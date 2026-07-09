@@ -140,4 +140,34 @@ describe("useProviderKeys", () => {
     });
     expect(result.current.results.gemini).toEqual({ type: "valid" });
   });
+
+  it("reports 'invalid' when the check verdict is invalid (AC-03.4)", async () => {
+    // The redacted, key-free reason is untrusted DATA; the verdict drives the
+    // machine-readable outcome and never carries the provider string forward.
+    mocks.keysIpc.checkKey.mockResolvedValue({
+      status: "invalid",
+      reason: "API key not valid ([REDACTED])",
+    });
+    const { result } = renderHook(() => useProviderKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.checkKey("gemini");
+    });
+    expect(result.current.results.gemini).toEqual({ type: "invalid" });
+  });
+
+  it("maps a failed check to a typed error result (AC-03.4)", async () => {
+    mocks.keysIpc.checkKey.mockRejectedValue({ kind: "network" });
+    const { result } = renderHook(() => useProviderKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.checkKey("gemini");
+    });
+    expect(result.current.results.gemini).toEqual({
+      type: "error",
+      kind: "network",
+    });
+  });
 });
