@@ -16,27 +16,13 @@ is banned), `Switch`, `Slider`, `Badge`, `Tooltip` (no raw `title=` attributes),
 `OverlayPanel` (the translation overlay surface), `DataList`. Each new primitive: create,
 export from the barrel, test, and add a row here IN THE SAME PR.
 
-Landed primitives (`src/components/ui/`):
-
-| Primitive | File | Notes |
-|-----------|------|-------|
-| `Badge` | `Badge.tsx` | Status/provider badge; `warning` variant. |
-| `Button` | `Button.tsx` | Text button; `primary` variant. |
-| `IconButton` | `IconButton.tsx` | Icon-only, mandatory `label` (aria-label); lucide SVG children. |
-| `Input` | `Input.tsx` | Text/password field (only text-entry element); `password` masks + disables autocomplete for key entry. |
-| `OverlayPanel` | `OverlayPanel.tsx` | Translation overlay surface with token scrim. |
-| `PlainText` | `PlainText.tsx` | Sanitizing plain-text renderer for provider output. |
-| `Select` | `Select.tsx` | Custom listbox (native `<select>` banned); full keyboard nav. |
-| `Slider` | `Slider.tsx` | Range input (overlay opacity). |
-| `Switch` | `Switch.tsx` | `role="switch"` toggle. |
-| `Tooltip` | `Tooltip.tsx` | Hover/focus tooltip (raw `title=` banned). |
-
 ### Landed
 
 | Primitive | File | Purpose |
 |-----------|------|---------|
 | `Button` | `src/components/ui/Button.tsx` | Text button (default/primary variants) |
 | `IconButton` | `src/components/ui/IconButton.tsx` | Icon-only button with mandatory `aria-label`; `pressed` for toggles |
+| `Input` | `src/components/ui/Input.tsx` | Text/password field (only text-entry element); `password` masks + disables autocomplete for key entry |
 | `Select` | `src/components/ui/Select.tsx` | Custom listbox select (native `<select>` banned); full keyboard nav |
 | `Switch` | `src/components/ui/Switch.tsx` | `role="switch"` toggle, keyboard operable |
 | `Slider` | `src/components/ui/Slider.tsx` | Token-styled range input (opacity control) |
