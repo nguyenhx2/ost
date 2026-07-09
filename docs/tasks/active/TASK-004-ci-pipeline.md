@@ -35,6 +35,8 @@ is green on the scaffolded skeleton.
 | 2026-07-09 | orchestrator | Task created and registered in master-plan (bootstrap seed) | Planned |
 | 2026-07-09 | orchestrator | User authorized: created private repo github.com/nguyenhx2/ost via gh, pushed main (525ba51) | Active |
 | 2026-07-09 | orchestrator | Enabled real CI jobs on branch ci/enable-pipeline: windows-latest, npm+cargo caches, eslint+prettier, vitest, frontend build, cargo fmt/clippy/test; full tauri bundling deliberately left to the gated release flow | Active |
+| 2026-07-09 | claude | Session recovery after garbled-output report: verified all tracked text files are valid UTF-8 and Vietnamese docs intact (garbling was console codepage display only, not file corruption); PR #1 CI green (lint-and-test pass, earlier failure was pre-gitattributes) | Active |
+| 2026-07-09 | claude | Attempted branch protection on main (require PR + lint-and-test check): blocked by GitHub plan - private repo on Free tier has no branch protection/rulesets; needs owner decision (make repo public, upgrade to Pro, or defer) | Blocked item |
 
 ## Result
 <Fill when moving to Done.>
