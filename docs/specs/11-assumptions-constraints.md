@@ -38,10 +38,10 @@ chốt, chuyển vào FR/NFR/BR tương ứng và ghi vào
 
 | ID | Vấn đề | Chủ trì / kế hoạch | Trạng thái |
 |----|--------|--------------------|------------|
-| OI-01 {#oi-01} | Engine OCR chưa chốt: Windows.Media.Ocr vs Tesseract vs PaddleOCR - ảnh hưởng chất lượng nhận dạng, kích thước bundle và budget p95 < 2s của FR-02 | TASK-005 (/brainstorm -> ADR) trước khi implement FR-02 | Mở |
+| OI-01 {#oi-01} | Engine OCR: đã chốt tại ADR-004 (2026-07-09) - mặc định local PaddleOCR PP-OCRv5 (oar-ocr/ort) sau trait `OcrEngine`; Windows.Media.Ocr giữ làm R2 fallback + opt-in fast-EN/JA; cloud OCR (Google Vision, Azure Read, multimodal-LLM) opt-in per-backend theo BR-09. Local default spike-gated (R1 <=700ms) là gate đầu của TASK-007 | TASK-005 -> ADR-004 | Đã chốt (2026-07-09) |
 | OI-02 {#oi-02} | GitHub remote chưa tạo (repo slug TBD); CI trên GitHub Actions chưa chạy được cho đến khi có remote | TASK-004 | Mở |
 | OI-03 {#oi-03} | Nguồn tải model whisper cụ thể (host, mirror, chính sách checksum/resume) chưa chốt | Quyết định khi implement FR-01 first-run (liên quan AS-06, NFR-REL-04) | Mở |
 | OI-04 {#oi-04} | Bộ hotkey mặc định cho 3 hành động (toggle audio, chọn vùng, ẩn/hiện overlay) chưa được người dùng chốt | Đề xuất trong PRD-FR-04, xin xác nhận chủ dự án | Mở |
 | OI-05 {#oi-05} | Giới hạn lưu giữ lịch sử dịch (số bản ghi / dung lượng / thời gian) chưa quyết; hiện chỉ có xoá toàn bộ thủ công | Đề xuất trong PRD-FR-04 | Mở |
 | OI-06 {#oi-06} | Tự khởi động cùng Windows (autostart) có nằm trong MVP không - chưa quyết | Xin quyết định chủ dự án trước Phase 2 | Mở |
-| OI-07 {#oi-07} | Ngưỡng confidence cụ thể cho flag STT/OCR (BR-05) chưa có con số; cần hiệu chỉnh bằng thực nghiệm | Chốt trong quá trình implement FR-01/FR-02, ghi vào PRD | Mở |
+| OI-07 {#oi-07} | Ngưỡng confidence cụ thể cho flag STT/OCR (BR-05) chưa có con số; cần hiệu chỉnh bằng thực nghiệm. OCR confidence là enum-tagged (`PerLine(scores)` vs `Unavailable{reason}`, ADR-004); ngưỡng chỉ áp cho nhánh `PerLine`; nhánh `Unavailable` (Windows.Media.Ocr, multimodal-LLM) dùng banner cố định thay vì ngưỡng. R1 spike của TASK-007 đo phân bố confidence để hiệu chỉnh | Chốt trong quá trình implement FR-01/FR-02, ghi vào PRD | Mở |
