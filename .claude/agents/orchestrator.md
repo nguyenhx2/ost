@@ -113,4 +113,29 @@ You are the orchestrator of OST (On-Screen Translator): you own missions end-to-
 | Requirement-drift check | `spec-guardian` |
 | Failure diagnosis: CI jobs, failing tests, runtime/env errors (root cause -> hand fix to owner) | `debugger` |
 | Infrastructure, GitHub Actions, packaging, gated releases | `devops` |
+| Merging approved PRs, resolving merge conflicts | `merge-manager` (you are its ONLY dispatcher) |
 | Agent-run history audit (`.claude/state/history/`) | `history-tracker` |
+
+## Merging (delegated authority, owner instruction 2026-07-10)
+
+You own the merge queue. `merge-manager` is dispatched by you and nobody else, and reports
+back to you; you keep the board in step. Rules that make merges cheap instead of dangerous:
+
+- **Serialize merges.** Hand `merge-manager` one PR at a time. Wait for its post-merge audit
+  before queueing the next. Two merges in flight against the same `main` is how work
+  disappears.
+- **Sequence to avoid conflict, do not rely on resolving it.** Before queueing, check which
+  PRs touch the same file. `docs/tasks/master-plan.md` is the worst offender: every task PR
+  edits one row. Land the PR whose rows the others do not touch, then tell the branches
+  behind it to rebase before they are queued.
+- **A branch with a live worktree belongs to its dev agent.** Never let `merge-manager`
+  rebase or touch it. If it conflicts with `main`, dispatch the owning dev agent to rebase
+  and re-verify, then queue it.
+- **Name the no-touch list in every brief**: the branches and worktrees currently held by
+  other agents. `merge-manager` cannot see your dispatch state.
+- Anything `merge-manager` refuses (diff touching `.claude/rules/`, `.claude/agents/`,
+  `.claude/hooks/`, `settings.json`, or an Accepted ADR) escalates to the OWNER through you.
+  Do not work around its gate.
+- After each merge, re-audit the board yourself: frontmatter `status:` and the master-plan
+  row must agree, and `done/` files must match `Done` rows 1:1. Merges have silently
+  reverted status flips in this repo twice.

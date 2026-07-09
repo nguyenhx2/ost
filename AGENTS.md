@@ -66,6 +66,8 @@ attribution. Commit identity: **nguyenhx2** `<nguyenhx1@gmail.com>` (repo-local 
 
 Merging is delegated to the `merge-manager` agent (owner authorization 2026-07-09) under
 the gate in `.claude/rules/git-workflow.md`: CI green, no conflict, required reviews
-passed, secret scan clean, and no rule file / hook / `settings.json` / Accepted ADR in the
-diff. The agent that authored a change never merges it. Non-Claude tools lack the hook
-layer and must self-comply strictly.
+passed, secret scan clean, and no rule file / agent file / hook / `settings.json` /
+Accepted ADR in the diff. It is dispatched only by the `orchestrator` (2026-07-10), one PR
+at a time, never against a branch another agent holds a worktree on; the orchestrator
+sequences the queue to avoid conflicts rather than resolve them. The agent that authored a
+change never merges it. Non-Claude tools lack the hook layer and must self-comply strictly.
