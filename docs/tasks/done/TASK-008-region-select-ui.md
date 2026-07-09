@@ -1,6 +1,6 @@
 ---
 title: "TASK-008: Region-select overlay + translation preview UI"
-status: Active
+status: Done
 fr: "FR-02, FR-04"
 owner: frontend-ui-dev
 deps: "TASK-002"
@@ -23,17 +23,17 @@ translation in.
   operability, dark-first).
 
 ## To do
-- [ ] Fullscreen dimmed selection overlay window (esc to cancel, drag to select,
+- [x] Fullscreen dimmed selection overlay window (esc to cancel, drag to select,
       pixel-coords via IPC).
-- [ ] Preview `OverlayPanel`: source text -> translated text, provider/model badge, copy,
+- [x] Preview `OverlayPanel`: source text -> translated text, provider/model badge, copy,
       pin, re-translate, close; low-confidence markers.
-- [ ] Global hotkey + tray menu entry to start selection (`src-tauri/src/shell/`).
-- [ ] i18n keys (vi + en) for all strings; Vitest for hooks with mocked IPC.
+- [x] Global hotkey + tray menu entry to start selection (`src-tauri/src/shell/`).
+- [x] i18n keys (vi + en) for all strings; Vitest for hooks with mocked IPC.
 
 ## Test scenarios / acceptance
-- [ ] Full flow works against a mocked pipeline (fake events) without TASK-007.
-- [ ] Keyboard-only operation possible (WCAG 2.1 AA path).
-- [ ] No design-system violations (code-reviewer hard gate).
+- [x] Full flow works against a mocked pipeline (fake events) without TASK-007.
+- [x] Keyboard-only operation possible (WCAG 2.1 AA path).
+- [x] No design-system violations (code-reviewer hard gate).
 
 ## Session log (AI session log)
 
@@ -51,3 +51,32 @@ translation in.
 
 ## Result
 <Fill when moving to Done.>
+| 2026-07-09 | claude | Rebased onto main after PR #2 merged; resolved Cargo.toml conflict by unioning both dependency sets, de-duplicating thiserror (kept the pinned 2.0.12) and pinning the two tauri plugins to 2.3.2 per tech-stack.md; regenerated Cargo.lock | Done |
+| 2026-07-09 | claude | Re-verified post-rebase: cargo test 67 passed (56 provider + 11 shell, confirming the rebase dropped no code), vitest 82/82, clippy -D warnings clean, prettier clean. CI green. PR #3 merged to main (5c55b54) | Done |
+
+## Result
+Region-select overlay and translation preview UI are on `main` (PR #3, merge commit
+5c55b54).
+
+Delivered: the fullscreen dimmed selection overlay (drag and keyboard driven, pixel coords
+over the typed IPC wrapper); the preview `OverlayPanel` (source -> translation, provider and
+model badge, copy / pin / re-translate / close, low-confidence marker, opacity and
+live-update controls); global hotkey and tray entry; nine UI primitives, each with a row in
+`.claude/rules/design-system.md`; i18n from day one (vi fully accented + en); the sanitizing
+plain-text renderer for untrusted output; and a translation failure/timeout state
+(`region:translation-error` + `TRANSLATION_TIMEOUT_MS`) so a stalled provider call surfaces
+instead of hanging silently. The region IPC contract is in
+`docs/architecture/api-contracts/ipc.md`.
+
+Evidence: vitest 82/82 (including 7 failure-path tests); `cargo test --lib` 11/11 for
+`shell::region`; lint, frontend build, clippy and fmt clean; CI `lint-and-test` green on
+PR #3. code-reviewer PASS on the design-system hard gate (no native `<select>`, no raw
+`title=`, no hardcoded hex/px, no `dangerouslySetInnerHTML`, no emoji, least-privilege
+capabilities, IPC only through the typed wrapper). qa-test PASS.
+
+Carried forward, not done here:
+- The whole flow runs against a mocked pipeline. It is wired to real capture/OCR only when
+  TASK-007 lands, and the preview surface is what TASK-007's spike will render into.
+- Keyboard-only operation is unit-tested but not yet covered by a WCAG audit or an e2e
+  run; tauri-driver e2e remains deferred (known-issues).
+

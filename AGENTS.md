@@ -63,3 +63,9 @@ GitHub, PRs, `gh` CLI. Never commit directly to `main`; one branch per task
 (`feat/fix/chore/docs`). Conventional Commits (types + scopes in
 `.claude/rules/conventional-commits.md`), subject lowercase imperative <= 72 chars, NO AI
 attribution. Commit identity: **nguyenhx2** `<nguyenhx1@gmail.com>` (repo-local config).
+
+Merging is delegated to the `merge-manager` agent (owner authorization 2026-07-09) under
+the gate in `.claude/rules/git-workflow.md`: CI green, no conflict, required reviews
+passed, secret scan clean, and no rule file / hook / `settings.json` / Accepted ADR in the
+diff. The agent that authored a change never merges it. Non-Claude tools lack the hook
+layer and must self-comply strictly.

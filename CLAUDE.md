@@ -74,6 +74,7 @@ against acceptance criteria, and records history in the task files.
 | debugger | Read-only root-cause analysis |
 | ba-analyst | docs/specs + docs/requirements |
 | devops | CI, packaging, gated releases |
+| merge-manager | Merges approved PRs and resolves conflicts (delegated authority, 2026-07-09) |
 | brainstormer + tech-researcher | Decisions -> ADRs |
 | history-tracker | `.claude/state/history/` audit |
 
