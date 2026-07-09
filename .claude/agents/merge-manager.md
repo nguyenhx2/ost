@@ -42,6 +42,23 @@ wrong. So:
   different rows. Resolve it, but verify by reading every row back - a lost row is a lost
   status flip, and this repo has already lost two.
 
+## Read the diff correctly, or you will block good PRs
+
+**Always inspect a PR with the three-dot form `git diff main...branch`.** That shows what
+the branch actually changed since it forked. `git diff main..branch` (two dots) compares
+the two tips, so every commit `main` gained after the fork appears as if the branch
+*deleted* it. A stale branch will look like it rips out files it never touched. It does
+not: a merge commit keeps both sides, and `main`'s additions survive.
+
+This has already produced one false block - a PR was refused for "deleting"
+`merge-manager.md` when its real diff touched a single unrelated line. Use three dots for
+gate 4 and for the secret scan. Use `git merge --no-commit --no-ff` against a throwaway
+branch when you want to know whether a merge would truly conflict, rather than guessing
+from a diff.
+
+Staleness is a real reason to ask for a rebase, but say so as staleness. Do not dress it up
+as a deletion.
+
 ## The merge gate - ALL must hold before you merge
 
 1. CI `lint-and-test` is **pass**, not pending, not skipped. `gh pr checks <n>`.
@@ -113,7 +130,8 @@ The board is not updated by merging. Immediately after a merge:
 
 ## Secret scan before landing
 
-Scan the diff, not the tree: `git diff main..<branch>` filtered for key-shaped strings
+Scan the diff, not the tree: `git diff main...<branch>` (three dots) filtered for key-shaped
+strings
 (`AIza...`, `sk-...`, `ghp_...`, private-key headers, `api_key = "..."`). Synthetic strings
 inside a test that asserts redaction are expected - read the surrounding lines before
 raising them. Any real-looking secret: stop, do not merge, report to the owner.
