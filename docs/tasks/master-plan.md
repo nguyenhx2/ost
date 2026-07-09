@@ -26,9 +26,9 @@ overlay system.
 
 | Task | Title | Owner | Deps | Priority | Phase | Status |
 |------|-------|-------|------|----------|-------|--------|
-| TASK-001 | Install Rust toolchain and verify build prerequisites | devops | - | P0 | 0 | Active |
-| TASK-002 | Scaffold Tauri 2 + React 19 + Vite app skeleton | frontend-ui-dev | TASK-001 | P0 | 0 | Planned |
-| TASK-003 | Write full 13-section specs for FR-01..FR-05 (spec-builder) | ba-analyst | - | P0 | 0 | Planned |
+| TASK-001 | Install Rust toolchain and verify build prerequisites | devops | - | P0 | 0 | Done |
+| TASK-002 | Scaffold Tauri 2 + React 19 + Vite app skeleton | frontend-ui-dev | TASK-001 | P0 | 0 | Done |
+| TASK-003 | Write full 13-section specs for FR-01..FR-05 (spec-builder) | ba-analyst | - | P0 | 0 | Active |
 | TASK-004 | CI pipeline green on the skeleton (lint + cargo test + vitest + build) | devops | TASK-002 | P1 | 0 | Planned |
 | TASK-005 | Decide the OCR engine (/brainstorm -> ADR) | brainstormer | TASK-003 | P0 | 1 | Planned |
 | TASK-006 | Provider layer core: TranslationProvider trait, Gemini client, keyring storage | llm-integration-dev | TASK-002, TASK-003 | P0 | 1 | Planned |

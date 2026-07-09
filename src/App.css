@@ -1,0 +1,25 @@
+/* App shell placeholder styles - token-driven only (design-system.md). */
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.app-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  color: var(--color-text);
+}

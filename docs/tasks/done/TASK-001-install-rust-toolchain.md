@@ -1,6 +1,6 @@
 ---
 title: "TASK-001: Install Rust toolchain and verify build prerequisites"
-status: Active
+status: Done
 fr: "-"
 owner: devops
 deps: "-"
@@ -44,6 +44,22 @@ prerequisites verified.
 |------|-----|---------------|--------|
 | 2026-07-09 | orchestrator | Task created and registered in master-plan (bootstrap seed) | Active |
 | 2026-07-09 | orchestrator | Bootstrap smoke test: /task-resume scan found this task; board row and frontmatter agree | Verified |
+| 2026-07-09 | user | Installed MSVC Build Tools, Rustlang.Rustup, GitHub CLI (session restart) | Installed |
+| 2026-07-09 | orchestrator | Verified: cargo/rustc 1.96.1, gh 2.88.0; hello-world builds and runs under vcvars64 (exit 0) | Done |
+
+## Orchestration notes (verification)
+- rustc does NOT auto-detect MSVC when invoked from Git Bash: GNU coreutils `link` shadows
+  MSVC `link.exe` on PATH, and with a clean PATH rustc's vswhere detection still failed
+  against VS 18 Enterprise. WORKAROUND (mandatory for agent shells): run cargo through the
+  developer environment, e.g.
+  `cmd //c "\"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat\" >nul 2>&1 && set PATH=%USERPROFILE%\.cargo\bin;%PATH% && cargo <args>"`.
+  Recorded in docs/context/known-issues.md.
+- `~/.cargo/bin` is not on the Git Bash session PATH; prefix commands with
+  `export PATH="$USERPROFILE/.cargo/bin:$PATH"` or use the cmd wrapper above.
 
 ## Result
-<Fill when moving to Done.>
+Rust stable 1.96.1 (rustup), MSVC VC Tools 14.50.35717 (VS 18 Enterprise), gh CLI 2.88.0,
+Node v22.17.0 all verified on the dev machine. MSVC link test: `cargo run` on a fresh
+crate exits 0 inside vcvars64. Follow-up: agents must use the vcvars64 wrapper for all
+cargo commands from Git Bash (see known-issues.md). Tauri CLI decision: use
+`npm create tauri-app` in TASK-002 (no global cargo install needed).
