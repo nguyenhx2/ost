@@ -1,6 +1,6 @@
 ---
 title: "TASK-002: Scaffold Tauri 2 + React 19 + Vite app skeleton"
-status: Active
+status: Done
 fr: "-"
 owner: frontend-ui-dev
 deps: "TASK-001"
@@ -47,4 +47,12 @@ with the planned module skeleton, lint/format configured.
 | 2026-07-09 | frontend-ui-dev | Verification green: npm run lint PASS (eslint 10.6.0 + prettier 3.9.4); vitest 4.1.10 2/2 tests PASS; tsc --noEmit PASS; cargo check 0 warnings (2m17s first build); cargo clippy -D warnings PASS; cargo fmt --check PASS; cargo test ok (0 tests, empty suites). One cargo test run hit transient OS error 1455 (paging file) - rerun with `-j 2` passed | Green |
 
 ## Result
-<Fill when moving to Done.>
+Delivered on branch `feat/scaffold-tauri-app`, commits 64987da + 11e72f3 (merged to main
+by the orchestrator after independent gate verification). Tauri 2 app skeleton: React 19 +
+TS strict + Vite, eslint 10 flat config + prettier, vitest (2/2 tests on the typed IPC
+wrapper), dark-first token seed, ui barrel, 8-module Rust skeleton compiling with 0
+clippy warnings. Orchestrator re-ran vitest + lint independently (green) and
+secret-scanned the branch diff (clean). Environment fixes recorded in
+docs/context/known-issues.md: Windows 11 SDK 10.0.26100 installed (was missing), .bat
+wrapper pattern for cargo under Git Bash, `-j 2` fallback for OS error 1455. Follow-up:
+`npm run tauri dev` window smoke test is pending manual user verification.
