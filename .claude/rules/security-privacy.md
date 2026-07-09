@@ -15,10 +15,12 @@
 
 ## Policies
 
-- In transit: HTTPS/TLS to providers, nothing else outbound. No telemetry without explicit
-  opt-in (none in MVP).
-- Translation history (if the user enables it) stores text only, locally, with a visible
-  clear-all control; keys and audio are never part of history.
+- In transit: HTTPS/TLS to providers; the only other outbound flow is the user-confirmed
+  whisper model download at first run (no user data leaves the machine). No telemetry
+  without explicit opt-in (none in MVP).
+- Translation history is ON by default (BR-06, user decision 2026-07-09): stores text
+  only, locally, with a visible clear-all control and a disable toggle; keys and audio are
+  never part of history.
 - Input validation at every boundary: Tauri command handlers validate all IPC input;
   provider responses schema-validated.
 - No tokens/keys/PII in logs at any level; log redaction is part of the provider layer.

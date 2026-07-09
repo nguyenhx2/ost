@@ -5,8 +5,7 @@ loopback -> local whisper.cpp -> LLM) and user-selected screen regions (capture 
 LLM, live preview) as low-latency overlays; users bring their own provider keys (Gemini,
 Anthropic, OpenAI, OpenRouter) stored in the OS keychain; runs in the background under
 strict performance budgets. Features FR-01..FR-05 in
-`docs/specs/05-functional-requirements.md` (seed table in `docs/specs/README.md` until
-TASK-003 lands).
+`docs/specs/05-functional-requirements.md`.
 
 Stack: Tauri 2 (Rust core) + React 19/TS/Vite; whisper.cpp local STT; keyring key storage.
 Details: `.claude/rules/tech-stack.md`.
