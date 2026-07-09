@@ -8,4 +8,4 @@ luôn giữ đồng bộ với specs (specs là nguồn chân lý).
 
 | PRD | FR | Trạng thái |
 |-----|----|-----------|
-| (chưa có - tạo sau khi TASK-003 hoàn thành specs) | | |
+| [PRD-FR-02-region-translate.md](PRD-FR-02-region-translate.md) | [FR-02](../specs/05-functional-requirements.md#fr-02) | Draft |
