@@ -1,6 +1,6 @@
 ---
 title: "TASK-004: CI pipeline green on the skeleton"
-status: Planned
+status: Active
 fr: "-"
 owner: devops
 deps: "TASK-002"
@@ -21,8 +21,8 @@ is green on the scaffolded skeleton.
   must exist first (create repo + `git remote add origin`).
 
 ## To do
-- [ ] Create the GitHub repo and push `main` (user action for auth).
-- [ ] Enable the CI workflow (uncomment), cache cargo + npm, Windows runner.
+- [x] Create the GitHub repo and push `main` (user authorized gh; private repo).
+- [x] Enable the CI workflow (real jobs), cache cargo + npm, Windows runner.
 - [ ] Branch protection: PR required, CI required to merge.
 
 ## Test scenarios / acceptance
@@ -33,6 +33,8 @@ is green on the scaffolded skeleton.
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-09 | orchestrator | Task created and registered in master-plan (bootstrap seed) | Planned |
+| 2026-07-09 | orchestrator | User authorized: created private repo github.com/nguyenhx2/ost via gh, pushed main (525ba51) | Active |
+| 2026-07-09 | orchestrator | Enabled real CI jobs on branch ci/enable-pipeline: windows-latest, npm+cargo caches, eslint+prettier, vitest, frontend build, cargo fmt/clippy/test; full tauri bundling deliberately left to the gated release flow | Active |
 
 ## Result
 <Fill when moving to Done.>
