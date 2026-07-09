@@ -52,8 +52,8 @@ let storePromise: Promise<Store> | null = null;
 
 function getStore(): Promise<Store> {
   if (storePromise === null) {
-    // Explicit save() is always called after set(); rely on the plugin's
-    // default autosave behaviour (options.defaults is required by the type).
+    // load() takes no options here; persistence is controlled explicitly via
+    // save() after every set() (see saveProviderSettings).
     storePromise = load(STORE_FILE);
   }
   return storePromise;

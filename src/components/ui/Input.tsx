@@ -40,6 +40,7 @@ export function Input({
         {label}
       </label>
       <input
+        {...rest}
         id={fieldId}
         className="ost-input"
         type={type}
@@ -49,7 +50,6 @@ export function Input({
         aria-describedby={describedById}
         autoComplete={type === "password" ? "off" : undefined}
         spellCheck={type === "password" ? false : undefined}
-        {...rest}
       />
     </span>
   );

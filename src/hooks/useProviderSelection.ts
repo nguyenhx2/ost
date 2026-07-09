@@ -9,9 +9,18 @@ import {
 
 export type MoveDirection = "up" | "down";
 
+/**
+ * Machine-readable persistence outcome the view can map to an i18n message
+ * (mirrors the typed error handling in useProviderKeys.ts). Only one failure
+ * mode exists: the settings-store write rejected.
+ */
+export type SelectionError = { kind: "persist" };
+
 export interface UseProviderSelectionResult {
   settings: ProviderSettings;
   loading: boolean;
+  /** Last persistence failure, or null when the store is in sync. */
+  error: SelectionError | null;
   /** Switch the active provider (AC-03.5). */
   setDefaultProvider: (provider: ProviderId) => Promise<void>;
   /** Choose the model for a provider (AC-03.1 / AC-03.5). */
@@ -30,6 +39,7 @@ export function useProviderSelection(): UseProviderSelectionResult {
     DEFAULT_PROVIDER_SETTINGS,
   );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<SelectionError | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -51,8 +61,16 @@ export function useProviderSelection(): UseProviderSelectionResult {
   }, []);
 
   const persist = useCallback(async (next: ProviderSettings) => {
+    // Optimistic update, then persist. A store-write rejection is caught and
+    // surfaced as typed error state (never left as an unhandled rejection),
+    // so the view can tell the user the change did not save.
     setSettings(next);
-    await saveProviderSettings(next);
+    try {
+      await saveProviderSettings(next);
+      setError(null);
+    } catch {
+      setError({ kind: "persist" });
+    }
   }, []);
 
   const setDefaultProvider = useCallback(
@@ -94,6 +112,7 @@ export function useProviderSelection(): UseProviderSelectionResult {
   return {
     settings,
     loading,
+    error,
     setDefaultProvider,
     setProviderModel,
     moveFallback,

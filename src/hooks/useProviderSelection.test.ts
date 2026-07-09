@@ -73,6 +73,30 @@ describe("useProviderSelection", () => {
     ]);
   });
 
+  it("surfaces a typed error when persistence fails and does not reject", async () => {
+    mocks.saveProviderSettings.mockRejectedValueOnce(
+      new Error("store write failed"),
+    );
+    const { result } = renderHook(() => useProviderSelection());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // The mutation must resolve (rejection is caught internally, so no
+    // unhandled rejection escapes) and the failure is surfaced as state.
+    await act(async () => {
+      await expect(
+        result.current.setDefaultProvider("openai"),
+      ).resolves.toBeUndefined();
+    });
+
+    expect(result.current.error).toEqual({ kind: "persist" });
+
+    // A subsequent successful mutation clears the error.
+    await act(async () => {
+      await result.current.setDefaultProvider("anthropic");
+    });
+    expect(result.current.error).toBeNull();
+  });
+
   it("ignores an out-of-range move", async () => {
     const { result } = renderHook(() => useProviderSelection());
     await waitFor(() => expect(result.current.loading).toBe(false));

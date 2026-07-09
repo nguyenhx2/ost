@@ -157,6 +157,16 @@ export function SettingsView() {
     <main className="settings">
       <h1 className="settings-title">{t("settings.title")}</h1>
 
+      {selection.error ? (
+        <p
+          className="settings-message settings-message--danger"
+          role="alert"
+          aria-live="assertive"
+        >
+          {t("settings.error.persist")}
+        </p>
+      ) : null}
+
       <section
         className="settings-section"
         aria-labelledby="settings-providers-heading"
