@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import type { ProviderId } from "./providers";
 
 /**
  * Typed wrapper around the Tauri IPC bridge.
@@ -93,6 +94,92 @@ export interface RegionTranslationRequest {
 export const EVENT_REGION_OCR_RESULT = "region:ocr-result";
 export const EVENT_REGION_TRANSLATION_RESULT = "region:translation-result";
 export const EVENT_REGION_TRANSLATION_ERROR = "region:translation-error";
+
+/* ------------------------------------------------------------------ */
+/* Provider key management (FR-03) contract                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Masked key status - the ONLY key-related data the WebView may receive
+ * (AC-03.3, security-privacy.md). Field names mirror the Rust `ProviderKeyStatus`
+ * serialization (snake_case, `src-tauri/src/keys/store.rs`). NEVER carries a key
+ * value.
+ */
+export interface ProviderKeyStatus {
+  provider_id: ProviderId;
+  key_present: boolean;
+}
+
+/**
+ * Result of saving a key (AC-03.4). `reason` on `invalid` is the redacted,
+ * key-free provider reason - the UI renders its own localized copy and treats
+ * this as untrusted DATA.
+ */
+export type SaveKeyOutcome =
+  | { status: "valid" }
+  | { status: "stored" }
+  | { status: "invalid"; reason: string };
+
+/** Outcome of a user-triggered key check on the stored key (AC-03.4). */
+export type KeyValidation =
+  { status: "valid" } | { status: "invalid"; reason: string };
+
+/**
+ * Typed command error class (`kind`) surfaced when a key command rejects. The
+ * UI maps the kind to an i18n message; the kind never carries key material.
+ */
+export type KeyErrorKind =
+  | "unknownProvider"
+  | "invalidInput"
+  | "notConfigured"
+  | "network"
+  | "quota"
+  | "timeout"
+  | "config"
+  | "keychain"
+  | "provider";
+
+export interface KeyCommandError {
+  kind: KeyErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed key command error. */
+export function asKeyCommandError(err: unknown): KeyCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: KeyErrorKind }).kind };
+  }
+  // Any non-typed failure (e.g. the IPC bridge itself) is treated as unknown.
+  return { kind: "provider" };
+}
+
+/** Typed key-management commands owned by `src-tauri/src/commands/keys.rs`. */
+export const keysIpc = {
+  /** Masked status for all four providers (AC-03.1, AC-03.3). */
+  statuses: (): Promise<ProviderKeyStatus[]> =>
+    invokeIpc("provider_key_statuses"),
+
+  /** Validate then store a key; the value is sent down once, never returned. */
+  saveKey: (provider: ProviderId, key: string): Promise<SaveKeyOutcome> =>
+    invokeIpc("save_provider_key", { provider, key }),
+
+  /** Re-check the stored key with one minimal provider call (AC-03.4). */
+  checkKey: (provider: ProviderId): Promise<KeyValidation> =>
+    invokeIpc("check_provider_key", { provider }),
+
+  /** Remove the stored key (AC-03.7). Idempotent. */
+  deleteKey: (provider: ProviderId): Promise<void> =>
+    invokeIpc("delete_provider_key", { provider }),
+};
+
+/** Open the Settings window (owned by `src-tauri/src/shell/settings.rs`). */
+export const settingsIpc = {
+  open: (): Promise<void> => invokeIpc("open_settings"),
+};
 
 /** Typed commands owned by `src-tauri/src/shell/region.rs`. */
 export const regionIpc = {

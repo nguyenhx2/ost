@@ -1,0 +1,162 @@
+/*
+ * SettingsView (SCR-04) styles. Token-driven only (design-system.md): every
+ * color/spacing/radius value comes from src/styles/tokens.css.
+ */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  font-family: var(--font-sans);
+}
+
+.settings-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.settings-hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.settings-field-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* ---------- Provider list ---------- */
+
+.settings-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-provider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-provider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.settings-provider-name {
+  font-size: var(--font-size-md);
+}
+
+.settings-provider-entry {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.settings-provider-entry .ost-input-field {
+  flex: 1 1 auto;
+}
+
+.settings-provider-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-provider-model {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-message {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.settings-message--ok {
+  color: var(--color-accent);
+}
+
+.settings-message--danger {
+  color: var(--color-danger);
+}
+
+/* ---------- Fallback order ---------- */
+
+.settings-fallback-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-fallback-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-fallback-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-on-accent);
+  background-color: var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+
+.settings-fallback-name {
+  flex: 1 1 auto;
+  font-size: var(--font-size-sm);
+}
+
+.settings-fallback-controls {
+  display: inline-flex;
+  gap: var(--space-1);
+}

@@ -8,6 +8,7 @@ import "./primitives.css";
 export { Badge, type BadgeProps } from "./Badge";
 export { Button, type ButtonProps } from "./Button";
 export { IconButton, type IconButtonProps } from "./IconButton";
+export { Input, type InputProps } from "./Input";
 export { OverlayPanel, type OverlayPanelProps } from "./OverlayPanel";
 export { PlainText, type PlainTextProps } from "./PlainText";
 export { Select, type SelectOption, type SelectProps } from "./Select";
