@@ -138,3 +138,54 @@ pub(crate) mod mock {
         }
     }
 }
+
+#[cfg(test)]
+mod real_keychain_smoke {
+    //! Real Windows Credential Manager round-trip (TASK-006 follow-up 1).
+    //!
+    //! `#[ignore]` so CI and the default `cargo test` NEVER touch the OS
+    //! credential store. Run manually with:
+    //!     cargo test --lib keys::backend::real_keychain_smoke -- --ignored
+    //!
+    //! It writes under a DEDICATED test service (`ost.test.roundtrip`) with a
+    //! random account, so it can never collide with or clobber a real user
+    //! provider key (which lives under `ost.provider-api-key`). The value is a
+    //! synthetic non-secret and is deleted at the end even on assertion paths.
+
+    use super::*;
+
+    const TEST_SERVICE: &str = "ost.test.roundtrip";
+
+    #[test]
+    #[ignore = "hits the real OS keychain - run manually with --ignored"]
+    fn set_get_delete_round_trips_against_the_os_keychain() {
+        let backend = KeyringBackend;
+        // Random-ish account so parallel/repeat runs never collide.
+        let account = format!(
+            "smoke-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let value = "SYNTHETIC-not-a-real-key-0000";
+
+        backend
+            .set_secret(TEST_SERVICE, &account, value)
+            .expect("set_secret should succeed against Credential Manager");
+
+        let got = backend
+            .get_secret(TEST_SERVICE, &account)
+            .expect("get_secret should succeed");
+        assert_eq!(got.as_deref(), Some(value), "round-trip value mismatch");
+
+        backend
+            .delete_secret(TEST_SERVICE, &account)
+            .expect("delete_secret should succeed");
+
+        let after = backend
+            .get_secret(TEST_SERVICE, &account)
+            .expect("get_secret after delete should succeed");
+        assert_eq!(after, None, "credential should be gone after delete");
+    }
+}

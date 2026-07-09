@@ -11,17 +11,20 @@ use tauri::{
 
 pub const TRAY_ID: &str = "ost-tray";
 pub const MENU_ID_REGION_SELECT: &str = "region-select";
+pub const MENU_ID_SETTINGS: &str = "settings";
 pub const MENU_ID_QUIT: &str = "quit";
 
 const LABEL_REGION_SELECT: &str = "Chọn vùng dịch";
+const LABEL_SETTINGS: &str = "Cài đặt";
 const LABEL_QUIT: &str = "Thoát";
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let region_select =
         MenuItemBuilder::with_id(MENU_ID_REGION_SELECT, LABEL_REGION_SELECT).build(app)?;
+    let settings = MenuItemBuilder::with_id(MENU_ID_SETTINGS, LABEL_SETTINGS).build(app)?;
     let quit = MenuItemBuilder::with_id(MENU_ID_QUIT, LABEL_QUIT).build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&region_select, &quit])
+        .items(&[&region_select, &settings, &quit])
         .build()?;
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
@@ -31,6 +34,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
             MENU_ID_REGION_SELECT => {
                 if let Err(error) = crate::shell::region::open_selection_window(app) {
                     eprintln!("failed to open region selection window: {error}");
+                }
+            }
+            MENU_ID_SETTINGS => {
+                if let Err(error) = crate::shell::settings::open_settings_window(app) {
+                    eprintln!("failed to open settings window: {error}");
                 }
             }
             MENU_ID_QUIT => app.exit(0),
