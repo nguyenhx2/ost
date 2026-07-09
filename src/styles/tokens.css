@@ -1,0 +1,53 @@
+/*
+ * OST design tokens - the single source of truth for visual values.
+ * Dark-first: :root carries the dark theme; [data-theme="light"] overrides it.
+ * Components must consume ONLY these custom properties (see .claude/rules/design-system.md).
+ */
+
+:root {
+  /* Color (dark theme, WCAG 2.1 AA contrast on --color-bg/--color-surface) */
+  --color-bg: #0f1115;
+  --color-surface: #1a1d24;
+  --color-text: #e8eaed;
+  --color-text-muted: #9aa0a6;
+  --color-accent: #8ab4f8;
+  --color-danger: #f28b9b;
+
+  /* Typography */
+  --font-sans:
+    "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-size-sm: 0.8125rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 2rem;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Z-index layers: overlay > toast > modal (design-system.md) */
+  --z-modal: 100;
+  --z-toast: 200;
+  --z-overlay: 300;
+
+  /* Overlay scrim opacity (user-adjustable at runtime) */
+  --overlay-scrim-opacity: 0.75;
+}
+
+[data-theme="light"] {
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-text: #1a1c1e;
+  --color-text-muted: #5f6368;
+  --color-accent: #1a56db;
+  --color-danger: #b3261e;
+}

@@ -1,0 +1,14 @@
+# Prettier formats only the frontend code and root JS/TS config files.
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/capabilities/
+src-tauri/Cargo.lock
+package-lock.json
+skills-lock.json
+docs/
+.claude/
+.agents/
+.github/
+*.md
