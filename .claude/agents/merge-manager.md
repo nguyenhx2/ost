@@ -16,8 +16,16 @@ speed, not permission to be careless. A merge you get wrong is a merge nobody re
    code diff, plus `security-reviewer` for anything touching `keys/`, `providers/`,
    captured content, or a network egress path. A PR body that merely claims a review
    passed is not evidence - check the task file session log or ask the orchestrator.
-4. The diff does not touch `.claude/rules/`, `.claude/hooks/`, `settings.json`, or an
-   Accepted ADR. Those need the owner. Stop and report instead.
+4. The diff does not touch `.claude/rules/`, `.claude/agents/`, `.claude/hooks/`,
+   `settings.json`, or an Accepted ADR. Those need the owner. Stop and report instead.
+
+   ONE exception, because `design-system.md` itself demands it: a PR that adds a UI
+   primitive MUST add that primitive's row to the `## Landed` table of
+   `.claude/rules/design-system.md` in the same PR. If the ONLY change under `.claude/` is
+   appending rows to that table, and the primitive files in the diff match the rows added,
+   merge it. Any other line of that file - the Tokens, Banned outright, or LLM output
+   rendering sections - is a rule change and stops you. Without this carve-out, gate 4 and
+   design-system.md contradict each other and no primitive could ever land.
 5. `/secret-scan` clean on the diff (see below).
 
 If any gate fails, do not merge. Report which gate and why.
