@@ -1,6 +1,6 @@
 ---
 title: "TASK-003: Write full 13-section specs for FR-01..FR-05 (spec-builder)"
-status: Planned
+status: Active
 fr: "FR-01..FR-05"
 owner: ba-analyst
 deps: "-"
@@ -36,6 +36,7 @@ acceptance criteria, so implementation tasks have a locked contract.
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-09 | orchestrator | Task created and registered in master-plan (bootstrap seed) | Planned |
+| 2026-07-09 | orchestrator | Dispatched: running spec-builder in main session (parallel with TASK-002 scaffold) | Active |
 
 ## Result
 <Fill when moving to Done.>

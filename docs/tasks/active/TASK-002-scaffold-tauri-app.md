@@ -1,6 +1,6 @@
 ---
 title: "TASK-002: Scaffold Tauri 2 + React 19 + Vite app skeleton"
-status: Planned
+status: Active
 fr: "-"
 owner: frontend-ui-dev
 deps: "TASK-001"
@@ -38,6 +38,7 @@ with the planned module skeleton, lint/format configured.
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-09 | orchestrator | Task created and registered in master-plan (bootstrap seed) | Planned |
+| 2026-07-09 | frontend-ui-dev | Dispatched; starting scaffold | Active |
 
 ## Result
 <Fill when moving to Done.>
