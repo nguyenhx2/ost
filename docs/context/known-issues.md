@@ -11,3 +11,4 @@
 | Sandbox của agent Bash tool chặn kết nối loopback: vite bind được :1420 nhưng mọi kết nối kẹt SYN_RECEIVED (kể cả probe của tauri dev cùng job) | Chạy `npm run tauri dev`/dev server với sandbox tắt (dangerouslyDisableSandbox) hoặc user tự chạy | Open (workaround ổn định) | 2026-07-09 |
 | Prettier fail toàn bộ trên GitHub windows runner do autocrlf=true đổi LF->CRLF khi checkout | Đã thêm `.gitattributes` (`* text=auto eol=lf`, bat/ps1 giữ CRLF) | Resolved 2026-07-09 | 2026-07-09 |
 | tauri-driver (e2e) còn hạn chế trên Windows - đánh giá lại khi wire e2e | Ưu tiên unit/integration; e2e smoke thủ công tạm thời | Open | 2026-07-09 |
+| Branch protection cho `main` không bật được: repo private trên GitHub Free (403 - cần Pro hoặc repo public). Owner quyết định defer (2026-07-09) | Kỷ luật local: hook guard-main-commit chặn commit/push thẳng main; quy tắc no-self-merge trong git-workflow.md. Bật lại khi repo public hoặc nâng gói | Deferred | 2026-07-09 |
