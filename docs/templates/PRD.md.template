@@ -1,0 +1,23 @@
+---
+title: "PRD: <Tên tính năng>"
+sidebar_label: "PRD-FR-XX"
+description: "Product Requirements Document cho <tính năng>."
+status: Draft
+tags: [prd, requirements]
+---
+
+# PRD: <Tên tính năng> (FR-XX)
+
+> Yêu cầu nguồn: [FR-XX](../specs/05-functional-requirements.md#fr-xx)
+
+## 1. Bối cảnh và vấn đề
+## 2. Mục tiêu và chỉ số thành công
+## 3. Phạm vi (trong / ngoài)
+## 4. Yêu cầu chi tiết
+| ID | Yêu cầu | Ưu tiên | Tiêu chí chấp nhận |
+|----|---------|---------|--------------------|
+| FR-XX.1 | | Must | |
+## 5. User flow (Mermaid)
+## 6. Ràng buộc kỹ thuật
+## 7. Câu hỏi mở
+## 8. Tham chiếu

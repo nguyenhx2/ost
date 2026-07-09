@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Environment - real env files never committed (.env.example is the only committed one)
+.env
+.env.local
+.env.*.local
+
+# Claude Code local state
+.claude/state/
+.claude/worktrees/
+.claude/settings.local.json
+
+# Whisper / OCR model binaries (downloaded at first run, never committed)
+models/
+*.bin
+*.gguf
+
+# OS noise
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

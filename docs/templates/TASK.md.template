@@ -1,0 +1,41 @@
+---
+title: "TASK-NNN: <Short title>"
+status: Active # Active | Blocked | Pending | Done (Planned before dispatch)
+fr: FR-XX
+owner: <agent>
+deps: <TASK-NNN, ... or "-">
+priority: <P0 | P1 | P2>
+phase: <phase number in docs/tasks/master-plan.md or "-">
+created: YYYY-MM-DD
+tags: [task]
+---
+
+<!-- TASK FILES ARE WRITTEN 100% IN ENGLISH (see .claude/rules/task-tracking.md). -->
+
+# TASK-NNN: <Short title>
+
+## Goal
+<One sentence describing the desired outcome.>
+
+## Inputs / context
+- Related FR: [FR-XX](../../specs/05-functional-requirements.md#fr-xx)
+- Related PRD: <link>
+- Related files/modules:
+
+## To do
+- [ ]
+
+## Test scenarios / acceptance
+- [ ] <Track the FR acceptance criteria>
+
+## Orchestration notes
+<Decisions, blockers, scope changes - bullet + why.>
+
+## Session log (AI session log)
+
+| Date | Who | What was done | Result |
+|------|-----|---------------|--------|
+| | | | |
+
+## Result
+<Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>

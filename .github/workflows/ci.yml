@@ -1,0 +1,35 @@
+# CI - OST
+# Skeleton seeded by bootstrap; ENABLE in TASK-004 after the app skeleton (TASK-002)
+# exists and the GitHub remote is created. Jobs are commented until then so a pushed
+# empty-skeleton repo does not show a permanently red pipeline.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CI skeleton - enable real jobs in TASK-004 (lint, cargo test, vitest, tauri build)"
+
+# --- TASK-004: uncomment and finish -----------------------------------------
+#  lint-and-test:
+#    runs-on: windows-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-node@v4
+#        with: { node-version: 22, cache: npm }
+#      - uses: dtolnay/rust-toolchain@stable
+#      - uses: Swatinem/rust-cache@v2
+#        with: { workspaces: src-tauri }
+#      - run: npm ci
+#      - run: npm run lint
+#      - run: npx vitest run
+#      - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+#      - run: cargo test --manifest-path src-tauri/Cargo.toml
+#      - run: npm run tauri build -- --ci
+# Secrets (release signing) live in GitHub Actions secrets only - see
+# .claude/rules/git-workflow.md.

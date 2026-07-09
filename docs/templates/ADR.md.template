@@ -1,0 +1,32 @@
+---
+title: "ADR-NNN: <Decision title>"
+status: Proposed # Proposed | Accepted | Deprecated | Superseded by ADR-MMM
+date: YYYY-MM-DD
+deciders: []
+tags: [adr, architecture]
+---
+
+<!-- ADRs ARE WRITTEN 100% IN ENGLISH (see .claude/rules/docs-workflow.md). -->
+
+# ADR-NNN: <Decision title>
+
+## Context
+<The problem to decide; constraints; forces at play.>
+
+## Decision
+<The chosen decision, stated briefly and decisively.>
+
+## Options considered
+
+| Option | Pros | Cons |
+|--------|------|------|
+| A (chosen) | | |
+| B | | |
+
+## Consequences
+- Positive:
+- Negative / trade-off:
+- Follow-up work:
+
+## References
+- <Link to related spec / PRD / document>
