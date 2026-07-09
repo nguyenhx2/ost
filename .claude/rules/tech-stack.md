@@ -12,7 +12,7 @@ The settled stack (ADR-001..ADR-003). Do not change the stack without a new ADR.
 | Audio capture | WASAPI loopback via `cpal`/`wasapi` (Windows first; abstraction trait for macOS ScreenCaptureKit / Linux PipeWire later) |
 | Speech-to-text | whisper.cpp local via `whisper-rs` (ADR-002) |
 | Screen capture | `xcap` (or Windows Graphics Capture via `windows` crate) behind a capture trait |
-| OCR | OPEN DECISION - Windows.Media.Ocr vs Tesseract vs paddle (TASK-005 /brainstorm -> ADR) |
+| OCR | PaddleOCR PP-OCRv5 mobile on ONNX Runtime via `oar-ocr` + `ort`, local and default, behind the `OcrEngine` trait (ADR-004). Windows.Media.Ocr is a fallback/opt-in fast-EN-JA impl. Cloud backends (Google Vision, Azure Read, multimodal-LLM) are opt-in per backend under BR-09 |
 | LLM providers | Gemini, Anthropic (Claude), OpenAI, OpenRouter - one provider trait, one client module each |
 | Key storage | OS keychain via `keyring` crate (ADR-003) - Windows Credential Manager |
 | Settings storage | tauri-plugin-store (JSON, no secrets ever) |
