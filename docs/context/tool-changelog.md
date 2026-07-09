@@ -16,3 +16,11 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
   `url` crate thay vì tách chuỗi thủ công (chặn kiểu userinfo `http://localhost:8080@evil.com`
   bypass loopback check). Kiểm chứng: `cargo clippy -- -D warnings` sạch, `cargo test` xanh
   (thêm test userinfo/ipv6/malformed). Refs: FR-03, TASK-006.
+- Chốt engine OCR (ADR-004, Accepted 2026-07-09): `.claude/rules/tech-stack.md` đổi dòng OCR
+  từ "OPEN DECISION" sang PaddleOCR PP-OCRv5 mobile chạy ONNX Runtime qua `oar-ocr` + `ort`,
+  local và mặc định, sau trait `OcrEngine`; Windows.Media.Ocr làm fallback/opt-in EN-JA
+  nhanh; backend đám mây opt-in theo BR-09. Các dependency `oar-ocr` và `ort` CHƯA được thêm
+  vào `src-tauri/Cargo.toml` - chúng sẽ được pin trong spike R1 của TASK-007, và spike đó là
+  gate: nếu OCR-stage p95 > 700ms thì quyết định phải xem lại. Refs: FR-02, TASK-005,
+  TASK-007, ADR-004.
+
