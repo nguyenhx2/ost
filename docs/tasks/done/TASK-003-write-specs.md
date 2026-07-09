@@ -1,6 +1,6 @@
 ---
 title: "TASK-003: Write full 13-section specs for FR-01..FR-05 (spec-builder)"
-status: Active
+status: Done
 fr: "FR-01..FR-05"
 owner: ba-analyst
 deps: "-"
@@ -46,4 +46,14 @@ acceptance criteria, so implementation tasks have a locked contract.
 | 2026-07-09 | orchestrator | Verified all 5 polish fixes in files; links/anchors re-checked clean, no em dash/emoji, no out-of-scope changes; committing spec set on branch docs/specs-fr-01-05 | Ready for merge gates by main session |
 
 ## Result
-<Fill when moving to Done.>
+Delivered on branch `docs/specs-fr-01-05` (commits 1317681 + f563476), merged to main in
+fdc3306 by the main session after conflict resolution on this task file. Full 13-section
+spec set in docs/specs/ (Vietnamese prose, English IDs): FR-01..FR-05 with numbered
+testable ACs including latency budgets, UC-01..06, US-01..13, SCR-01..08, NFRs, ER model +
+data dictionary, feasibility, revision history v1.0. Plus PRD-FR-02 stub, BR-06..BR-08,
+glossary sync. spec-guardian verdict: PASS (no drift, no ADR contradiction). Follow-ups:
+(1) owner sign-off requested on 6 BA-derived quantifications (AC-01.10 stop <= 1s,
+AC-05.4 idle within 60s, NFR-PERF-03 5-min idle average, AC-01.2 >= 10-min benchmark,
+AC-02.4 p95 < 2s on live updates, AC-04.1 three default hotkey actions); (2) open issues
+OI-01..OI-07 recorded in 11-assumptions-constraints.md; (3) security-privacy.md synced to
+BR-06 in the close-out commit.
