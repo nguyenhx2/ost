@@ -30,6 +30,7 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1.17"
 tracing = "0.1.41"
+url = "2.5.8"
 
 [dev-dependencies]
 # --- TASK-006 provider layer (FR-03) ---

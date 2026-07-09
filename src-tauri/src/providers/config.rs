@@ -7,6 +7,8 @@
 
 use std::time::Duration;
 
+use url::{Host, Url};
+
 /// Timeouts and bounded-retry policy for one provider client.
 #[derive(Debug, Clone)]
 pub struct ProviderHttpConfig {
@@ -42,20 +44,31 @@ impl ProviderHttpConfig {
 
     /// True when the base URL is acceptable under NFR-SEC-07:
     /// `https://` anywhere, or `http://` to loopback (tests only).
+    ///
+    /// Parsing goes through the `url` crate so the check sees the same host
+    /// reqwest will connect to. Naive string splitting is unsafe here: a value
+    /// like `http://localhost:8080@evil.com` embeds `localhost:8080` as
+    /// userinfo and actually targets `evil.com`. Any URL carrying userinfo is
+    /// rejected outright.
     pub fn base_url_is_allowed(&self) -> bool {
-        if self.base_url.starts_with("https://") {
-            return true;
+        let Ok(url) = Url::parse(&self.base_url) else {
+            return false;
+        };
+        // Reject embedded credentials/userinfo; the real host would differ from
+        // a naive read of the string.
+        if !url.username().is_empty() || url.password().is_some() {
+            return false;
         }
-        if let Some(rest) = self.base_url.strip_prefix("http://") {
-            let host = rest
-                .split('/')
-                .next()
-                .unwrap_or("")
-                .rsplit_once(':')
-                .map_or_else(|| rest.split('/').next().unwrap_or(""), |(h, _)| h);
-            return host == "127.0.0.1" || host == "localhost" || host == "[::1]";
+        match url.scheme() {
+            "https" => true,
+            "http" => match url.host() {
+                Some(Host::Domain("localhost")) => true,
+                Some(Host::Ipv4(ip)) => ip.is_loopback(),
+                Some(Host::Ipv6(ip)) => ip.is_loopback(),
+                _ => false,
+            },
+            _ => false,
         }
-        false
     }
 }
 
@@ -79,6 +92,35 @@ mod tests {
     fn non_loopback_http_is_rejected() {
         assert!(!ProviderHttpConfig::with_base_url("http://example.com").base_url_is_allowed());
         assert!(!ProviderHttpConfig::with_base_url("ftp://127.0.0.1").base_url_is_allowed());
+    }
+
+    #[test]
+    fn userinfo_embedding_loopback_is_rejected() {
+        // reqwest connects to `evil.com` here; the loopback-looking prefix is
+        // userinfo, not the host. Naive `rsplit_once(':')` parsing accepted it.
+        assert!(
+            !ProviderHttpConfig::with_base_url("http://localhost:8080@evil.com")
+                .base_url_is_allowed()
+        );
+        assert!(
+            !ProviderHttpConfig::with_base_url("http://127.0.0.1@evil.com").base_url_is_allowed()
+        );
+        assert!(
+            !ProviderHttpConfig::with_base_url("https://localhost@evil.com").base_url_is_allowed()
+        );
+        // Password-only userinfo form.
+        assert!(!ProviderHttpConfig::with_base_url("http://:pass@evil.com").base_url_is_allowed());
+    }
+
+    #[test]
+    fn loopback_ipv6_http_is_allowed() {
+        assert!(ProviderHttpConfig::with_base_url("http://[::1]:8080").base_url_is_allowed());
+    }
+
+    #[test]
+    fn malformed_url_is_rejected() {
+        assert!(!ProviderHttpConfig::with_base_url("not a url").base_url_is_allowed());
+        assert!(!ProviderHttpConfig::with_base_url("").base_url_is_allowed());
     }
 
     #[test]

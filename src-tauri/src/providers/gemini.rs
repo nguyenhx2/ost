@@ -538,7 +538,7 @@ mod tests {
     use super::*;
 
     /// Synthetic test key (testing.md: synthetic data only).
-    const TEST_KEY: &str = "AIzaSy-SYNTHETIC-TEST-KEY-0042";
+    const TEST_KEY: &str = "FAKE-TEST-KEY-SYNTHETIC-0042";
     const MODEL: &str = "gemini-2.5-flash";
 
     fn api_key() -> ApiKey {

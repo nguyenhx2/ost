@@ -120,7 +120,7 @@ mod tests {
     use super::super::backend::mock::{FailingBackend, MockBackend};
     use super::*;
 
-    const SECRET: &str = "AIzaSy-test-secret-key-value-42";
+    const SECRET: &str = "FAKE-TEST-KEY-secret-value-42";
 
     fn store_with_mock() -> (KeyStore, Arc<MockBackend>) {
         let backend = Arc::new(MockBackend::default());
