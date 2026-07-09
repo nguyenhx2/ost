@@ -26,13 +26,12 @@ with the planned module skeleton, lint/format configured.
       shell/ commands/` (mod.rs each, compiles clean).
 - [x] tsconfig strict; eslint + prettier; `src/lib/ipc.ts` typed IPC wrapper stub;
       `src/styles/tokens.css` dark-first token seed; `src/components/ui/` barrel.
-- [ ] `cargo clippy -- -D warnings` and `npm run lint` pass; `npm run tauri dev` opens the
-      window. (clippy + lint PASS; `tauri dev` window smoke test deferred to the user per
-      dispatch brief)
+- [x] `cargo clippy -- -D warnings` and `npm run lint` pass; `npm run tauri dev` opens the
+      window. (smoke test run 2026-07-09 on user request: ost.exe PID 11176, window title
+      "OST", ~34.6MB RAM)
 
 ## Test scenarios / acceptance
-- [ ] `npm run tauri dev` launches; `cargo test` and `npx vitest run` pass (empty suites ok).
-      (cargo test + vitest PASS; `tauri dev` launch pending manual user smoke test)
+- [x] `npm run tauri dev` launches; `cargo test` and `npx vitest run` pass (empty suites ok).
 - [x] Module skeleton compiles with no warnings.
 
 ## Session log (AI session log)
@@ -45,6 +44,7 @@ with the planned module skeleton, lint/format configured.
 | 2026-07-09 | frontend-ui-dev | Added 8-module Rust skeleton (audio/stt/capture/ocr/providers/keys/shell/commands) declared in lib.rs; eslint 10 flat config + prettier + vitest; typed IPC wrapper `src/lib/ipc.ts` + 2 unit tests; dark-first `src/styles/tokens.css` + light override; `src/components/ui/` barrel; token-only OST placeholder screen | Done |
 | 2026-07-09 | frontend-ui-dev | ENV FIX: Windows 10/11 SDK was missing (cargo link failed LNK1181 kernel32.lib; TASK-001 wrapper only verified cargo --version); installed Windows 11 SDK 10.0.26100 via winget. Also: the inline vcvars cmd wrapper breaks under Git Bash quoting - use a .bat wrapper file instead | Fixed |
 | 2026-07-09 | frontend-ui-dev | Verification green: npm run lint PASS (eslint 10.6.0 + prettier 3.9.4); vitest 4.1.10 2/2 tests PASS; tsc --noEmit PASS; cargo check 0 warnings (2m17s first build); cargo clippy -D warnings PASS; cargo fmt --check PASS; cargo test ok (0 tests, empty suites). One cargo test run hit transient OS error 1455 (paging file) - rerun with `-j 2` passed | Green |
+| 2026-07-09 | orchestrator | tauri dev window smoke test on user request: window "OST" opened (ost.exe PID 11176, ~34.6MB RAM), app killed cleanly after. NOTE: the Bash-tool sandbox blocks loopback - vite bound [::1]:1420 but connections stalled (SYN_RECEIVED); rerun without sandbox succeeded. Recorded in known-issues | Smoke test PASS |
 
 ## Result
 Delivered on branch `feat/scaffold-tauri-app`, commits 64987da + 11e72f3 (merged to main
