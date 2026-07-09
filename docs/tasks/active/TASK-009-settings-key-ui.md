@@ -1,6 +1,6 @@
 ---
 title: "TASK-009: Settings UI - provider key entry/validation, model selection"
-status: Planned
+status: Active
 fr: "FR-03, FR-04"
 owner: frontend-ui-dev
 deps: "TASK-006"
@@ -38,6 +38,8 @@ model, and set fallback order - keys stored via TASK-006's keychain wrapper only
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-09 | orchestrator | Task created and registered in master-plan (bootstrap seed) | Planned |
+| 2026-07-09 | frontend-ui-dev | Flipped status to Active. Built Rust key command surface (`commands/keys.rs`: statuses/save/check/delete, typed `KeyCommandError`, `SaveKeyOutcome`), settings window (`shell/settings.rs`) + tray entry, registered `KeyStore` + `tauri-plugin-store`. Added Input primitive (+ design-system row), `keysIpc`/`settingsIpc` typed wrapper, `settings.ts` persistence (names only), `useProviderKeys`/`useProviderSelection` hooks, `SettingsView` + i18n (vi+en). Followed up TASK-006: real Credential Manager round-trip smoke test (`keys/backend.rs`, `#[ignore]`) and automated command-surface no-`expose`/no-`ApiKey` test. | Active - all gates green |
+| 2026-07-09 | frontend-ui-dev | Verified: Vitest 124/124, eslint+prettier clean, tsc strict clean; cargo fmt+clippy -D warnings clean, cargo test 79 pass + 1 ignored (real keychain smoke ran manually and PASSED). Synced `ipc.md` contract. | Active - ready for review gates |
 
 ## Result
 <Fill when moving to Done.>
