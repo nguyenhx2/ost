@@ -22,4 +22,18 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# --- TASK-006 provider layer (FR-03) - appended, keep at end of [dependencies] ---
+async-trait = "0.1.88"
+keyring = { version = "3.6.2", features = ["windows-native"] }
+reqwest = { version = "0.12.15", default-features = false, features = ["json", "rustls-tls"] }
+thiserror = "2.0.12"
+tokio = { version = "1.44.2", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-stream = "0.1.17"
+tracing = "0.1.41"
+url = "2.5.8"
+
+[dev-dependencies]
+# --- TASK-006 provider layer (FR-03) ---
+tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
+wiremock = "0.6.3"
 

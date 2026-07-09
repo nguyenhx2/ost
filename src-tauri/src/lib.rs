@@ -1,9 +1,9 @@
 mod audio;
 mod capture;
 mod commands;
-mod keys;
+pub mod keys;
 mod ocr;
-mod providers;
+pub mod providers;
 mod shell;
 mod stt;
 
