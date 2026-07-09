@@ -21,7 +21,7 @@ preview overlay gần như tức thì, cập nhật trực tiếp khi nội dung
 
 - Từ lúc chốt vùng đến khi bản dịch hiển thị: p95 < 2s (AC-02.2, NFR-PERF-02).
 - Live update khi nội dung vùng đổi: p95 < 2s từ khi phát hiện thay đổi (AC-02.4).
-- Ảnh chụp không bao giờ ghi đĩa hay rời máy; chỉ TEXT OCR đến provider (AC-02.5).
+- Ảnh chụp mặc định không rời máy (OCR local) và không bao giờ ghi đĩa. Nếu người dùng bật OCR đám mây opt-in (consent per-backend, BR-09): chỉ crop vùng đã thu nhỏ + loại metadata rời máy, không bao giờ toàn màn hình; ngoài ra chỉ TEXT OCR đến provider (AC-02.5).
 - Đây là tính năng đích của Phase 1 (đường dọc đầu tiên qua provider layer).
 
 ## 3. Phạm vi (trong / ngoài)
@@ -39,8 +39,8 @@ preview overlay gần như tức thì, cập nhật trực tiếp khi nội dung
 | FR-02.2 | Pipeline capture -> OCR -> dịch đạt p95 < 2s sau chốt vùng | Must | AC-02.2 |
 | FR-02.3 | Preview hiện text OCR ngay, bản dịch cập nhật sau | Must | AC-02.3 |
 | FR-02.4 | Live update khi nội dung vùng thay đổi | Must | AC-02.4 |
-| FR-02.5 | Ảnh chỉ trong RAM; chỉ TEXT OCR gửi provider | Must | AC-02.5 |
-| FR-02.6 | Confidence flag cho vùng nhận dạng kém | Must | AC-02.6 |
+| FR-02.5 | Ảnh chỉ trong RAM; mặc định chỉ TEXT OCR gửi provider; OCR đám mây opt-in gửi crop đã thu nhỏ theo BR-09 | Must | AC-02.5 |
+| FR-02.6 | Confidence flag cho vùng nhận dạng kém (`PerLine` dùng ngưỡng OI-07; `Unavailable` dùng banner cố định) | Must | AC-02.6 |
 | FR-02.7 | Trạng thái "không nhận dạng được text", không gọi LLM khi OCR trống | Must | AC-02.7 |
 | FR-02.8 | Re-translate cùng text OCR, đổi được provider/model trước khi gửi | Must | AC-02.8 |
 | FR-02.9 | Preview đủ điều khiển: copy, re-translate, pin, đóng; badge provider/model; thao tác đủ bàn phím | Must | AC-02.9 |
@@ -61,8 +61,7 @@ flowchart LR
 
 ## 6. Ràng buộc kỹ thuật
 
-- Engine OCR CHƯA chốt - chặn implement pipeline OCR: [OI-01](../specs/11-assumptions-constraints.md#oi-01)
-  (TASK-005 bakeoff -> ADR).
+- Engine OCR đã chốt ở [ADR-004](../architecture/decisions/ADR-004-pluggable-ocr-backends.md): mặc định local PaddleOCR PP-OCRv5 (oar-ocr/ort) sau trait `OcrEngine`; backend pluggable; cloud opt-in theo BR-09. Local spike-gated (R1 <=700ms) là gate đầu của TASK-007.
 - Capture qua trait `ScreenCapturer` (xcap hoặc Windows Graphics Capture); OCR qua trait
   `OcrEngine` (CT-07).
 - Mọi lệnh dịch qua provider layer FR-03; prompt tách chỉ thị/dữ liệu, response
@@ -72,7 +71,7 @@ flowchart LR
 
 ## 7. Câu hỏi mở
 
-- OI-01: engine OCR (quyết định trước khi code pipeline).
+- OI-01: engine OCR - ĐÃ CHỐT ở ADR-004 (local PaddleOCR PP-OCRv5 mặc định; backend pluggable; cloud opt-in theo BR-09).
 - OI-07: ngưỡng confidence cụ thể cho flag OCR.
 - Tần suất/cơ chế phát hiện thay đổi vùng ở chế độ live (polling interval vs diff ảnh) -
   chốt khi thiết kế kỹ thuật, phải giữ budget NFR-PERF-02 và không phá idle budget.

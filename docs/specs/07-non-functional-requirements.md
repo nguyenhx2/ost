@@ -29,7 +29,7 @@ text riêng tư lưu local. Không có PII nào khác được thu thập.
 |----|---------|---------|
 | NFR-SEC-01 | API key lưu DUY NHẤT trong OS keychain (Windows Credential Manager) qua module `keys/`; không bao giờ trong file, settings store, log, crash report, thông báo lỗi | Test + audit module (AC-03.2, ADR-003) |
 | NFR-SEC-02 | WebView chỉ nhận tên provider + trạng thái masked; không lệnh IPC nào trả giá trị key | Test IPC (AC-03.3) |
-| NFR-SEC-03 | Audio thô và ảnh chụp màn hình: chỉ trong RAM phiên, không ghi đĩa, không rời máy; chỉ TEXT tối thiểu gửi đến provider người dùng chọn | Integration test + audit (AC-01.6, AC-02.5, BR-01) |
+| NFR-SEC-03 | Audio thô: chỉ trong RAM phiên, không ghi đĩa, không rời máy. Ảnh chụp màn hình: chỉ trong RAM phiên, không ghi đĩa; MẶC ĐỊNH không rời máy (OCR local). Nếu người dùng bật backend OCR đám mây (opt-in, consent per-backend theo BR-09): chỉ crop vùng đã chọn - đã thu nhỏ (LLM long-edge <= ~1568px), loại metadata, chỉ trong RAM - được gửi đến provider đó qua HTTPS; không bao giờ gửi toàn màn hình, không bao giờ ghi đĩa. Mỗi đường rời-ảnh mới phải qua security-reviewer | Integration test + audit (AC-01.6, AC-02.5, BR-01, BR-09) |
 | NFR-SEC-04 | Lịch sử dịch: text-only, lưu local, không bao giờ chứa key/audio/ảnh; có nút xoá toàn bộ; tắt được | Test (AC-04.4..AC-04.6, BR-06) |
 | NFR-SEC-05 | Mọi input IPC được validate tại Tauri command handler; response provider được schema-validate trước khi dùng | Unit test biên |
 | NFR-SEC-06 | Anti-injection: text capture (STT/OCR) là DATA không tin cậy - prompt tách rõ chỉ thị/dữ liệu; output render plain text (không dangerouslySetInnerHTML, không diễn giải markdown); nội dung dạng chỉ thị trong text capture không bao giờ được thực thi | Test prompt template + renderer (AC-03.8) |
@@ -42,7 +42,7 @@ text riêng tư lưu local. Không có PII nào khác được thu thập.
 |----|---------|---------|
 | NFR-REL-01 | Lỗi provider (mạng/quota/key) không làm crash phiên: fallback theo thứ tự người dùng định, hết fallback thì báo lỗi hành động được | Test mô phỏng lỗi (AC-03.6) |
 | NFR-REL-02 | Dừng phiên giải phóng tài nguyên về ngưỡng idle trong 60s; không rò rỉ qua nhiều phiên liên tiếp | Đo (AC-05.4) |
-| NFR-REL-03 | Mất mạng: STT local vẫn chạy, phần dịch báo trạng thái offline rõ ràng thay vì treo | E2e mô phỏng |
+| NFR-REL-03 | Mất mạng: STT local vẫn chạy; OCR local (mặc định) vẫn chạy. Nếu backend OCR đám mây đang bật mà mất mạng hoặc provider lỗi, hệ thống báo trạng thái offline rõ ràng và tự động dùng backend OCR local làm fallback thay vì treo; phần dịch báo offline rõ ràng | E2e mô phỏng |
 | NFR-REL-04 | Tải model gián đoạn: resume hoặc báo lỗi kèm thử lại; model tải xong được kiểm toàn vẹn trước khi dùng | Test luồng first-run |
 
 ## Khả dụng {#nfr-usability}
