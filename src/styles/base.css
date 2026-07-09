@@ -1,0 +1,29 @@
+/*
+ * Global base styles shared by every window (main, region-select, region-preview).
+ * Token-driven only (design-system.md). The body background stays transparent so
+ * overlay windows can composite over the desktop; opaque surfaces are set per view.
+ */
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background-color: transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* WCAG 2.1 AA: respect the user's reduced-motion preference everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

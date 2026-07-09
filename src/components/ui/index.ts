@@ -1,9 +1,16 @@
 /*
- * Barrel for UI primitives (design-system.md).
- * Primitives land here in Phase 1: Button, IconButton, Input, Select, Switch,
- * Slider, Badge, Tooltip, Card, OverlayPanel, DataList. Each new primitive is
- * exported from this barrel and registered in .claude/rules/design-system.md
- * in the same PR.
+ * Barrel for UI primitives (design-system.md). Each primitive exported here
+ * is registered in .claude/rules/design-system.md in the same PR.
  */
 
-export {};
+import "./primitives.css";
+
+export { Badge, type BadgeProps } from "./Badge";
+export { Button, type ButtonProps } from "./Button";
+export { IconButton, type IconButtonProps } from "./IconButton";
+export { OverlayPanel, type OverlayPanelProps } from "./OverlayPanel";
+export { PlainText, type PlainTextProps } from "./PlainText";
+export { Select, type SelectOption, type SelectProps } from "./Select";
+export { Slider, type SliderProps } from "./Slider";
+export { Switch, type SwitchProps } from "./Switch";
+export { Tooltip, type TooltipProps } from "./Tooltip";

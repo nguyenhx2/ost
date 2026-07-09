@@ -8,14 +8,26 @@
   /* Color (dark theme, WCAG 2.1 AA contrast on --color-bg/--color-surface) */
   --color-bg: #0f1115;
   --color-surface: #1a1d24;
+  /* RGB triplet of --color-surface for alpha composition (overlay scrim). */
+  --color-surface-rgb: 26, 29, 36;
+  --color-surface-raised: #232733;
+  --color-border: #3c4149;
   --color-text: #e8eaed;
   --color-text-muted: #9aa0a6;
   --color-accent: #8ab4f8;
+  --color-on-accent: #0f1115;
   --color-danger: #f28b9b;
+  --color-warning: #fdd663;
+  --color-on-warning: #1f1a05;
+  /* Region selection overlay (SCR-02) */
+  --color-scrim: rgba(8, 10, 14, 0.55);
+  --color-selection-fill: rgba(138, 180, 248, 0.15);
+  --color-selection-border: #8ab4f8;
 
   /* Typography */
   --font-sans:
     "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-size-xs: 0.6875rem;
   --font-size-sm: 0.8125rem;
   --font-size-md: 1rem;
   --font-size-lg: 1.25rem;
@@ -39,15 +51,36 @@
   --z-toast: 200;
   --z-overlay: 300;
 
-  /* Overlay scrim opacity (user-adjustable at runtime) */
-  --overlay-scrim-opacity: 0.75;
+  /* Overlay scrim opacity (user-adjustable at runtime via the opacity Slider) */
+  --overlay-scrim-opacity: 0.85;
+
+  /* Elevation */
+  --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  /* Motion (zeroed under prefers-reduced-motion, see base.css) */
+  --duration-fast: 120ms;
+
+  /* Focus ring (WCAG 2.1 AA visible focus) */
+  --focus-ring-width: 2px;
+  --focus-ring-color: var(--color-accent);
+  --focus-ring-offset: 2px;
 }
 
 [data-theme="light"] {
   --color-bg: #f6f7f9;
   --color-surface: #ffffff;
+  --color-surface-rgb: 255, 255, 255;
+  --color-surface-raised: #eef1f5;
+  --color-border: #c6cbd2;
   --color-text: #1a1c1e;
   --color-text-muted: #5f6368;
   --color-accent: #1a56db;
+  --color-on-accent: #ffffff;
   --color-danger: #b3261e;
+  --color-warning: #7a5a00;
+  --color-on-warning: #fff8e1;
+  --color-scrim: rgba(28, 32, 40, 0.4);
+  --color-selection-fill: rgba(26, 86, 219, 0.12);
+  --color-selection-border: #1a56db;
+  --shadow-overlay: 0 8px 24px rgba(30, 34, 40, 0.25);
 }
