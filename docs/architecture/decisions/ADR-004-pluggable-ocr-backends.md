@@ -1,8 +1,8 @@
 ---
 title: "ADR-004: OCR engine - local PaddleOCR default with pluggable optional cloud backends behind informed consent"
-status: Proposed
+status: Accepted
 date: 2026-07-09
-deciders: []
+deciders: [nguyenhx2]
 tags: [adr, architecture, screen, privacy]
 ---
 

@@ -16,6 +16,20 @@ is banned), `Switch`, `Slider`, `Badge`, `Tooltip` (no raw `title=` attributes),
 `OverlayPanel` (the translation overlay surface), `DataList`. Each new primitive: create,
 export from the barrel, test, and add a row here IN THE SAME PR.
 
+### Landed
+
+| Primitive | File | Purpose |
+|-----------|------|---------|
+| `Button` | `src/components/ui/Button.tsx` | Text button (default/primary variants) |
+| `IconButton` | `src/components/ui/IconButton.tsx` | Icon-only button with mandatory `aria-label`; `pressed` for toggles |
+| `Select` | `src/components/ui/Select.tsx` | Custom listbox select (native `<select>` banned); full keyboard nav |
+| `Switch` | `src/components/ui/Switch.tsx` | `role="switch"` toggle, keyboard operable |
+| `Slider` | `src/components/ui/Slider.tsx` | Token-styled range input (opacity control) |
+| `Badge` | `src/components/ui/Badge.tsx` | Status badge (provider/model, low-confidence warning) |
+| `Tooltip` | `src/components/ui/Tooltip.tsx` | Hover/focus tooltip linked via `aria-describedby` (raw `title=` banned) |
+| `OverlayPanel` | `src/components/ui/OverlayPanel.tsx` | Translation overlay surface with user-adjustable scrim opacity |
+| `PlainText` | `src/components/ui/PlainText.tsx` | Sanitizing plain-text renderer for untrusted OCR/transcript/translation output |
+
 ## Banned outright
 
 - Native `<select>`, raw data `<table>` (use the DataList/table primitive when it exists).

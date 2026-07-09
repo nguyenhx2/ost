@@ -1,0 +1,275 @@
+/*
+ * Styles for UI primitives (design-system.md). Token-driven only:
+ * every color/spacing/radius/z-index value comes from src/styles/tokens.css.
+ */
+
+/* ---------- Shared focus ring (WCAG 2.1 AA visible focus) ---------- */
+
+.ost-button:focus-visible,
+.ost-icon-button:focus-visible,
+.ost-switch:focus-visible,
+.ost-slider:focus-visible,
+.ost-select-trigger:focus-visible,
+.ost-select-listbox:focus-visible,
+.ost-move-handle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ---------- Button ---------- */
+
+.ost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.ost-button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.ost-button--primary {
+  color: var(--color-on-accent);
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.ost-button:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+
+/* ---------- IconButton ---------- */
+
+.ost-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  color: var(--color-text);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.ost-icon-button:hover:not(:disabled) {
+  background-color: var(--color-surface-raised);
+}
+
+.ost-icon-button[aria-pressed="true"] {
+  color: var(--color-accent);
+  background-color: var(--color-surface-raised);
+}
+
+.ost-icon-button:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+
+/* ---------- Badge ---------- */
+
+.ost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  white-space: nowrap;
+}
+
+.ost-badge--warning {
+  color: var(--color-on-warning);
+  background-color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+/* ---------- Tooltip ---------- */
+
+.ost-tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.ost-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, calc(-1 * var(--space-1)));
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+  z-index: var(--z-toast);
+}
+
+.ost-tooltip-wrapper:hover .ost-tooltip,
+.ost-tooltip-wrapper:focus-within .ost-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* ---------- Switch ---------- */
+
+.ost-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.ost-switch-track {
+  display: inline-flex;
+  align-items: center;
+  width: var(--space-6);
+  padding: 2px;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: background-color var(--duration-fast) ease;
+}
+
+.ost-switch[aria-checked="true"] .ost-switch-track {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.ost-switch-thumb {
+  width: var(--space-3);
+  height: var(--space-3);
+  background-color: var(--color-text);
+  border-radius: var(--radius-lg);
+  transition: transform var(--duration-fast) ease;
+}
+
+.ost-switch[aria-checked="true"] .ost-switch-thumb {
+  background-color: var(--color-on-accent);
+  transform: translateX(var(--space-3));
+}
+
+/* ---------- Slider ---------- */
+
+.ost-slider-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.ost-slider {
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* ---------- Select (custom - native <select> is banned) ---------- */
+
+.ost-select {
+  position: relative;
+  display: inline-flex;
+}
+
+.ost-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.ost-select-listbox {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 100%;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-1);
+  list-style: none;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-overlay);
+  z-index: var(--z-modal);
+}
+
+.ost-select-option {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ost-select-option[aria-selected="true"] {
+  color: var(--color-accent);
+}
+
+.ost-select-option--active {
+  background-color: var(--color-surface);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* ---------- OverlayPanel ---------- */
+
+.ost-overlay-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  color: var(--color-text);
+  /* Scrim: surface color composited at a user-adjustable opacity so the
+     overlay stays legible over arbitrary backgrounds (frontend.md). */
+  background-color: rgba(
+    var(--color-surface-rgb),
+    var(--overlay-scrim-opacity)
+  );
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  z-index: var(--z-overlay);
+}
+
+/* ---------- PlainText (sanitizing renderer) ---------- */
+
+.ost-plain-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-sans);
+}

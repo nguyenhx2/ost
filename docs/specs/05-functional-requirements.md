@@ -99,8 +99,7 @@ re-translate / pin / đóng; bản ghi lịch sử text-only nếu đang bật.
 - Con người: chọn/huỷ vùng, đọc preview, copy, yêu cầu dịch lại, đổi provider/model, đóng
   hoặc ghim preview.
 
-**Quy tắc nghiệp vụ.** BR-01 (chỉ TEXT rời máy - áp dụng cho ảnh chụp: không ghi đĩa,
-không gửi đi), BR-03, BR-04, BR-05, BR-06.
+**Quy tắc nghiệp vụ.** BR-01 (ảnh chụp: mặc định không rời máy - OCR local; chỉ TEXT rời máy, trừ khi người dùng bật OCR đám mây opt-in theo BR-09 thì chỉ crop đã thu nhỏ rời máy), BR-03, BR-04, BR-05, BR-06, BR-09.
 
 **Tiêu chí chấp nhận.**
 
@@ -113,9 +112,8 @@ không gửi đi), BR-03, BR-04, BR-05, BR-06.
    dịch; bản dịch cập nhật vào preview khi provider trả về.
 4. AC-02.4: Chế độ live: khi nội dung vùng thay đổi, preview cập nhật (OCR + dịch lại)
    trong p95 < 2s tính từ thay đổi được phát hiện.
-5. AC-02.5: Ảnh chụp màn hình chỉ tồn tại trong RAM của phiên: không ghi xuống đĩa, không
-   gửi ra ngoài máy; chỉ TEXT OCR được gửi đến provider (kiểm bằng test + audit).
-6. AC-02.6: Vùng OCR có độ nhận dạng kém được gắn confidence flag hiển thị rõ.
+5. AC-02.5: Ảnh chụp màn hình chỉ tồn tại trong RAM của phiên, không ghi xuống đĩa. Với backend OCR local (mặc định) ảnh không rời máy; chỉ TEXT OCR được gửi đến provider. Với backend OCR đám mây do người dùng bật (consent per-backend theo BR-09): chỉ crop vùng đã chọn đã thu nhỏ + loại metadata rời máy đến provider đó, không bao giờ gửi toàn màn hình (kiểm bằng test + audit).
+6. AC-02.6: Vùng OCR có độ nhận dạng kém được gắn confidence flag hiển thị rõ. Backend cung cấp confidence theo dòng (`PerLine`) dùng ngưỡng hiệu chỉnh (OI-07). Backend không cung cấp confidence (`Unavailable`, ví dụ Windows.Media.Ocr hoặc đường multimodal-LLM) hiển thị banner cố định 'bản nhận dạng chưa kiểm chứng' thay vì đoán im lặng (giữ đúng BR-05).
 7. AC-02.7: Nếu OCR không tìm thấy text, preview hiển thị trạng thái "không nhận dạng được
    text" và không có lệnh gọi LLM nào được phát.
 8. AC-02.8: Nút re-translate gửi lại đúng text OCR hiện tại để dịch lại (cho phép đổi

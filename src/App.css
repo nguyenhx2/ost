@@ -1,12 +1,5 @@
 /* App shell placeholder styles - token-driven only (design-system.md). */
 
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background-color: var(--color-bg);
-  color: var(--color-text);
-}
-
 .app {
   min-height: 100vh;
   display: flex;
