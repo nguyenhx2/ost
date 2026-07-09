@@ -53,6 +53,18 @@ impl ModelSet {
         rec: "korean_pp-ocrv5_mobile_rec.onnx",
         dict: "ppocrv5_korean_dict.txt",
     };
+
+    /// PP-OCRv5 SERVER main recognition model (en/ja/zh), the heavier
+    /// higher-accuracy variant. Shares the main `ppocrv5_dict.txt` charset with
+    /// [`ModelSet::MAIN`] - there is NO latin/Vietnamese server rec in oar-ocr
+    /// 0.8.0, only this CJK-charset server rec. Detection is kept on the mobile
+    /// det model so an A/B against [`ModelSet::MAIN`] isolates the rec cost.
+    /// Evaluated in the R2 spike only (~80MB download, not a default).
+    pub const MAIN_SERVER: ModelSet = ModelSet {
+        det: "pp-ocrv5_mobile_det.onnx",
+        rec: "pp-ocrv5_server_rec.onnx",
+        dict: "ppocrv5_dict.txt",
+    };
 }
 
 /// The local PaddleOCR engine. Cheap to construct; the ONNX Runtime session is
@@ -91,6 +103,11 @@ impl PaddleOcrEngine {
     /// The Korean engine.
     pub fn korean() -> Self {
         Self::new("paddle-ppocrv5-korean", ModelSet::KOREAN)
+    }
+
+    /// The heavier server main engine (en/ja/zh), R2 spike A/B only.
+    pub fn main_server() -> Self {
+        Self::new("paddle-ppocrv5-main-server", ModelSet::MAIN_SERVER)
     }
 
     /// Whether the lazy ONNX Runtime session has been built yet. Used by the R1

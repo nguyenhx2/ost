@@ -316,6 +316,42 @@ fn px_for_big() -> f32 {
     88.0
 }
 
+/// Upscales `img` by `factor` with a Lanczos3 (3-lobe windowed-sinc) kernel.
+///
+/// Lanczos3 is chosen over bilinear/bicubic for the R2 pre-recognition upscale
+/// probe because, when magnifying, its wider windowed-sinc support reconstructs
+/// high-frequency stroke and diacritic detail with the sharpest edges of the
+/// filters `image` exposes (bilinear over-blurs, CatmullRom/bicubic is softer);
+/// mild ringing is acceptable for a recognizer input. This is the most
+/// favourable resampling for the "dense tone-mark stacks are lost to low
+/// effective DPI" hypothesis, so a null result here is a strong refutation.
+pub fn upscale(img: &RgbImage, factor: f32) -> RgbImage {
+    if (factor - 1.0).abs() < f32::EPSILON {
+        return img.clone();
+    }
+    let w = ((img.width() as f32 * factor).round() as u32).max(1);
+    let h = ((img.height() as f32 * factor).round() as u32).max(1);
+    imageops::resize(img, w, h, imageops::FilterType::Lanczos3)
+}
+
+/// A single large, clean Vietnamese crop dense in composed tone-mark glyphs
+/// (ả ạ ử ụ ầ ế ...), rendered big enough that DPI cannot be the limiter. Used
+/// by the R2 charset probe: if the latin rec model NEVER emits any composed
+/// U+1E00-U+1EFF glyph even here, the gap is the charset, not the DPI.
+/// Returns `None` if the Latin font is unavailable.
+pub fn vi_charset_probe() -> Option<Fixture> {
+    let font = latin_font()?;
+    // Every syllable carries a composed tone-mark diacritic on purpose.
+    let text = "Tiếng Việt rất đẹp và dễ đọc khó";
+    Some(Fixture {
+        name: "vi-charset-probe-1400x220".to_string(),
+        lang: Lang::Vi,
+        category: Category::General,
+        text: text.to_string(),
+        image: render_horizontal(text, &font, 96.0, 1400, 220, FG, BG),
+    })
+}
+
 /// A minimal always-available synthetic fixture (single latin word) for the
 /// criterion latency benchmark and smoke checks when CJK fonts are absent.
 /// Returns `None` only if even the Latin font is missing.
