@@ -2,7 +2,9 @@ mod audio;
 mod capture;
 mod commands;
 pub mod keys;
-mod ocr;
+// Public for the R1 OCR spike harness (benches/ + tests/); the pipeline is NOT
+// wired into the Tauri runtime yet (gated behind the spike).
+pub mod ocr;
 pub mod providers;
 mod shell;
 mod stt;

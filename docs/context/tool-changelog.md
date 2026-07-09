@@ -16,6 +16,18 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
   `url` crate thay vì tách chuỗi thủ công (chặn kiểu userinfo `http://localhost:8080@evil.com`
   bypass loopback check). Kiểm chứng: `cargo clippy -- -D warnings` sạch, `cargo test` xanh
   (thêm test userinfo/ipv6/malformed). Refs: FR-03, TASK-006.
+- Spike R1 OCR (TASK-007, FR-02): thêm dependency `src-tauri` cho engine OCR local
+  PaddleOCR PP-OCRv5 (ADR-004). Pin chính xác: `oar-ocr = "=0.8.0"` (feature `auto-download`,
+  kéo theo `ort 2.0.0-rc.12` prebuilt binary qua `download-binaries` lúc build),
+  `image = "=0.25.8"` (khớp `imageproc 0.27` yêu cầu `^0.25.8`). Fixture render chỉ cho
+  spike (optional, sau feature `ocr-spike`): `ab_glyph = "=0.2.31"`, `imageproc = "=0.27.0"`
+  (default-features off, feature `text`). Dev-dependency benchmark: `criterion = "=0.5.1"`.
+  Model ONNX (~40MB) tải từ ModelScope vào cache của oar-ocr (KHÔNG nằm trong repo, KHÔNG
+  commit). Kiểm chứng: `cargo clippy --all-targets --features ocr-spike -- -D warnings` sạch;
+  `cargo fmt --check` sạch; unit test `ocr::engine` xanh; spike harness đo latency p95=277ms
+  (<=700ms), EN/JA/ja-vertical/low-DPI/ko/zh accuracy=1.000, per-line confidence có sẵn,
+  lazy load + idle RAM đạt NFR-PERF-03; Vietnamese 0.73-0.74 (rớt dấu thanh dày) escalate.
+  Refs: FR-02, TASK-007, ADR-004.
 - Chốt engine OCR (ADR-004, Accepted 2026-07-09): `.claude/rules/tech-stack.md` đổi dòng OCR
   từ "OPEN DECISION" sang PaddleOCR PP-OCRv5 mobile chạy ONNX Runtime qua `oar-ocr` + `ort`,
   local và mặc định, sau trait `OcrEngine`; Windows.Media.Ocr làm fallback/opt-in EN-JA
