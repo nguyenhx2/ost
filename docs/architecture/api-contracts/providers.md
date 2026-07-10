@@ -25,7 +25,9 @@ NFR-SCA-02, ADR-003, data model 08.
 Enum serde string cố định (data model 08 - KHÔNG đổi):
 `"gemini" | "anthropic" | "openai" | "openrouter"`.
 
-TASK-006 chỉ ship client Gemini; ba provider còn lại là module follow-up.
+Cả 4 provider đều đã có client (Gemini từ TASK-006; Anthropic, OpenAI, OpenRouter từ
+TASK-010) - mỗi client là một module implement trait, KHÔNG sửa trait, resolve qua
+`factory::build_provider` (NFR-SCA-02).
 
 ## Trait `TranslationProvider` (Rust, `src-tauri/src/providers/traits.rs`)
 
@@ -155,14 +157,26 @@ cấu hình khác bằng `ProviderError::Config`.
 
 ## `list_models` (PLACEHOLDER - nguồn danh sách model là open item)
 
-- Gemini hiện trả DANH SÁCH PIN tối thiểu, hard-code có chú thích rõ trong
-  `gemini.rs` (`PINNED_GEMINI_MODELS`): `gemini-2.5-flash`, `gemini-2.5-pro`,
-  `gemini-2.0-flash`.
+- Cả 4 client hiện trả DANH SÁCH PIN tối thiểu, hard-code có chú thích rõ trong module
+  tương ứng (`PINNED_<PROVIDER>_MODELS`):
+  - Gemini: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`.
+  - Anthropic: `claude-3-5-sonnet-latest`, `claude-3-5-haiku-latest`, `claude-3-opus-latest`.
+  - OpenAI: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`.
+  - OpenRouter: `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`, `google/gemini-2.5-flash`
+    (id namespaced `vendor/model`).
 - `model_id` vẫn là chuỗi opaque: user nhập model ngoài danh sách vẫn hợp lệ; không có
   default nào bị bake vào logic dịch.
 - Khi chốt nguồn catalog (API động vs danh sách curated), cập nhật mục này cùng PR.
 - Tham số `key: Option<&ApiKey>` tồn tại vì một số provider yêu cầu auth để list model;
-  Gemini hiện bỏ qua tham số này.
+  cả 4 client hiện bỏ qua tham số này (danh sách pin tĩnh).
+
+## Factory (`src-tauri/src/providers/factory.rs`)
+
+`build_provider(provider: ProviderId) -> Result<Box<dyn TranslationProvider>, ProviderError>`
+là NƠI DUY NHẤT map `ProviderId` sang client cụ thể. Cả command key (validate/store) lẫn
+router fallback tương lai (AC-03.6) dựng client qua đây, nên thêm provider = một match arm,
+zero call-site (NFR-SCA-02). Enum đóng trên 4 provider nên factory là total: chỉ lỗi khi
+build client thất bại (`ProviderError::Config`), không bao giờ vì provider lạ.
 
 ## Gemini client (`src-tauri/src/providers/gemini.rs`)
 
@@ -176,6 +190,55 @@ cấu hình khác bằng `ProviderError::Config`.
 - Base production: `https://generativelanguage.googleapis.com`.
 - Log của layer chỉ chứa: provider id, model id, status, số ký tự (KHÔNG log nội dung
   text capture/bản dịch, không log header). Message lỗi đã redact.
+
+## Anthropic client (`src-tauri/src/providers/anthropic.rs`)
+
+| Thao tác | Endpoint |
+|----------|----------|
+| translate | `POST {base}/v1/messages` (`stream: false`) |
+| translate_stream | `POST {base}/v1/messages` (`stream: true`, SSE) |
+| validate_key | `GET {base}/v1/models?limit=1` |
+
+- Key đi trong header `x-api-key`; mọi request kèm header bắt buộc
+  `anthropic-version: 2023-06-01`. Key KHÔNG BAO GIỜ trong URL.
+- Instruction tin cậy vào kênh `system`; data block không tin cậy là message `user` duy
+  nhất (AC-03.8). `max_tokens` bắt buộc = 4096.
+- Response: chuỗi các content block `type: "text"`; stream dùng event
+  `content_block_delta` với `delta.type == "text_delta"`.
+- Base production: `https://api.anthropic.com`.
+
+## OpenAI client (`src-tauri/src/providers/openai.rs`)
+
+| Thao tác | Endpoint |
+|----------|----------|
+| translate | `POST {base}/v1/chat/completions` (`stream: false`) |
+| translate_stream | `POST {base}/v1/chat/completions` (`stream: true`, SSE) |
+| validate_key | `GET {base}/v1/models` |
+
+- Key đi trong header `Authorization: Bearer <key>`, KHÔNG BAO GIỜ trong URL.
+- Instruction tin cậy là message `system`; data block không tin cậy là message `user`
+  (AC-03.8). Response lấy `choices[0].message.content`; stream lấy
+  `choices[0].delta.content`; sentinel `data: [DONE]` được bỏ qua.
+- Base production: `https://api.openai.com`.
+- Wire schema + helper HTTP (retry, error mapping, SSE parse, validate outcome) dùng chung
+  cho OpenRouter (surface tương thích OpenAI).
+
+## OpenRouter client (`src-tauri/src/providers/openrouter.rs`)
+
+| Thao tác | Endpoint |
+|----------|----------|
+| translate | `POST {base}/v1/chat/completions` (`stream: false`) |
+| translate_stream | `POST {base}/v1/chat/completions` (`stream: true`, SSE) |
+| validate_key | `GET {base}/v1/auth/key` |
+
+- Surface tương thích OpenAI: tái dùng wire schema + helper của `openai.rs`; chỉ sở hữu
+  base URL (`/api` prefix), endpoint `validate_key`, và identity riêng.
+- Key đi trong header `Authorization: Bearer <key>`, KHÔNG BAO GIỜ trong URL.
+- `validate_key` dùng `GET /v1/auth/key` (yêu cầu auth, trả metadata của chính key) - lệnh
+  tối thiểu đúng nghĩa (khác model list vốn public).
+- SSE parser bỏ qua keep-alive comment (`: OPENROUTER PROCESSING`). `model_id` namespaced
+  `vendor/model` được validate chấp nhận dấu `/` và `:`.
+- Base production: `https://openrouter.ai/api`.
 
 ## Testing (testing.md)
 

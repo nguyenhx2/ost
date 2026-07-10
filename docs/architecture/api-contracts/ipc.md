@@ -106,7 +106,8 @@ Kiểu dữ liệu:
   (serde snake_case, khớp `keys/store.rs`). Đây là kiểu DUY NHẤT liên quan tới key mà WebView
   được nhận.
 - `SaveKeyOutcome` = `{ status: "valid" } | { status: "stored" } | { status: "invalid", reason }`.
-  `stored` = đã lưu nhưng chưa có client để kiểm tra trực tiếp (chỉ Gemini có client ở MVP).
+  Cả 4 provider đều đã có client (TASK-010) nên save/check luôn chạy kiểm tra key trực tiếp -
+  `stored` giờ chỉ là nhánh dự phòng (no-client) còn lại ở lớp lệnh cho mục đích test.
   `reason` là chuỗi đã redact, không chứa key - UI hiển thị thông báo i18n của chính nó.
 - `KeyValidation` = `{ status: "valid" } | { status: "invalid", reason }`.
 - Lỗi command tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownProvider | invalidInput |

@@ -1,6 +1,6 @@
 ---
 title: "TASK-010: Additional LLM provider clients: Anthropic, OpenAI, OpenRouter"
-status: Planned
+status: Active
 fr: "FR-03"
 owner: llm-integration-dev
 deps: "TASK-006"
@@ -47,6 +47,9 @@ Implement Anthropic, OpenAI and OpenRouter clients behind the existing `Translat
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | spec-guardian | Pre-dispatch scope check vs FR-03/BR-02. ALIGNED: TranslationProvider trait sufficient as-is, no change needed. Added AC-03.2/03.3 citations. | Go |
+| 2026-07-10 | llm-integration-dev | Flip status Planned->Active; read Gemini client, trait, keys, contract. Start Anthropic/OpenAI/OpenRouter clients + factory. | In progress |
+| 2026-07-10 | llm-integration-dev | CRASH RECOVERY: recovered orphaned uncommitted work (anthropic/openai/openrouter/factory + mod.rs + commands/keys.rs). Verified trait UNCHANGED (traits.rs diff vs origin/main empty). Reviewed all 3 clients match certified Gemini shape: TLS enforced, per-request timeout, bounded retries+backoff, redaction, schema-validated responses, instruction/data separation. Factory total over 4 providers; keys command validates all 4 via build_provider. Synced providers.md + ipc.md. | Clients complete |
+| 2026-07-10 | llm-integration-dev | cargo fmt --check OK; clippy --all-targets -j2 -D warnings OK (0 warnings); cargo test -j2: 177 passed / 0 failed / 1 ignored. 3 new clients carry full wiremock suites (success, injection-separation, auth/quota/network/timeout, malformed/missing-field, bounded 5xx retry, streaming happy+auth+malformed, validate_key one-call+redacted+network-is-error, insecure-url, model-id validation). | Green |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>

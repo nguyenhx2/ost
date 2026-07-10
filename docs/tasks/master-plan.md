@@ -35,7 +35,7 @@ overlay system.
 | TASK-007 | Region capture + OCR pipeline (Rust side) | screen-translate-dev | TASK-002, TASK-005 | P0 | 1 | Done |
 | TASK-008 | Region-select overlay + translation preview UI | frontend-ui-dev | TASK-002 | P0 | 1 | Done |
 | TASK-009 | Settings UI: provider key entry/validation, model selection | frontend-ui-dev | TASK-006 | P1 | 1 | Done |
-| TASK-010 | Additional LLM provider clients: Anthropic, OpenAI, OpenRouter | llm-integration-dev | TASK-006 | P0 | 1 | Planned |
+| TASK-010 | Additional LLM provider clients: Anthropic, OpenAI, OpenRouter | llm-integration-dev | TASK-006 | P0 | 1 | Active |
 | TASK-011 | Opt-in cloud OCR backends (BR-09) | screen-translate-dev | TASK-007 | P1 | 1 | Pending |
 | TASK-012 | Settings revoke-consent control for model downloads | frontend-ui-dev | TASK-007, TASK-009 | P1 | 1 | Done |
 | TASK-013 | System-audio capture: WASAPI loopback + VAD + chunking | audio-pipeline-dev | TASK-002 | P0 | 2 | Planned |
