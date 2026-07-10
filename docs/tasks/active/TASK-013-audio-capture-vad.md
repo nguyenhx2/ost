@@ -1,6 +1,6 @@
 ---
 title: "TASK-013: System-audio capture: WASAPI loopback + VAD + chunking"
-status: Planned
+status: Active
 fr: "FR-01"
 owner: audio-pipeline-dev
 deps: "TASK-002"
@@ -43,6 +43,7 @@ Capture system audio via WASAPI loopback behind an `AudioSource` trait, detect v
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+| 2026-07-10 | audio-pipeline-dev | Flip Planned -> Active; start TDD on AudioSource trait + VAD + chunking + session | Active |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
