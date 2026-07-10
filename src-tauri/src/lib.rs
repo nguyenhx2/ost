@@ -1,8 +1,13 @@
 mod audio;
-mod capture;
+// Public for the capture->OCR criterion benchmark (benches/); the pipeline is
+// wired into the Tauri runtime via shell::region (TASK-007).
+pub mod capture;
 mod commands;
 pub mod keys;
-mod ocr;
+// Shared first-run model-download consent + download facility (TASK-007).
+pub mod models;
+// Public for the OCR spike + capture->OCR benchmark harness (benches/ + tests/).
+pub mod ocr;
 pub mod providers;
 mod shell;
 mod stt;
@@ -18,8 +23,9 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        // Settings persistence (default provider/model + fallback order); NEVER
-        // stores keys - keys live only in the OS keychain (security-privacy.md).
+        // Settings persistence (default provider/model + fallback order) and
+        // first-run model-download consent flags (JSON, no secrets). NEVER stores
+        // keys - keys live only in the OS keychain (security-privacy.md).
         .plugin(tauri_plugin_store::Builder::new().build());
 
     // Desktop-only shell features: global hotkeys + tray (FR-04).
@@ -31,6 +37,23 @@ pub fn run() {
         // Provider key store (FR-03): the single path to the OS keychain.
         .manage(keys::KeyStore::new_os_keychain())
         .setup(|app| {
+            // Build the fail-closed model-consent gate over the persisted store,
+            // then wire the OCR pipeline through it (no silent auto-download,
+            // security-privacy.md). Both are managed here because the persisted
+            // consent store needs the AppHandle available only in setup.
+            use std::sync::Arc;
+            use tauri::Manager;
+            use tauri_plugin_store::StoreExt;
+
+            let store = app.store(models::CONSENT_STORE_FILE)?;
+            let consent: Arc<dyn models::ConsentStore> =
+                Arc::new(models::StoreConsentStore::new(store));
+            let descriptor = ocr::ocr_model_set_descriptor(models::resolve_model_cache_dir());
+            let gate = Arc::new(models::ModelGate::new(consent, vec![descriptor]));
+
+            app.manage(models::ModelConsent::new(Arc::clone(&gate)));
+            app.manage(shell::region::RegionPipeline::new_default(gate));
+
             #[cfg(desktop)]
             shell::init(app.handle())?;
             Ok(())
@@ -50,6 +73,9 @@ pub fn run() {
             commands::keys::save_provider_key,
             commands::keys::check_provider_key,
             commands::keys::delete_provider_key,
+            models::model_consent_status,
+            models::grant_model_consent,
+            models::revoke_model_consent,
         ])
         .run(tauri::generate_context!())
         // expect is acceptable here: outermost entry point, failure to start the

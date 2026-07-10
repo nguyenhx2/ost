@@ -13,6 +13,15 @@ const en = {
   "select.hintKeyboard":
     "Keyboard: arrow keys move, Space anchors the region, Enter confirms, Esc cancels",
   "select.dimensionsLabel": "Selection size",
+  "select.sourceLanguage": "Source language",
+
+  // Source-language options (BR-07)
+  "lang.auto": "Auto-detect",
+  "lang.vi": "Vietnamese",
+  "lang.en": "English",
+  "lang.ja": "Japanese",
+  "lang.ko": "Korean",
+  "lang.zh": "Chinese",
 
   // SCR-03: region translation preview overlay
   "preview.title": "Region translation",
@@ -24,8 +33,13 @@ const en = {
     "Translation failed - please try again or switch provider",
   "preview.translationTimeout":
     "Translation timed out - please try again or switch provider",
+  "preview.ocrError":
+    "Could not recognize text - the capture or OCR step failed. Please try selecting the region again",
   "preview.emptyOcr": "No text recognized in the selected region",
   "preview.lowConfidence": "Low confidence - the result may be inaccurate",
+  "preview.degradedNotice":
+    "Recognition for the selected source language is degraded: some diacritics may be dropped from the text below. This is NOT flagged as low confidence - review the result carefully.",
+  "preview.degradedReasonLabel": "Missing character set",
   "preview.copySource": "Copy source text",
   "preview.copyTranslation": "Copy translation",
   "preview.copied": "Copied to clipboard",
@@ -80,6 +94,20 @@ const en = {
   "settings.moveDown": "Move down",
   "settings.fallbackNoKey": "no key",
 
+  // Model-download consent (fail-closed egress UX)
+  "consent.title": "Download OCR model",
+  "consent.intro":
+    "OST needs to download the OCR recognition model before it can translate this region. The files below are fetched over HTTPS from the host named here. No captured content or keys are sent - only the model files are downloaded.",
+  "consent.blocked":
+    "OCR is blocked until the model download is allowed. No text can be recognized yet.",
+  "consent.reopen": "Review model download",
+  "consent.hostLabel": "Download host",
+  "consent.destinationLabel": "Saved to",
+  "consent.totalSizeLabel": "Approximate total size",
+  "consent.artifactsLabel": "Files to download",
+  "consent.grant": "Allow download",
+  "consent.decline": "Not now",
+
   // Shared primitives
   "ui.select.placeholder": "Choose...",
 } as const;
@@ -93,6 +121,14 @@ const vi: Record<I18nKey, string> = {
   "select.hintKeyboard":
     "Bàn phím: phím mũi tên di chuyển, Space neo vùng chọn, Enter xác nhận, Esc huỷ",
   "select.dimensionsLabel": "Kích thước vùng chọn",
+  "select.sourceLanguage": "Ngôn ngữ nguồn",
+
+  "lang.auto": "Tự phát hiện",
+  "lang.vi": "Tiếng Việt",
+  "lang.en": "Tiếng Anh",
+  "lang.ja": "Tiếng Nhật",
+  "lang.ko": "Tiếng Hàn",
+  "lang.zh": "Tiếng Trung",
 
   "preview.title": "Dịch vùng màn hình",
   "preview.sourceLabel": "Văn bản nguồn",
@@ -103,8 +139,13 @@ const vi: Record<I18nKey, string> = {
     "Dịch thất bại - vui lòng thử lại hoặc đổi provider",
   "preview.translationTimeout":
     "Dịch quá thời gian chờ - vui lòng thử lại hoặc đổi provider",
+  "preview.ocrError":
+    "Không nhận dạng được văn bản - bước chụp hoặc OCR đã thất bại. Vui lòng chọn lại vùng màn hình",
   "preview.emptyOcr": "Không nhận dạng được văn bản trong vùng đã chọn",
   "preview.lowConfidence": "Độ tin cậy thấp - kết quả có thể không chính xác",
+  "preview.degradedNotice":
+    "Khả năng nhận dạng cho ngôn ngữ nguồn đã chọn bị suy giảm: một số dấu phụ có thể bị rơi khỏi văn bản bên dưới. Đây KHÔNG được đánh dấu là độ tin cậy thấp - hãy kiểm tra kết quả cẩn thận.",
+  "preview.degradedReasonLabel": "Bộ ký tự bị thiếu",
   "preview.copySource": "Chép văn bản nguồn",
   "preview.copyTranslation": "Chép bản dịch",
   "preview.copied": "Đã chép vào clipboard",
@@ -158,6 +199,19 @@ const vi: Record<I18nKey, string> = {
   "settings.moveUp": "Đưa lên",
   "settings.moveDown": "Đưa xuống",
   "settings.fallbackNoKey": "chưa có key",
+
+  "consent.title": "Tải mô hình OCR",
+  "consent.intro":
+    "OST cần tải mô hình nhận dạng OCR trước khi có thể dịch vùng này. Các tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có nội dung đã chụp hay khoá nào được gửi đi - chỉ tải các tệp mô hình.",
+  "consent.blocked":
+    "OCR bị chặn cho tới khi cho phép tải mô hình. Chưa thể nhận dạng văn bản.",
+  "consent.reopen": "Xem lại việc tải mô hình",
+  "consent.hostLabel": "Máy chủ tải về",
+  "consent.destinationLabel": "Lưu vào",
+  "consent.totalSizeLabel": "Tổng dung lượng ước tính",
+  "consent.artifactsLabel": "Các tệp sẽ tải",
+  "consent.grant": "Cho phép tải",
+  "consent.decline": "Để sau",
 
   "ui.select.placeholder": "Chọn...",
 };

@@ -1,6 +1,8 @@
 import { useEffect, useRef, type CSSProperties } from "react";
+import { Select } from "../components/ui";
 import { useRegionSelection } from "../hooks/useRegionSelection";
 import { t } from "../lib/i18n";
+import { SOURCE_LANGUAGE_OPTIONS } from "../lib/languages";
 import "./RegionSelectView.css";
 
 /**
@@ -18,7 +20,7 @@ export function RegionSelectView() {
     rootRef.current?.focus();
   }, []);
 
-  const { rect, physicalRect, cursor, selecting } = selection;
+  const { rect, physicalRect, cursor, selecting, sourceLanguage } = selection;
 
   const rectStyle: CSSProperties | undefined = rect
     ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
@@ -51,6 +53,31 @@ export function RegionSelectView() {
         <span className="region-select-hint-secondary">
           {t("select.hintKeyboard")}
         </span>
+        {/*
+         * BR-07 source-language pin. It sits on the drag surface, so pointer
+         * and keyboard events are stopped here to keep them from anchoring or
+         * moving the selection while the Select is in use.
+         */}
+        <div
+          className="region-select-language"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseMove={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <span className="region-select-language-label">
+            {t("select.sourceLanguage")}
+          </span>
+          <Select
+            label={t("select.sourceLanguage")}
+            options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: t(o.labelKey),
+            }))}
+            value={sourceLanguage}
+            onChange={selection.setSourceLanguage}
+          />
+        </div>
       </div>
 
       {!selecting ? (

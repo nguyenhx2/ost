@@ -308,6 +308,40 @@
   z-index: var(--z-overlay);
 }
 
+/* ---------- Dialog (modal surface) ---------- */
+
+.ost-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background-color: var(--color-scrim);
+  z-index: var(--z-modal);
+}
+
+.ost-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 28rem;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--space-4);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+}
+
+.ost-dialog:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* ---------- PlainText (sanitizing renderer) ---------- */
 
 .ost-plain-text {

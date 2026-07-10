@@ -16,6 +16,12 @@ is banned), `Switch`, `Slider`, `Badge`, `Tooltip` (no raw `title=` attributes),
 `OverlayPanel` (the translation overlay surface), `DataList`. Each new primitive: create,
 export from the barrel, test, and add a row here IN THE SAME PR.
 
+Landed primitives:
+
+| Primitive | Purpose |
+|-----------|---------|
+| `Dialog` | Modal surface (role="dialog", aria-modal, Esc/backdrop close, focus-on-open); used by the fail-closed model-download consent disclosure. |
+
 ### Landed
 
 | Primitive | File | Purpose |

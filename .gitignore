@@ -19,10 +19,17 @@ src-tauri/target/
 .claude/worktrees/
 .claude/settings.local.json
 
-# Whisper / OCR model binaries (downloaded at first run, never committed)
-models/
+# Whisper / OCR model binaries (downloaded at first run, never committed).
+# Root-anchored so it does NOT match the Rust source module
+# `src-tauri/src/models/` (the shared model-consent facility).
+/models/
 *.bin
 *.gguf
+*.onnx
+
+# Local dev helper: machine-specific vcvars cargo wrapper (hardcoded VS + worktree
+# paths); not portable, so kept out of version control (known-issues.md).
+scripts/cargo-wt.bat
 
 # OS noise
 Thumbs.db

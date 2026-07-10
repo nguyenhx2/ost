@@ -37,10 +37,44 @@ tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-clipboard-manager = "2.3.2"
 
 # --- TASK-009 settings persistence (FR-03/FR-04): names only, never keys ---
-tauri-plugin-store = "2.2.0"
+# --- TASK-007 shared model-consent facility (FR-02; whisper reuses in Phase 2) ---
+# Persists settings (key names only, never keys) and first-run model-download
+# consent as plain JSON flags (never secrets). Pinned =2.4.3, which satisfies the
+# settings UI requirement (^2.2.0) and the consent facility's exact pin.
+tauri-plugin-store = "=2.4.3"
+# SHA-256 verification of self-fetched model artifacts (shared facility). ort
+# already pulls sha2/hex transitively; pinned here as a direct dep.
+sha2 = "=0.10.9"
+hex = "=0.4.3"
+
+# --- TASK-007 OCR pipeline (FR-02, ADR-004) ---
+# Local PaddleOCR PP-OCRv5 via ONNX Runtime; auto-download resolves models from
+# ModelScope into the oar-ocr cache (never committed). ort 2.0.0-rc.12 is pulled
+# transitively and pinned in Cargo.lock.
+oar-ocr = { version = "=0.8.0", features = ["auto-download"] }
+image = "=0.25.8"
+# Windows region screen capture behind the `ScreenCapturer` trait (AC-02.5).
+# Default features only (no `image` png/save feature): captured pixels stay in
+# an in-memory RgbaImage and are never written to disk (NFR-SEC-03).
+xcap = "=0.9.6"
+# Fixture rendering for the R1 spike only (feature `ocr-spike`).
+ab_glyph = { version = "=0.2.31", optional = true }
+imageproc = { version = "=0.27.0", default-features = false, features = ["text"], optional = true }
+
+[features]
+# R1 OCR spike: synthetic fixture rendering + accuracy/latency harness. Off by
+# default so production builds do not pull the font-rendering stack.
+ocr-spike = ["dep:ab_glyph", "dep:imageproc"]
+
+[[bench]]
+name = "ocr_stage"
+harness = false
+required-features = ["ocr-spike"]
 
 [dev-dependencies]
 # --- TASK-006 provider layer (FR-03) ---
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 wiremock = "0.6.3"
+# --- TASK-007 OCR spike latency benchmark (FR-02, ADR-004 R1) ---
+criterion = "=0.5.1"
 

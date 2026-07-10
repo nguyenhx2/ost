@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const regionIpcMock = vi.hoisted(() => ({
   startSelection: vi.fn().mockResolvedValue(undefined),
@@ -64,12 +65,29 @@ describe("RegionSelectView (SCR-02, AC-02.1)", () => {
     fireEvent.mouseMove(overlay, { clientX: 110, clientY: 70 });
     fireEvent.mouseUp(overlay);
 
-    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith({
-      x: 10,
-      y: 20,
-      width: 100,
-      height: 50,
-    });
+    // Default source language is Auto (BR-07) - carried as the second arg.
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 10, y: 20, width: 100, height: 50 },
+      "auto",
+    );
+  });
+
+  it("pins the source language and carries it into confirm (BR-07)", async () => {
+    const overlay = renderView();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Source language" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Vietnamese" }));
+
+    fireEvent.mouseDown(overlay, { clientX: 10, clientY: 20 });
+    fireEvent.mouseMove(overlay, { clientX: 110, clientY: 70 });
+    fireEvent.mouseUp(overlay);
+
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 10, y: 20, width: 100, height: 50 },
+      "vi",
+    );
   });
 
   it("Esc cancels without confirming (no capture event)", () => {
@@ -94,11 +112,9 @@ describe("RegionSelectView (SCR-02, AC-02.1)", () => {
     fireEvent.keyDown(overlay, { key: "ArrowDown" });
     fireEvent.keyDown(overlay, { key: "Enter" });
 
-    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith({
-      x: 64,
-      y: 16,
-      width: 16,
-      height: 16,
-    });
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 64, y: 16, width: 16, height: 16 },
+      "auto",
+    );
   });
 });

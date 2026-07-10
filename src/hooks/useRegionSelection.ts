@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { regionIpc, type RegionRect } from "../lib/ipc";
+import { regionIpc, type RegionRect, type SourceLanguage } from "../lib/ipc";
+import { DEFAULT_SOURCE_LANGUAGE } from "../lib/languages";
 
 export interface Point {
   x: number;
@@ -53,6 +54,10 @@ export interface UseRegionSelectionResult {
   rect: CssRect | null;
   /** Physical-pixel version of `rect` (shown as the SCR-02 size label). */
   physicalRect: RegionRect | null;
+  /** User-selected source language, default Auto (BR-07). */
+  sourceLanguage: SourceLanguage;
+  /** Pin (or un-pin to Auto) the source language before confirming. */
+  setSourceLanguage: (language: SourceLanguage) => void;
   onMouseDown: (point: Point) => void;
   onMouseMove: (point: Point) => void;
   onMouseUp: () => void;
@@ -68,8 +73,13 @@ export interface UseRegionSelectionResult {
 export function useRegionSelection(): UseRegionSelectionResult {
   const [anchor, setAnchor] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
+  const [sourceLanguage, setSourceLanguageState] = useState<SourceLanguage>(
+    DEFAULT_SOURCE_LANGUAGE,
+  );
   const anchorSourceRef = useRef<AnchorSource>(null);
   const doneRef = useRef(false);
+  // Read the latest pin inside the memoized confirm without stale closures.
+  const sourceLanguageRef = useRef(sourceLanguage);
 
   const dpr = window.devicePixelRatio || 1;
   const rect = anchor ? normalizeRect(anchor, cursor) : null;
@@ -94,10 +104,20 @@ export function useRegionSelection(): UseRegionSelectionResult {
         return;
       }
       doneRef.current = true;
-      void regionIpc.confirmSelection(toPhysicalRect(candidate, dpr));
+      // BR-07: carry the selected source language (default Auto) so the core
+      // keys fidelity + rec-model routing off the pin, not post-OCR detection.
+      void regionIpc.confirmSelection(
+        toPhysicalRect(candidate, dpr),
+        sourceLanguageRef.current,
+      );
     },
     [dpr, reset],
   );
+
+  const setSourceLanguage = useCallback((language: SourceLanguage) => {
+    sourceLanguageRef.current = language;
+    setSourceLanguageState(language);
+  }, []);
 
   const cancel = useCallback(() => {
     if (doneRef.current) {
@@ -169,6 +189,8 @@ export function useRegionSelection(): UseRegionSelectionResult {
     cursor,
     rect,
     physicalRect,
+    sourceLanguage,
+    setSourceLanguage,
     onMouseDown,
     onMouseMove,
     onMouseUp,

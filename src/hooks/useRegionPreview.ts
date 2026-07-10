@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   copyToClipboard,
+  EVENT_MODELS_CONSENT_REQUIRED,
+  EVENT_REGION_OCR_ERROR,
   EVENT_REGION_OCR_RESULT,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
   listenIpc,
+  modelIpc,
   regionIpc,
+  type ConsentDisclosure,
+  type OcrErrorPayload,
+  type OcrFidelity,
   type OcrResultPayload,
   type TranslationErrorPayload,
   type TranslationResultPayload,
@@ -18,6 +24,11 @@ import {
 export type PreviewStatus =
   /** Waiting for the first OCR event after region confirm. */
   | "waitingOcr"
+  /**
+   * OCR is blocked pending first-run model-download consent (fail-closed).
+   * The consent dialog is (or was) shown; nothing is recognized until granted.
+   */
+  | "consentRequired"
   /** OCR found no text (AC-02.7) - no translate request is sent. */
   | "empty"
   /** Source text shown, translation pending (AC-02.3 two-phase). */
@@ -31,14 +42,27 @@ export type PreviewStatus =
    */
   | "failed";
 
-/** Why a translation ended in the "failed" state (drives the error copy). */
-export type PreviewFailureReason = "error" | "timeout";
+/**
+ * Why the preview ended in the "failed" state (drives the error copy):
+ * - `error`   translation provider/network error;
+ * - `timeout` translation exceeded the client-side budget;
+ * - `ocr`     capture/OCR failed (region:ocr-error) - never the raw message.
+ */
+export type PreviewFailureReason = "error" | "timeout" | "ocr";
+
+const FULL_FIDELITY: OcrFidelity = { kind: "full" };
 
 export interface PreviewState {
   status: PreviewStatus;
   sourceText: string;
   /** Pipeline-provided low-confidence flag (AC-02.6); no UI-side threshold. */
   lowConfidence: boolean;
+  /**
+   * Recognition-fidelity declaration for the selected source language
+   * (AC-02.6). `degraded` drives a STANDING notice independent of
+   * `lowConfidence` (dropped diacritics are NOT confidence-flagged).
+   */
+  fidelity: OcrFidelity;
   translation: string | null;
   /** Provider/model that actually produced the translation (AC-03.5 badge). */
   provider: string | null;
@@ -51,6 +75,7 @@ const INITIAL_STATE: PreviewState = {
   status: "waitingOcr",
   sourceText: "",
   lowConfidence: false,
+  fidelity: FULL_FIDELITY,
   translation: null,
   provider: null,
   model: null,
@@ -87,6 +112,16 @@ export interface UseRegionPreviewResult {
   dismiss: () => void;
   /** Keyboard reposition of the overlay window (AC-04.3). */
   nudge: (dx: number, dy: number) => void;
+  /** Disclosure for the pending model download, or null when none. */
+  consentDisclosure: ConsentDisclosure | null;
+  /** Whether the consent dialog is currently open. */
+  consentDialogOpen: boolean;
+  /** Grant download consent, then re-arm the OCR pipeline (fail-closed gate). */
+  grantConsent: () => void;
+  /** Decline: close the dialog WITHOUT granting; OCR stays blocked. */
+  declineConsent: () => void;
+  /** Re-open the consent dialog after declining. */
+  reopenConsent: () => void;
 }
 
 /**
@@ -103,6 +138,9 @@ export function useRegionPreview(): UseRegionPreviewResult {
   const [copied, setCopied] = useState<"source" | "translation" | null>(null);
   const [pinned, setPinned] = useState(false);
   const [liveUpdate, setLiveUpdateState] = useState(true);
+  const [consentDisclosure, setConsentDisclosure] =
+    useState<ConsentDisclosure | null>(null);
+  const [consentDialogOpen, setConsentDialogOpen] = useState(false);
 
   const optionRef = useRef(option);
   const sourceTextRef = useRef("");
@@ -175,12 +213,45 @@ export function useRegionPreview(): UseRegionPreviewResult {
         status: "translating",
         sourceText,
         lowConfidence: payload.lowConfidence,
+        // Contract requires `fidelity`; mocked/legacy payloads without it are
+        // treated as full so the notice only shows on an explicit `degraded`.
+        fidelity: payload.fidelity ?? FULL_FIDELITY,
         translation: null,
         provider: prev.provider,
         model: prev.model,
         failureReason: null,
       }));
       requestTranslation(sourceText);
+    };
+
+    const onOcrError = () => {
+      // human-in-the-loop.md: no silent hang. Leave "recognizing" and show our
+      // own localized copy - the raw diagnostic string is untrusted DATA.
+      clearTranslationTimeout();
+      requestIdRef.current = null;
+      sourceTextRef.current = "";
+      translationRef.current = null;
+      setState((prev) => ({
+        ...INITIAL_STATE,
+        status: "failed",
+        failureReason: "ocr",
+        provider: prev.provider,
+        model: prev.model,
+      }));
+    };
+
+    const onConsentRequired = (disclosure: ConsentDisclosure) => {
+      // Fail-closed egress: OCR is blocked in Rust until consent is granted.
+      // Stop the "recognizing" spinner and open the disclosure dialog.
+      clearTranslationTimeout();
+      setConsentDisclosure(disclosure);
+      setConsentDialogOpen(true);
+      setState((prev) => ({
+        ...INITIAL_STATE,
+        status: "consentRequired",
+        provider: prev.provider,
+        model: prev.model,
+      }));
     };
 
     const onTranslation = (payload: TranslationResultPayload) => {
@@ -225,13 +296,23 @@ export function useRegionPreview(): UseRegionPreviewResult {
         EVENT_REGION_TRANSLATION_ERROR,
         onTranslationError,
       );
+      const un4 = await listenIpc<OcrErrorPayload>(
+        EVENT_REGION_OCR_ERROR,
+        onOcrError,
+      );
+      const un5 = await listenIpc<ConsentDisclosure>(
+        EVENT_MODELS_CONSENT_REQUIRED,
+        onConsentRequired,
+      );
       if (disposed) {
         un1();
         un2();
         un3();
+        un4();
+        un5();
         return;
       }
-      unlistens.push(un1, un2, un3);
+      unlistens.push(un1, un2, un3, un4, un5);
       // Handshake: listeners are attached, the pipeline may emit now.
       await regionIpc.previewReady();
     })();
@@ -306,6 +387,37 @@ export function useRegionPreview(): UseRegionPreviewResult {
     void regionIpc.nudgePreview(dx, dy);
   }, []);
 
+  const grantConsent = useCallback(() => {
+    const disclosure = consentDisclosure;
+    if (!disclosure) {
+      return;
+    }
+    void (async () => {
+      // Fail-closed gate lives in Rust; grant, then re-arm the pipeline so OCR
+      // runs (contract: re-signal region_preview_ready after granting).
+      await modelIpc.grantConsent(disclosure.modelSetId);
+      setConsentDialogOpen(false);
+      setState((prev) => ({
+        ...INITIAL_STATE,
+        status: "waitingOcr",
+        provider: prev.provider,
+        model: prev.model,
+      }));
+      await regionIpc.previewReady();
+    })();
+  }, [consentDisclosure]);
+
+  const declineConsent = useCallback(() => {
+    // Close WITHOUT granting; OCR stays blocked (status: consentRequired).
+    setConsentDialogOpen(false);
+  }, []);
+
+  const reopenConsent = useCallback(() => {
+    if (consentDisclosure) {
+      setConsentDialogOpen(true);
+    }
+  }, [consentDisclosure]);
+
   return {
     state,
     option,
@@ -321,5 +433,10 @@ export function useRegionPreview(): UseRegionPreviewResult {
     close,
     dismiss,
     nudge,
+    consentDisclosure,
+    consentDialogOpen,
+    grantConsent,
+    declineConsent,
+    reopenConsent,
   };
 }
