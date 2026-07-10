@@ -51,6 +51,7 @@ Capture system audio via WASAPI loopback behind an `AudioSource` trait, detect v
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | audio-pipeline-dev | Flip Planned -> Active; start TDD on AudioSource trait + VAD + chunking + session | Active |
 | 2026-07-10 | audio-pipeline-dev | Implemented audio/{source,vad,chunk,session,wasapi}; wasapi=0.23.0 pinned (win-gated); minimal lib.rs/Cargo.toml adds | fmt clean, clippy -D warnings clean, cargo test 143 passed/0 failed/1 ignored (audio 19) |
+| 2026-07-10 | audio-pipeline-dev | Recovery: prior session had already committed (1d392ca) + pushed; verified ACs met, rebased feat/audio-capture onto origin/main (de69810, TASK-010 providers). lib.rs/Cargo.toml/Cargo.lock applied cleanly as unions (providers scaffolding pre-existed base; TASK-010 added only files under providers/, no textual overlap with audio/). Re-verified on rebased tree. | fmt --check clean; clippy --all-targets -D warnings clean; cargo test 196 passed/0 failed/1 ignored (audio unit + session incl. no-disk guard). Tip bef5fa8. |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
