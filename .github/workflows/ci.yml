@@ -3,6 +3,12 @@
 # Full Tauri bundling (MSI/NSIS) is NOT run here - it belongs to the gated release flow
 # (devops agent, signing keys in Actions secrets only). cargo clippy compiles the crate,
 # so the Rust build is covered; the frontend build is covered by `npm run build`.
+#
+# Native STT toolchain (ADR-002): whisper-rs -> whisper-rs-sys builds bundled whisper.cpp
+# with CMake and generates FFI bindings with bindgen (needs libclang). LLVM is PINNED to
+# 19.x because bindgen 0.71 (pulled by whisper-rs-sys 0.13.1) miscompiles struct layouts
+# with libclang >= 21 (whisper_full_params emitted as an opaque size-1 type). LIBCLANG_PATH
+# forces clang-sys to load the pinned libclang regardless of any newer LLVM on the runner.
 name: ci
 
 on:
@@ -25,6 +31,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      # --- Native whisper build prerequisites (ADR-002) ---
+      # CMake compiles bundled whisper.cpp; LLVM 19 provides the libclang bindgen needs.
+      # windows-latest self-locates MSVC (cl.exe/link.exe) for cargo and the cmake crate's
+      # default Visual Studio generator, so no vcvars wrapper is required here - unlike the
+      # dev host (VS 18 Enterprise preview), see docs/context/known-issues.md.
+      - name: Install CMake (whisper.cpp build)
+        run: choco install cmake --version=4.3.4 -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+      - name: Install LLVM 19 (libclang for bindgen)
+        run: choco install llvm --version=19.1.7 -y --no-progress --force
+      - name: Set LIBCLANG_PATH
+        run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
       - name: Lint (eslint + prettier)
