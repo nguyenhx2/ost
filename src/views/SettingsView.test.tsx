@@ -23,6 +23,11 @@ const mocks = vi.hoisted(() => ({
     closeOverlay: vi.fn(),
     nudgeOverlay: vi.fn(),
   },
+  hotkeysIpc: {
+    get: vi.fn(),
+    set: vi.fn(),
+  },
+  listenIpc: vi.fn(),
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
   isHistoryEnabled: vi.fn(),
@@ -37,6 +42,8 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     modelIpc: mocks.modelIpc,
     audioIpc: mocks.audioIpc,
     captionIpc: mocks.captionIpc,
+    hotkeysIpc: mocks.hotkeysIpc,
+    listenIpc: mocks.listenIpc,
   };
 });
 
@@ -142,6 +149,14 @@ beforeEach(() => {
   mocks.saveProviderSettings.mockReset().mockResolvedValue(undefined);
   mocks.isHistoryEnabled.mockReset().mockResolvedValue(true);
   mocks.setHistoryEnabled.mockReset().mockResolvedValue(undefined);
+  mocks.hotkeysIpc.get.mockReset().mockResolvedValue({
+    toggleAudio: "Ctrl+Alt+A",
+    regionSelect: "Ctrl+Alt+R",
+    toggleOverlay: "Ctrl+Alt+O",
+  });
+  mocks.hotkeysIpc.set.mockReset().mockResolvedValue(undefined);
+  // useAudioSession subscribes to `audio:stopped`; return a noop unlisten.
+  mocks.listenIpc.mockReset().mockResolvedValue(() => {});
 });
 
 describe("SettingsView", () => {

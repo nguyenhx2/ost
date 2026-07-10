@@ -7,11 +7,13 @@ const mocks = vi.hoisted(() => ({
   loadHistory: vi.fn(),
   clearHistory: vi.fn().mockResolvedValue(undefined),
   copyToClipboard: vi.fn().mockResolvedValue(undefined),
+  subscribeHistoryChanges: vi.fn().mockResolvedValue(() => {}),
 }));
 
 vi.mock("../lib/history", () => ({
   loadHistory: mocks.loadHistory,
   clearHistory: mocks.clearHistory,
+  subscribeHistoryChanges: mocks.subscribeHistoryChanges,
 }));
 
 vi.mock("../lib/ipc", () => ({

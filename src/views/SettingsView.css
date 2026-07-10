@@ -161,6 +161,38 @@
   gap: var(--space-1);
 }
 
+/* ---------- Global hotkeys ---------- */
+
+.settings-hotkey-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-hotkey {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-hotkey-label {
+  flex: 1 1 auto;
+  font-size: var(--font-size-sm);
+}
+
+.settings-hotkey-recording {
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
 /* ---------- Model downloads (revoke consent) ---------- */
 
 .settings-model-meta {

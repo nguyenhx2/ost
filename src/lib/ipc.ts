@@ -278,6 +278,13 @@ export interface AudioErrorPayload {
 export const EVENT_AUDIO_CAPTION = "audio:caption";
 /** Emitted when a chunk fails to transcribe/translate (non-fatal). */
 export const EVENT_AUDIO_ERROR = "audio:error";
+/**
+ * Emitted (app-global, no payload) when the caption overlay window is destroyed
+ * - directly closed or via the tray/hotkey. A separate Settings window that
+ * launched the session listens for this to reset its running-state (TASK-016
+ * follow-up). Owned by `src-tauri/src/shell/audio_session.rs`.
+ */
+export const EVENT_AUDIO_STOPPED = "audio:stopped";
 
 /* ------------------------------------------------------------------ */
 /* Provider key management (FR-03) contract                            */
@@ -363,6 +370,83 @@ export const keysIpc = {
 /** Open the Settings window (owned by `src-tauri/src/shell/settings.rs`). */
 export const settingsIpc = {
   open: (): Promise<void> => invokeIpc("open_settings"),
+};
+
+/** Open the History window (owned by `src-tauri/src/shell/history.rs`). */
+export const historyIpc = {
+  open: (): Promise<void> => invokeIpc("open_history"),
+};
+
+/* ------------------------------------------------------------------ */
+/* Global hotkeys (FR-04, AC-04.1) contract                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The reconfigurable global-hotkey actions. Each maps to exactly one binding.
+ * Mirrors the Rust `HotkeyAction` (`src-tauri/src/shell/hotkeys.rs`).
+ */
+export type HotkeyAction = "toggleAudio" | "regionSelect" | "toggleOverlay";
+
+/** The ordered set of hotkey actions (drives the Settings binding rows). */
+export const HOTKEY_ACTIONS: readonly HotkeyAction[] = [
+  "toggleAudio",
+  "regionSelect",
+  "toggleOverlay",
+];
+
+/**
+ * Accelerator strings (e.g. `"Ctrl+Alt+R"`) bound to each action. NAMES only -
+ * persisted via tauri-plugin-store (`settings.json`, key `hotkeys`), never a
+ * secret. Mirrors the Rust `HotkeyConfig` (camelCase).
+ */
+export interface HotkeyConfig {
+  toggleAudio: string;
+  regionSelect: string;
+  toggleOverlay: string;
+}
+
+/**
+ * Typed `kind` surfaced when `set_hotkey_config` rejects. `action` names which
+ * binding is at fault (absent for a store failure). The UI maps the kind to an
+ * i18n message; nothing here carries key material or captured content.
+ */
+export type HotkeyErrorKind =
+  "invalidBinding" | "duplicate" | "conflict" | "store";
+
+export interface HotkeyCommandError {
+  kind: HotkeyErrorKind;
+  action: HotkeyAction | null;
+}
+
+/** Narrow an unknown thrown value to a typed hotkey command error. */
+export function asHotkeyCommandError(err: unknown): HotkeyCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    const e = err as { kind: HotkeyErrorKind; action?: unknown };
+    const action =
+      typeof e.action === "string" ? (e.action as HotkeyAction) : null;
+    return { kind: e.kind, action };
+  }
+  return { kind: "store", action: null };
+}
+
+/**
+ * Global-hotkey commands (owned by `src-tauri/src/shell/hotkeys.rs`). Rust owns
+ * registration + persistence; the UI reads the effective config and submits a
+ * new one. A rejected `set` leaves the previous bindings registered and returns
+ * a typed error naming the unavailable action.
+ */
+export const hotkeysIpc = {
+  /** The current effective hotkey config. */
+  get: (): Promise<HotkeyConfig> => invokeIpc("get_hotkey_config"),
+
+  /** Validate, re-register, persist, and return the new config (or reject). */
+  set: (config: HotkeyConfig): Promise<HotkeyConfig> =>
+    invokeIpc("set_hotkey_config", { config }),
 };
 
 /** Typed commands owned by `src-tauri/src/shell/region.rs`. */

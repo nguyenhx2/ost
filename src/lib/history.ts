@@ -230,6 +230,20 @@ export async function recordTranslation(
   });
 }
 
+/**
+ * Subscribe to changes of the entries list (TASK-018 follow-up: live-update an
+ * already-open History window). Fires when another window records or clears a
+ * translation, so the History view can refresh without a manual reload. Resolves
+ * to an unlisten function. Never carries key/audio/screenshot data - it is only
+ * a change signal; the callback re-reads the text-only entries itself.
+ */
+export async function subscribeHistoryChanges(
+  onChange: () => void,
+): Promise<() => void> {
+  const store = await getStore();
+  return store.onKeyChange(ENTRIES_KEY, () => onChange());
+}
+
 /** Wipe the entire local history store (AC-04.5). Idempotent. */
 export async function clearHistory(): Promise<void> {
   const store = await getStore();

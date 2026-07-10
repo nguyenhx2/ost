@@ -130,6 +130,49 @@ tự gọi `start_audio_session` khi mount, tái phát tín hiệu sau khi cấp
 | `close_caption_overlay` | -                              | Đóng cửa sổ overlay caption. Idempotent.                       |
 | `nudge_caption_overlay` | `dx: number, dy: number`       | Dời overlay caption bằng bàn phím (AC-04.3); dùng lại kẹp `clamp_nudge` của vùng chọn. |
 
+Khi cửa sổ overlay caption bị HUỶ (đóng trực tiếp, hoặc qua tray/hotkey), core phát
+`audio:stopped` (toàn cục, không payload) để một cửa sổ Settings riêng đồng bộ lại trạng
+thái đang-chạy (TASK-016 follow-up). Hằng số: `EVENT_AUDIO_STOPPED` (`audio_session.rs`) /
+`EVENT_AUDIO_STOPPED` (`ipc.ts`).
+
+## Commands cửa sổ Lịch sử (FR-04, BR-06)
+
+Do `src-tauri/src/shell/history.rs` sở hữu; wrapper TypeScript là `historyIpc` trong
+`ipc.ts`. Cửa sổ Lịch sử là cửa sổ thường (nhãn `history`) tải `index.html?view=history`,
+liệt kê các lượt dịch đã lưu cục bộ (chỉ text). Mở được từ tray ("Lịch sử") hoặc Settings.
+
+| Command        | Tham số | Vai trò                                                        |
+| -------------- | ------- | -------------------------------------------------------------- |
+| `open_history` | -       | Mở (hoặc show + focus) cửa sổ Lịch sử. Single instance.        |
+
+## Commands phím tắt toàn cục (FR-04, AC-04.1)
+
+Do `src-tauri/src/shell/hotkeys.rs` sở hữu; wrapper TypeScript là `hotkeysIpc` trong
+`ipc.ts`. Rust SỞ HỮU việc đăng ký với OS (`tauri-plugin-global-shortcut`) và lưu trữ; UI
+chỉ đọc cấu hình hiệu lực và gửi cấu hình mới. Cấu hình lưu bằng `tauri-plugin-store`
+(`settings.json`, khoá `hotkeys` - CHỈ TÊN, chuỗi accelerator, không bao giờ bí mật).
+
+| Command             | Tham số                  | Trả về                          | Vai trò                                                                 |
+| ------------------- | ------------------------ | ------------------------------- | ---------------------------------------------------------------------- |
+| `get_hotkey_config` | -                        | `HotkeyConfig`                  | Cấu hình phím tắt hiệu lực hiện tại.                                    |
+| `set_hotkey_config` | `config: HotkeyConfig`   | `HotkeyConfig`                  | Kiểm tra, đăng ký lại với OS, lưu, rồi trả cấu hình mới. Xung đột đăng ký -> rollback về bộ cũ và trả lỗi có kiểu. |
+
+```ts
+type HotkeyAction = "toggleAudio" | "regionSelect" | "toggleOverlay";
+
+type HotkeyConfig = {
+  toggleAudio: string; // ví dụ "Ctrl+Alt+A"
+  regionSelect: string; // ví dụ "Ctrl+Alt+R"
+  toggleOverlay: string; // ví dụ "Ctrl+Alt+O"
+};
+```
+
+`set_hotkey_config` lỗi tuần tự hoá thành `{ kind, action }` với `kind` ∈ `invalidBinding |
+duplicate | conflict | store`; `action` (`HotkeyAction` hoặc `null`) chỉ ra binding gây lỗi.
+UI ánh xạ `kind` sang thông báo i18n, không render chuỗi backend thô. Phím tắt CHỈ kích hoạt
+hành động của chính ứng dụng (start/stop phiên âm thanh, chọn vùng, hiện/ẩn overlay) - không
+bao giờ tự gửi/gõ bản dịch ra ngoài (human-in-the-loop.md).
+
 ## Commands quản lý khoá provider (FR-03)
 
 Do `src-tauri/src/commands/keys.rs` sở hữu; wrapper TypeScript là `keysIpc` trong `ipc.ts`.

@@ -21,6 +21,8 @@ impl serde::Serialize for SettingsWindowError {
 /// Open the Settings window, focusing it if it already exists (single instance).
 pub fn open_settings_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), SettingsWindowError> {
     if let Some(existing) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        // The window may be hidden (close-to-tray, AC-04.2); re-show then focus.
+        existing.show()?;
         existing.set_focus()?;
         return Ok(());
     }
