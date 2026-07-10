@@ -1,6 +1,6 @@
 ---
 title: "TASK-012: Settings revoke-consent control for model downloads"
-status: Planned
+status: Active
 fr: "FR-02, FR-04"
 owner: frontend-ui-dev
 deps: "TASK-007, TASK-009"
@@ -42,6 +42,8 @@ Wire the deferred revoke-consent control into the Settings view so users can rev
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | spec-guardian | Pre-dispatch scope check. ALIGNED. Fixed BR-09->BR-08 citation (model-download consent, not cloud OCR); added a11y/primitives requirement. | Go |
+| 2026-07-10 | frontend-ui-dev | Flipped status Planned->Active (task file + master-plan row). Starting TDD. | Active |
+| 2026-07-10 | frontend-ui-dev | TDD: added useModelConsent hook + Settings "Model downloads" section listing granted sets with an aria-labelled revoke IconButton wired to modelIpc.revokeConsent. i18n vi+en keys. Vitest (mocked IPC) covers revoke command call, list reflects consent status, empty state, fail-closed on error, no key/secret on surface. Frontend-only; no Rust touched. test 149 pass, lint clean, tsc clean. | Green |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
