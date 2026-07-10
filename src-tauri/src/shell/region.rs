@@ -573,49 +573,85 @@ pub fn confirm_region_selection(
     open_preview_window(&app)
 }
 
+/// Take -> capture/OCR -> restore-on-consent core of [`region_preview_ready`],
+/// independent of the `AppHandle`/emit surface and the engine routing (both
+/// tested separately). Returns `None` when nothing was pending (a re-mount
+/// before confirm); otherwise the pipeline result.
+///
+/// LIFECYCLE (ipc.md re-arm contract, human-in-the-loop.md no-silent-hang): the
+/// pending region is consumed up front, but a [`OcrError::ConsentRequired`]
+/// refusal is RECOVERABLE - the region is RESTORED into `state` so the
+/// subsequent `grant_model_consent` + re-called `region_preview_ready` actually
+/// runs OCR (the first-run consent path). Any OTHER error is TERMINAL: the
+/// region stays cleared so the preview shows an `ocr-error` and a re-call finds
+/// nothing pending (no infinite re-arm loop). A success likewise clears it.
+fn take_and_recognize<F>(
+    state: &RegionState,
+    capturer: &dyn ScreenCapturer,
+    resolve_engine: F,
+    request_id: String,
+) -> Option<Result<OcrResultPayload, PipelineError>>
+where
+    F: FnOnce(&SourceLanguageSelection) -> Arc<dyn OcrEngine>,
+{
+    let pending = state.pending_region.lock().ok()?.take()?;
+    // Route to the rec engine for the SELECTED source language (per-language
+    // routing; vi/latin -> latin rec).
+    let engine = resolve_engine(&pending.source_language);
+    let result = build_ocr_payload(
+        capturer,
+        engine.as_ref(),
+        pending.rect,
+        request_id,
+        &pending.source_language,
+    );
+    // Restore ONLY on a consent refusal so the grant round-trip re-runs OCR;
+    // every other outcome leaves the region cleared.
+    if matches!(&result, Err(err) if err.consent_disclosure().is_some()) {
+        if let Ok(mut guard) = state.pending_region.lock() {
+            *guard = Some(pending);
+        }
+    }
+    Some(result)
+}
+
 /// Preview WebView mounted and listening (SCR-03 handshake): pick up the pending
 /// region and run capture -> OCR off the UI thread, then emit `region:ocr-result`
 /// to the preview window. Capture/OCR are blocking CPU work, so they run on a
 /// dedicated thread (tech-stack.md: never on the UI thread).
+///
+/// On the fail-closed first-run consent path the region is preserved by
+/// [`take_and_recognize`] and this handler emits [`EVENT_MODEL_CONSENT_REQUIRED`];
+/// after the user grants consent the preview re-calls this command and OCR runs
+/// against the surviving region (ipc.md re-arm contract).
 #[tauri::command]
-pub fn region_preview_ready(
-    app: AppHandle,
-    state: tauri::State<'_, RegionState>,
-    pipeline: tauri::State<'_, RegionPipeline>,
-) -> Result<(), ShellError> {
-    let Some(pending) = state
-        .pending_region
-        .lock()
-        .ok()
-        .and_then(|mut pending| pending.take())
-    else {
-        return Ok(()); // nothing pending (e.g. re-mount); no capture
-    };
-
-    let PendingRegion {
-        rect,
-        source_language,
-    } = pending;
-    let capturer = Arc::clone(&pipeline.capturer);
-    // Route to the rec engine for the SELECTED source language (per-language
-    // routing; vi/latin -> latin rec).
-    let engine = pipeline.engine_for(&source_language);
+pub fn region_preview_ready(app: AppHandle) -> Result<(), ShellError> {
     std::thread::spawn(move || {
+        // State is fetched inside the worker thread: managed `State` handles
+        // cannot cross the `'static` thread boundary, but the `AppHandle` can.
+        let state = app.state::<RegionState>();
+        let pipeline = app.state::<RegionPipeline>();
         let request_id = format!("region-ocr-{}", monotonic_correlation_id());
-        match build_ocr_payload(
+        let capturer = Arc::clone(&pipeline.capturer);
+
+        let outcome = take_and_recognize(
+            state.inner(),
             capturer.as_ref(),
-            engine.as_ref(),
-            rect,
+            |selection| -> Arc<dyn OcrEngine> { pipeline.engine_for(selection) },
             request_id.clone(),
-            &source_language,
-        ) {
-            Ok(payload) => {
+        );
+
+        match outcome {
+            // Nothing pending (e.g. re-mount before a confirm); no capture.
+            None => {}
+            Some(Ok(payload)) => {
                 let _ = app.emit_to(PREVIEW_WINDOW_LABEL, EVENT_OCR_RESULT, payload);
             }
-            Err(err) => {
+            Some(Err(err)) => {
                 // Never swallow the failure (human-in-the-loop.md: no silent
-                // failure). A consent refusal asks the user; anything else is an
-                // OCR error. Neither message carries pixel data or user content.
+                // failure). A consent refusal asks the user (region kept by
+                // take_and_recognize); anything else is a terminal OCR error.
+                // Neither message carries pixel data or user content.
                 if let Some(disclosure) = err.consent_disclosure() {
                     let _ = app.emit_to(
                         PREVIEW_WINDOW_LABEL,
@@ -1196,6 +1232,166 @@ mod tests {
             PipelineError::Capture(crate::capture::CaptureError::Backend("backend".into()))
                 .consent_disclosure()
                 .is_none()
+        );
+    }
+
+    /// A mock OCR engine that mirrors [`PaddleOcrEngine`]'s fail-closed behavior:
+    /// it consults a real [`ModelGate`] before "recognizing", so it returns
+    /// `ConsentRequired` until consent is granted and canned lines afterwards -
+    /// without any download. Lets the lifecycle test drive the exact first-run
+    /// consent round-trip against the real gate.
+    struct GatedMockOcr {
+        gate: Arc<ModelGate>,
+    }
+    impl OcrEngine for GatedMockOcr {
+        fn id(&self) -> &'static str {
+            "gated-mock-ocr"
+        }
+        fn recognize(&self, _image: &image::RgbImage) -> Result<crate::ocr::OcrOutput, OcrError> {
+            // Gate first (as the real engine does before build_pipeline).
+            if let Err(err) = self
+                .gate
+                .ensure_download_allowed(crate::ocr::OCR_MODEL_SET_ID)
+            {
+                return Err(match err {
+                    crate::models::ModelError::ConsentRequired(d) => OcrError::ConsentRequired(d),
+                    other => OcrError::ModelLoad(other.to_string()),
+                });
+            }
+            Ok(crate::ocr::OcrOutput {
+                lines: vec![crate::ocr::OcrLine {
+                    text: "Xin chao".into(),
+                    confidence: Some(0.98),
+                }],
+                confidence: crate::ocr::OcrConfidence::PerLine(vec![0.98]),
+            })
+        }
+        fn fidelity(&self, _lang: &str) -> OcrFidelity {
+            OcrFidelity::Full
+        }
+    }
+
+    fn arm_region(state: &RegionState) {
+        *state.pending_region.lock().unwrap() = Some(PendingRegion {
+            rect: rect(),
+            source_language: SourceLanguageSelection::Pinned("vi".into()),
+        });
+    }
+
+    #[test]
+    fn consent_required_keeps_region_and_grant_reruns_ocr() {
+        // BLOCKER regression (first-run hang): take_and_recognize consumes the
+        // pending region up front, but a ConsentRequired refusal must RESTORE it
+        // so the grant + re-called region_preview_ready runs OCR. Without the
+        // restore the second call finds nothing pending and the preview hangs on
+        // "Recognizing text..." forever (ipc.md re-arm contract).
+        use crate::models::{InMemoryConsentStore, ModelGate};
+
+        let gate = Arc::new(ModelGate::new(
+            Arc::new(InMemoryConsentStore::default()),
+            vec![crate::ocr::ocr_model_set_descriptor(
+                std::path::PathBuf::from("/cache"),
+            )],
+        ));
+        let engine: Arc<dyn OcrEngine> = Arc::new(GatedMockOcr {
+            gate: Arc::clone(&gate),
+        });
+        let capturer = MockCapturer(image::RgbImage::new(8, 4));
+        let state = RegionState::default();
+        arm_region(&state);
+
+        // Pass 1: consent not granted -> ConsentRequired, region PRESERVED.
+        let first = take_and_recognize(
+            &state,
+            &capturer,
+            |_| Arc::clone(&engine),
+            "region-ocr-1".into(),
+        );
+        assert!(
+            matches!(
+                first,
+                Some(Err(ref e)) if e.consent_disclosure().is_some()
+            ),
+            "first pass must refuse with ConsentRequired"
+        );
+        assert!(
+            state.pending_region.lock().unwrap().is_some(),
+            "the region must survive a consent refusal so the grant can re-run OCR"
+        );
+
+        // User grants consent, then the preview re-calls region_preview_ready.
+        gate.grant(crate::ocr::OCR_MODEL_SET_ID).unwrap();
+
+        // Pass 2: same surviving region now runs OCR to an ocr-result payload.
+        let second = take_and_recognize(
+            &state,
+            &capturer,
+            |_| Arc::clone(&engine),
+            "region-ocr-2".into(),
+        );
+        match second {
+            Some(Ok(payload)) => {
+                assert_eq!(payload.request_id, "region-ocr-2");
+                assert_eq!(payload.source_text, "Xin chao");
+            }
+            other => panic!("grant + re-call must run OCR to an ocr-result, got {other:?}"),
+        }
+        // The successful pickup consumed the region (nothing left to re-arm).
+        assert!(state.pending_region.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn terminal_ocr_error_clears_region_and_does_not_re_arm() {
+        // The other half of the lifecycle contract: a genuine (non-consent) OCR
+        // failure is TERMINAL. The region must be CLEARED so region_preview_ready
+        // emits an ocr-error and a re-call finds nothing pending - no infinite
+        // ret/re-arm loop (human-in-the-loop.md: no silent hang, but also no spin).
+        struct FailingOcr;
+        impl OcrEngine for FailingOcr {
+            fn id(&self) -> &'static str {
+                "failing-ocr"
+            }
+            fn recognize(
+                &self,
+                _image: &image::RgbImage,
+            ) -> Result<crate::ocr::OcrOutput, OcrError> {
+                Err(OcrError::Inference("boom".into()))
+            }
+            fn fidelity(&self, _lang: &str) -> OcrFidelity {
+                OcrFidelity::Full
+            }
+        }
+
+        let engine: Arc<dyn OcrEngine> = Arc::new(FailingOcr);
+        let capturer = MockCapturer(image::RgbImage::new(8, 4));
+        let state = RegionState::default();
+        arm_region(&state);
+
+        let first = take_and_recognize(
+            &state,
+            &capturer,
+            |_| Arc::clone(&engine),
+            "region-ocr-1".into(),
+        );
+        assert!(
+            matches!(first, Some(Err(ref e)) if e.consent_disclosure().is_none()),
+            "a non-consent OCR failure is a terminal error"
+        );
+        assert!(
+            state.pending_region.lock().unwrap().is_none(),
+            "a terminal error must clear the region (no re-arm loop)"
+        );
+
+        // A re-call now finds nothing pending: None, not another attempt.
+        let second = take_and_recognize(
+            &state,
+            &capturer,
+            |_| Arc::clone(&engine),
+            "region-ocr-2".into(),
+        );
+        assert!(
+            second.is_none(),
+            "re-calling after a terminal error must not re-run OCR"
         );
     }
 

@@ -226,9 +226,27 @@ impl OcrEngine for PaddleOcrEngine {
             // FAIL-CLOSED: refuse the (download-triggering) build until first-run
             // consent is granted. `build_pipeline` reaches oar-ocr's auto-download,
             // so the gate must be checked BEFORE it (security-privacy.md).
+            //
+            // A production engine MUST carry the gate; a `None` gate would re-open
+            // the silent auto-download hole a future caller could hit by forgetting
+            // `with_consent_gate()`. The spike/bench harness legitimately downloads
+            // gate-less behind the explicit `ocr-spike` feature, so the debug
+            // assertion is compiled out there.
+            #[cfg(not(feature = "ocr-spike"))]
+            debug_assert!(
+                self.gate.is_some(),
+                "PaddleOcrEngine reached a model download without a consent gate; \
+                 call with_consent_gate() (security-privacy.md fail-closed download)"
+            );
             if let Some(gate) = &self.gate {
                 gate.ensure_download_allowed(OCR_MODEL_SET_ID)
                     .map_err(map_consent_error)?;
+            } else {
+                // Release builds (debug_assert disabled) still get a signal.
+                tracing::warn!(
+                    engine = self.id,
+                    "OCR engine has no consent gate; skipping the fail-closed download check"
+                );
             }
             *guard = Some(self.build_pipeline()?);
         }
