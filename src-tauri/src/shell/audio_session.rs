@@ -29,6 +29,7 @@ use tauri::{AppHandle, Emitter, Runtime, State};
 use tokio::sync::mpsc;
 
 use crate::audio::{AudioChunk, CaptureSession};
+use crate::core::{HeavySessionCoordinator, HeavySessionKind};
 use crate::keys::{ApiKey, KeyStore};
 use crate::models::{ConsentDisclosure, ModelGate};
 use crate::providers::{
@@ -415,16 +416,22 @@ pub struct AudioSessionPipeline {
     model: WhisperModel,
     model_dir: PathBuf,
     active: Mutex<Option<ActiveSession>>,
+    /// The one-heavy-session-at-a-time coordinator (BR-04): starting an audio
+    /// session drops any resident ORT OCR session, and stopping it drops the
+    /// whisper context, so at most one heavy model set is resident.
+    coordinator: Arc<HeavySessionCoordinator>,
 }
 
 impl AudioSessionPipeline {
     /// Wires the production backends: OS-keychain key store, the shared
-    /// fail-closed consent `gate`, and the hardware-recommended whisper model.
+    /// fail-closed consent `gate`, the hardware-recommended whisper model, and
+    /// the shared heavy-session `coordinator` (BR-04).
     pub fn new_default(
         keys: Arc<KeyStore>,
         gate: Arc<ModelGate>,
         model: WhisperModel,
         model_dir: PathBuf,
+        coordinator: Arc<HeavySessionCoordinator>,
     ) -> Self {
         Self {
             keys,
@@ -432,6 +439,7 @@ impl AudioSessionPipeline {
             model,
             model_dir,
             active: Mutex::new(None),
+            coordinator,
         }
     }
 
@@ -446,7 +454,12 @@ impl AudioSessionPipeline {
             // thread (bounded <= 1s), which closes the channel and ends the loop.
             drop(session.capture);
             session.consumer.abort();
+            // Drop this session's whisper context directly (return-to-idle,
+            // AC-05.4), then clear the coordinator's active marker (its registered
+            // hook unloads the same context - idempotent). Doing both keeps the
+            // release correct regardless of registration timing.
             session.stt.unload();
+            self.coordinator.end(HeavySessionKind::Stt);
         }
     }
 }
@@ -518,7 +531,20 @@ pub async fn start_audio_session(
         pipeline.model_dir.clone(),
         Arc::clone(&pipeline.gate),
     ));
+    // Start capture first: if the backend fails we return before marking a heavy
+    // session active, so the coordinator's state never goes stale on a failed
+    // start.
     let (capture, rx) = start_capture()?;
+
+    // One-heavy-session-at-a-time (BR-04): register this session's whisper unload
+    // hook, then start the STT session - dropping any resident ORT OCR session so
+    // only one heavy model set is resident. The hook stays current for the
+    // matching `stop -> end(Stt)`.
+    let hook_stt = Arc::clone(&stt);
+    pipeline
+        .coordinator
+        .register(HeavySessionKind::Stt, Arc::new(move || hook_stt.unload()));
+    pipeline.coordinator.begin(HeavySessionKind::Stt);
 
     let config = CaptionConfig {
         source_language: normalize_language(request.source_language),
