@@ -1,6 +1,6 @@
 ---
 title: "TASK-009: Settings UI - provider key entry/validation, model selection"
-status: Active
+status: Done
 fr: "FR-03, FR-04"
 owner: frontend-ui-dev
 deps: "TASK-006"
@@ -21,17 +21,17 @@ model, and set fallback order - keys stored via TASK-006's keychain wrapper only
   `human-in-the-loop.md` (provider transparency).
 
 ## To do
-- [ ] Settings window: provider list with masked status, add-key flow (paste -> validate
+- [x] Settings window: provider list with masked status, add-key flow (paste -> validate
       via provider `validate_key` -> store -> clear input), remove-key flow.
-- [ ] Default provider/model selection + fallback order (persisted in tauri-plugin-store -
+- [x] Default provider/model selection + fallback order (persisted in tauri-plugin-store -
       names only, never keys).
-- [ ] Clear error surfaces for invalid key / quota / network (typed errors from the
+- [x] Clear error surfaces for invalid key / quota / network (typed errors from the
       provider layer).
-- [ ] i18n vi+en; Vitest with mocked IPC.
+- [x] i18n vi+en; Vitest with mocked IPC.
 
 ## Test scenarios / acceptance
-- [ ] After entry, the key value is unreachable from the WebView (assert IPC surface).
-- [ ] Invalid key shows a specific, actionable message.
+- [x] After entry, the key value is unreachable from the WebView (assert IPC surface).
+- [x] Invalid key shows a specific, actionable message.
 
 ## Session log (AI session log)
 
@@ -48,3 +48,37 @@ model, and set fallback order - keys stored via TASK-006's keychain wrapper only
 
 ## Result
 <Fill when moving to Done.>
+| 2026-07-10 | claude | Independently verified on merged main: PR #10 merge commit c6d212e; review rows present in the task file; commit subjects all within 72 chars | Done |
+
+## Result
+Settings UI for provider keys and model selection is on `main` (PR #10, merge commit
+c6d212e).
+
+Delivered: the settings window with a provider list showing masked key status, the
+add-key flow (paste -> `validate_key` against the provider -> store in the OS keychain ->
+clear the input), the remove-key flow, default provider/model selection with fallback
+order persisted in tauri-plugin-store (names only, never keys), typed error surfaces for
+invalid key / quota / network, the `Input` primitive with its design-system row, and i18n
+in vi (fully accented) and en.
+
+Both follow-ups carried from TASK-006 are closed:
+- The real Windows Credential Manager round-trip is covered by `keys::backend::
+  real_keychain_smoke` (`#[ignore]`, dedicated service name), which was run for real:
+  set / get / delete all passed against the live keychain.
+- Two automated guards assert no key reaches the IPC surface: a source scan
+  (`command_module_never_exposes_key_material`) and a runtime scan that serializes every
+  command return value (`no_command_return_value_contains_the_key`). `ApiKey` having no
+  `Serialize` is the compile-time backstop behind them.
+
+Evidence: Vitest 127 passed; `cargo test --lib` 79 passed / 1 ignored (the keychain smoke);
+ESLint, Prettier, clippy `-D warnings` and `cargo fmt --check` clean; CI `lint-and-test`
+green on PR #10. code-reviewer PASS (design-system hard gate holds; nits only).
+security-reviewer PASS (traced every key path; no key on the IPC surface; the WebView
+receives provider id + `key_present` only).
+
+Carried forward, not done here:
+- The revoke-consent control for model downloads lands with TASK-007, which brings the
+  consent facility; it needs this window to live in.
+- security-reviewer noted an optional future hardening for the non-Gemini clients when
+  Anthropic / OpenAI / OpenRouter are added.
+
