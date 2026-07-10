@@ -39,7 +39,7 @@ overlay system.
 | TASK-011 | Opt-in cloud OCR backends (BR-09) | screen-translate-dev | TASK-007 | P1 | 1 | Pending |
 | TASK-012 | Settings revoke-consent control for model downloads | frontend-ui-dev | TASK-007, TASK-009 | P1 | 1 | Done |
 | TASK-013 | System-audio capture: WASAPI loopback + VAD + chunking | audio-pipeline-dev | TASK-002 | P0 | 2 | Done |
-| TASK-014 | Local STT: whisper.cpp + first-run download + hardware probe | audio-pipeline-dev | TASK-013, TASK-007 | P0 | 2 | Planned |
+| TASK-014 | Local STT: whisper.cpp + first-run download + hardware probe | audio-pipeline-dev | TASK-013, TASK-007 | P0 | 2 | Active |
 | TASK-015 | Audio session pipeline wiring + audio p95 under 3s benchmark | audio-pipeline-dev | TASK-013, TASK-014 | P0 | 2 | Planned |
 | TASK-016 | Caption overlay UI (bilingual subtitles) | frontend-ui-dev | TASK-015, TASK-008 | P0 | 2 | Planned |
 | TASK-017 | Global hotkeys + tray UX | frontend-ui-dev | TASK-016 | P0 | 3 | Planned |

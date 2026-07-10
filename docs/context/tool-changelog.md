@@ -4,6 +4,18 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
 
 ## 2026-07-10
 
+- STT local FR-01 (TASK-014, ADR-002): them dependency truc tiep `whisper-rs = "=0.14.4"`
+  (keo `whisper-rs-sys 0.13.1` build bundled whisper.cpp qua CMake/Ninja + bindgen). CPU-only
+  (KHONG bat feature GPU) cho MVP Windows; chi TEXT transcribe roi module, audio o RAM
+  (AC-01.6/BR-01). Model `ggml-*.bin` tai luc first-run vao user-cache (`.gitignore` `*.bin`,
+  KHONG commit), route qua consent gate CHUNG `src-tauri/src/models/` (KHONG tao gate thu 2).
+  Them feature `stt-live` (off mac dinh, KHONG chay CI) cho test inference model that tu
+  `OST_WHISPER_TEST_MODEL`. Kiem chung THUC TE tren host dev (C: day 100% -> dat
+  `CARGO_TARGET_DIR=D:/t14` path ngan tranh MAX_PATH; `LIBCLANG_PATH=C:\Program Files\LLVM\bin`
+  pin LLVM 19.1.7; `CMAKE_GENERATOR=Ninja` 1.13.2; cmake 4.3.4; wrapper vcvars64 `-j 2`):
+  whisper-rs-sys compile xanh (exit 0), `cargo fmt --check` sach, `cargo clippy --all-targets
+  -j 2 -- -D warnings` sach, `cargo test -j 2` xanh (module stt: xem session log TASK-014).
+  Refs: FR-01, TASK-014, ADR-002.
 - Toolchain build STT native (ADR-002, chuan bi cho TASK-014/FR-01): cai host prereq cho
   `whisper-rs 0.14.4 -> whisper-rs-sys 0.13.1`. Truoc do build fail vi thieu (1) libclang
   cho bindgen, (2) `cmake.exe`. Da cai qua winget: **CMake 4.3.4** (Kitware.CMake) va
