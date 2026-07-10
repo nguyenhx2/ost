@@ -1,6 +1,6 @@
 ---
 title: "TASK-010: Additional LLM provider clients: Anthropic, OpenAI, OpenRouter"
-status: Planned
+status: Active
 fr: "FR-03"
 owner: llm-integration-dev
 deps: "TASK-006"
@@ -47,6 +47,7 @@ Implement Anthropic, OpenAI and OpenRouter clients behind the existing `Translat
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | spec-guardian | Pre-dispatch scope check vs FR-03/BR-02. ALIGNED: TranslationProvider trait sufficient as-is, no change needed. Added AC-03.2/03.3 citations. | Go |
+| 2026-07-10 | llm-integration-dev | Flip status Planned->Active; read Gemini client, trait, keys, contract. Start Anthropic/OpenAI/OpenRouter clients + factory. | In progress |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
