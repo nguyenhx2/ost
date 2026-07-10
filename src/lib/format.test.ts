@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes } from "./format";
+import { formatBytes, formatTimestamp } from "./format";
 
 describe("formatBytes", () => {
   it("formats megabyte-scale sizes with one decimal", () => {
@@ -19,5 +19,20 @@ describe("formatBytes", () => {
     expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(-1)).toBe("0 B");
     expect(formatBytes(Number.NaN)).toBe("0 B");
+  });
+});
+
+describe("formatTimestamp", () => {
+  it("formats a valid ISO string in the given locale", () => {
+    const out = formatTimestamp("2026-07-10T10:15:00.000Z", "en");
+    expect(out).not.toBe("");
+    // Locale-dependent exact form varies by platform ICU; assert it is non-empty
+    // and does not leak the raw ISO string.
+    expect(out).not.toContain("T10:15");
+  });
+
+  it("returns an empty string for empty or invalid input", () => {
+    expect(formatTimestamp("", "en")).toBe("");
+    expect(formatTimestamp("not-a-date", "en")).toBe("");
   });
 });

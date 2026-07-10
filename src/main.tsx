@@ -6,6 +6,7 @@ import App from "./App";
 import { RegionSelectView } from "./views/RegionSelectView";
 import { RegionPreviewView } from "./views/RegionPreviewView";
 import { SettingsView } from "./views/SettingsView";
+import { HistoryView } from "./views/HistoryView";
 
 /**
  * Window routing: every Tauri window loads the same bundle; the `view` query
@@ -21,6 +22,8 @@ function selectView(): React.ReactElement {
       return <RegionPreviewView />;
     case "settings":
       return <SettingsView />;
+    case "history":
+      return <HistoryView />;
     default:
       return <App />;
   }

@@ -1,0 +1,149 @@
+/*
+ * HistoryView (FR-04, BR-06) styles. Token-driven only (design-system.md):
+ * every color/spacing/radius value comes from src/styles/tokens.css.
+ */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  font-family: var(--font-sans);
+}
+
+.history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.history-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.history-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.history-subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.history-count {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.history-empty {
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* ---------- Entry list ---------- */
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.history-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.history-entry-provider {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.history-entry-langs {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.history-entry-time {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.history-entry-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+.history-entry-field-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.history-entry-text {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.history-entry-text:last-child {
+  margin-bottom: 0;
+}
+
+.history-entry-live {
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+  min-height: var(--space-3);
+}
+
+/* ---------- Clear-all confirm ---------- */
+
+.history-confirm-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-md);
+}
+
+.history-confirm-body {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.history-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

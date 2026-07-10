@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   },
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
+  isHistoryEnabled: vi.fn(),
+  setHistoryEnabled: vi.fn(),
 }));
 
 vi.mock("../lib/ipc", async (importOriginal) => {
@@ -31,6 +33,12 @@ vi.mock("../lib/settings", async (importOriginal) => {
     saveProviderSettings: mocks.saveProviderSettings,
   };
 });
+
+vi.mock("../lib/history", () => ({
+  HISTORY_ENABLED_DEFAULT: true,
+  isHistoryEnabled: mocks.isHistoryEnabled,
+  setHistoryEnabled: mocks.setHistoryEnabled,
+}));
 
 import { DEFAULT_PROVIDER_SETTINGS } from "../lib/settings";
 import { OCR_MODEL_SET_ID, type ModelConsentStatus } from "../lib/ipc";
@@ -75,6 +83,8 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ ...DEFAULT_PROVIDER_SETTINGS });
   mocks.saveProviderSettings.mockReset().mockResolvedValue(undefined);
+  mocks.isHistoryEnabled.mockReset().mockResolvedValue(true);
+  mocks.setHistoryEnabled.mockReset().mockResolvedValue(undefined);
 });
 
 describe("SettingsView", () => {
@@ -297,5 +307,31 @@ describe("SettingsView", () => {
     expect(
       screen.getByRole("button", { name: "Revoke consent" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows the history toggle ON by default (BR-06/AC-04.6)", async () => {
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Translation history")).toBeInTheDocument(),
+    );
+    const toggle = screen.getByRole("switch", {
+      name: "Record translation history",
+    });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+  });
+
+  it("persists disabling the history toggle (AC-04.6)", async () => {
+    render(<SettingsView />);
+    const toggle = await screen.findByRole("switch", {
+      name: "Record translation history",
+    });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+
+    await userEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(mocks.setHistoryEnabled).toHaveBeenCalledWith(false),
+    );
+    expect(toggle).toHaveAttribute("aria-checked", "false");
   });
 });

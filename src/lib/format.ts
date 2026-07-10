@@ -24,3 +24,22 @@ export function formatBytes(bytes: number): string {
   }
   return `${Math.round(bytes)} B`;
 }
+
+/**
+ * Locale-aware date+time for a history entry's ISO-8601 `createdAt`. Uses the
+ * platform Intl formatter (`vi`/`en`). An empty/invalid input returns "" so the
+ * view can omit the timestamp rather than render "Invalid Date".
+ */
+export function formatTimestamp(iso: string, locale: string): string {
+  if (iso === "") {
+    return "";
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
