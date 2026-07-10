@@ -94,6 +94,12 @@ ocr-spike = ["dep:ab_glyph", "dep:imageproc"]
 # and transcribes synthetic audio. Off by default so it NEVER runs in CI and no
 # model is downloaded there (testing.md: no real models in CI).
 stt-live = []
+# e2e acceptance gate (TASK-022): compiles the WebDriver-only `e2e_region_probe`
+# command that drives the REAL capture -> OCR path synchronously and returns its
+# terminal outcome, so a single-WebView tauri-driver session can prove the real
+# region pipeline never hangs (the emitted events go to a separate preview
+# window the driver cannot observe). Off by default: NEVER in production builds.
+e2e = []
 
 [[bench]]
 name = "ocr_stage"

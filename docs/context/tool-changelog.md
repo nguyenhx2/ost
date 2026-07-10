@@ -2,6 +2,26 @@
 
 Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng thế nào).
 
+## 2026-07-11
+
+- E2E acceptance gate FR-01/02/04 (TASK-022, test): wire WebdriverIO + tauri-driver against
+  the RELEASE binary. Cai `tauri-driver 2.0.6` (`cargo install tauri-driver --locked`). Them
+  dev-deps PIN: `webdriverio 9.20.0`, `@wdio/cli 9.20.0`, `@wdio/local-runner 9.20.0`,
+  `@wdio/mocha-framework 9.20.0`, `@wdio/spec-reporter 9.20.0`, `tsx 4.20.6`,
+  `@types/node 22.18.9`. Native WebView2 driver: `msedgedriver` PHAI khop WebView2 runtime
+  (150.0.4078.48) - pin duoi `e2e/.driver/` (gitignored, khong commit), truyen qua
+  `--native-driver`. Config `e2e/wdio.conf.ts` tro `tauri:options.application` vao release
+  `ost.exe`, spawn tauri-driver o `beforeSession`. Specs: `smoke`, `settings-keys`,
+  `overlay-lifecycle`, `region-select`. Region duoc lai qua command CHI-e2e
+  `e2e_region_probe` (feature `e2e`, VANG khoi production) tra ve ket qua truc tiep vi
+  driver chi gan MOT WebView va event region emit toi cua so preview khong quan sat duoc;
+  probe dung LAI capturer + rec engine that cua `RegionPipeline` (KHONG mock). Kiem chung
+  THUC TE (release build qua `npm run tauri build -- --no-bundle`, host co display, OCR
+  models co san `~/.oar`): ca 4 spec xanh - region: `consent-required` 17ms (fail-closed,
+  khong chup) roi sau grant consent `ocr-result:len=85` 360ms (chup that + OCR that, KHONG
+  hang). `cargo clippy --features e2e -- -D warnings` sach; `npm run test` 228 passed,
+  `npm run lint` + `tsc --noEmit` sach. Refs: FR-01, FR-02, FR-04, TASK-022.
+
 ## 2026-07-10
 
 - Installer + auto-update FR-05 (TASK-020, infra): them dependency truc tiep PIN

@@ -31,6 +31,10 @@ src-tauri/target/
 # paths); not portable, so kept out of version control (known-issues.md).
 scripts/cargo-wt.bat
 
+# e2e (TASK-022): the pinned msedgedriver + WebView2 WebDriver artifacts are
+# downloaded per host to match the installed WebView2 runtime; never committed.
+e2e/.driver/
+
 # OS noise
 Thumbs.db
 .DS_Store

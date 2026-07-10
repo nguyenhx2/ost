@@ -1,6 +1,7 @@
 # Prettier formats only the frontend code and root JS/TS config files.
 node_modules/
 dist/
+e2e/.driver/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/capabilities/
