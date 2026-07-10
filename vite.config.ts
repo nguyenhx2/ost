@@ -12,6 +12,10 @@ export default defineConfig(async () => ({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Vitest owns the jsdom unit layer (src/). The e2e/ specs are WebdriverIO +
+    // tauri-driver against the release binary (TASK-022) - a different runner;
+    // exclude them so `vitest run` never tries to load @wdio/globals in jsdom.
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

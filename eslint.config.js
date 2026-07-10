@@ -19,4 +19,28 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // e2e (WebdriverIO + tauri-driver, TASK-022): Mocha + wdio globals, and the
+    // diagnostic console output that reports the REAL run outcomes. These specs
+    // run against the release binary, never in the jsdom unit environment.
+    files: ["e2e/**/*.ts"],
+    languageOptions: {
+      globals: {
+        describe: "readonly",
+        it: "readonly",
+        before: "readonly",
+        beforeEach: "readonly",
+        after: "readonly",
+        afterEach: "readonly",
+        expect: "readonly",
+        window: "readonly",
+        document: "readonly",
+        console: "readonly",
+        process: "readonly",
+      },
+    },
+    rules: {
+      "no-console": "off",
+    },
+  },
 );

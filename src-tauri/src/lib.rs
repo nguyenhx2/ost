@@ -134,6 +134,10 @@ pub fn run() {
             models::model_consent_status,
             models::grant_model_consent,
             models::revoke_model_consent,
+            // e2e acceptance gate (TASK-022): WebDriver-only region probe,
+            // compiled ONLY under the `e2e` feature - absent from production.
+            #[cfg(feature = "e2e")]
+            shell::region::e2e_region_probe,
         ])
         .run(tauri::generate_context!())
         // expect is acceptable here: outermost entry point, failure to start the

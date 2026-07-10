@@ -875,6 +875,60 @@ pub fn nudge_region_preview(app: AppHandle, dx: i32, dy: i32) -> Result<(), Shel
     Ok(())
 }
 
+/// e2e acceptance gate (TASK-022) - COMPILED ONLY under the `e2e` feature, never
+/// in production builds. Drives the SAME real capture -> OCR core as
+/// [`region_preview_ready`] (the production [`RegionPipeline`] capturer + rec
+/// engine, NOT a mock) synchronously and RETURNS the terminal outcome tag.
+///
+/// Why a returning command: tauri-driver attaches to ONE WebView, and
+/// `region_preview_ready` emits its result to the separate `region-preview`
+/// window the driver cannot observe. Returning the outcome lets the WebDriver
+/// session assert the real pipeline reaches a terminal state - `ocr-result`,
+/// `ocr-error`, or `consent-required` - and, because the `invoke` resolves, that
+/// the real capturer NEVER hangs (the owner acceptance bar). This changes NO
+/// production capture/OCR behavior: it is absent from shipping binaries.
+#[cfg(feature = "e2e")]
+#[tauri::command]
+pub fn e2e_region_probe(
+    pipeline: tauri::State<'_, RegionPipeline>,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> Result<String, ShellError> {
+    let region = RegionRect {
+        x,
+        y,
+        width,
+        height,
+    };
+    validate_region(&region)?;
+    // Auto selection routes to the production main rec engine (same as an
+    // unpinned real selection). This is the real per-language routing, not a
+    // test double.
+    let selection = SourceLanguageSelection::Auto;
+    let engine = pipeline.engine_for(&selection);
+    pipeline.begin_session();
+    let request_id = format!("e2e-region-{}", monotonic_correlation_id());
+    let outcome = build_ocr_payload(
+        pipeline.capturer.as_ref(),
+        engine.as_ref(),
+        region,
+        request_id,
+        &selection,
+    );
+    pipeline.end_session();
+    Ok(match outcome {
+        Ok(payload) => format!(
+            "ocr-result:len={},lowConfidence={}",
+            payload.source_text.chars().count(),
+            payload.low_confidence
+        ),
+        Err(err) if err.consent_disclosure().is_some() => "consent-required".to_string(),
+        Err(err) => format!("ocr-error:{err}"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
