@@ -195,6 +195,36 @@ mod tests {
         }
     }
 
+    /// A synthetic idle source that flips a shared flag when dropped. Lets the
+    /// stop test assert the session actually RELEASES the capture backend - the
+    /// in-test analogue of the WASAPI client freeing its endpoint on `Drop`
+    /// (AC-01.10, "frees resources"). Never real captured audio.
+    struct DropSignalSource {
+        sample_rate: u32,
+        read_delay: Duration,
+        dropped: Arc<AtomicBool>,
+    }
+
+    impl AudioSource for DropSignalSource {
+        fn format(&self) -> AudioFormat {
+            AudioFormat {
+                sample_rate: self.sample_rate,
+            }
+        }
+
+        fn read(&mut self, _out: &mut Vec<f32>) -> Result<usize, CaptureError> {
+            // Idle like a silent endpoint, but with a bounded blocking read.
+            std::thread::sleep(self.read_delay);
+            Ok(0)
+        }
+    }
+
+    impl Drop for DropSignalSource {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::SeqCst);
+        }
+    }
+
     fn test_config() -> ChunkConfig {
         ChunkConfig {
             vad: VadConfig {
@@ -274,6 +304,33 @@ mod tests {
         assert!(
             elapsed < Duration::from_secs(1),
             "stop took {elapsed:?}, budget is < 1s"
+        );
+    }
+
+    #[test]
+    fn stop_drops_the_source_releasing_resources() {
+        // AC-01.10 (resource freeing): stopping must not merely halt the loop -
+        // it must release the capture backend. We assert the source is actually
+        // dropped by the session on stop (the WASAPI client frees its endpoint
+        // in its own Drop), and that it stays alive while capture is running.
+        let dropped = Arc::new(AtomicBool::new(false));
+        let source = DropSignalSource {
+            sample_rate: 1_000,
+            read_delay: Duration::from_millis(20),
+            dropped: Arc::clone(&dropped),
+        };
+
+        let (mut session, _rx) = CaptureSession::start_with(source, test_config(), 16);
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(
+            !dropped.load(Ordering::SeqCst),
+            "source must stay alive while capture is running"
+        );
+
+        session.stop();
+        assert!(
+            dropped.load(Ordering::SeqCst),
+            "stop must drop the source to free capture resources (AC-01.10)"
         );
     }
 
