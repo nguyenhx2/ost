@@ -1,6 +1,6 @@
 ---
 title: "TASK-012: Settings revoke-consent control for model downloads"
-status: Active
+status: Done
 fr: "FR-02, FR-04"
 owner: frontend-ui-dev
 deps: "TASK-007, TASK-009"
@@ -44,6 +44,17 @@ Wire the deferred revoke-consent control into the Settings view so users can rev
 | 2026-07-10 | spec-guardian | Pre-dispatch scope check. ALIGNED. Fixed BR-09->BR-08 citation (model-download consent, not cloud OCR); added a11y/primitives requirement. | Go |
 | 2026-07-10 | frontend-ui-dev | Flipped status Planned->Active (task file + master-plan row). Starting TDD. | Active |
 | 2026-07-10 | frontend-ui-dev | TDD: added useModelConsent hook + Settings "Model downloads" section listing granted sets with an aria-labelled revoke IconButton wired to modelIpc.revokeConsent. i18n vi+en keys. Vitest (mocked IPC) covers revoke command call, list reflects consent status, empty state, fail-closed on error, no key/secret on surface. Frontend-only; no Rust touched. test 149 pass, lint clean, tsc clean. | Green |
+| 2026-07-10 | qa-test | Independently verified suite: vitest 149 passed / 0 failed (19 files), eslint+prettier clean, tsc clean. All 3 ACs covered (revoke sends only modelSetId, revoked state re-prompts, failed revoke keeps granted). No test added (coverage complete). | Green |
+| 2026-07-10 | code-reviewer | Full-diff gate. Design-system HARD GATE holds (primitives/tokens, lucide, no native controls); TS strict, logic in hook, IPC via typed wrapper; master-plan edits only the TASK-012 row; disclosure via PlainText; aria-labelled keyboard revoke. 2 nits only. | PASS |
+| 2026-07-10 | security-reviewer | Model-download consent gate. Fail-closed Rust gate preserved (UI only flips persisted flag; ensure_download_allowed authoritative); revoke IPC carries only modelSetId; no key/secret on IPC surface; disclosure rendered plain-text. | PASS |
+| 2026-07-10 | orchestrator | Merged PR #16 (merge commit f648800); secret-scan clean; CI lint-and-test green. Closed: status Done in frontmatter + board, moved to done/. | Done |
 
 ## Result
-<Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
+Settings revoke-consent control for model downloads is on `main` (PR #16, merge commit
+f648800). Frontend-only: a `useModelConsent` hook + a "Model downloads" section in
+SettingsView listing consented model sets, each with an aria-labelled revoke `IconButton`
+wired to the existing `modelIpc.revokeConsent` (carries only `modelSetId`). Revoke flips
+the persisted consent flag; the Rust fail-closed download gate stays authoritative, so the
+next download re-prompts. i18n vi (accented) + en; primitives/tokens only; disclosure
+fields rendered as plain text. Gates: qa-test 149 passed, code-reviewer PASS,
+security-reviewer PASS (fail-closed preserved), secret-scan clean, CI green.
