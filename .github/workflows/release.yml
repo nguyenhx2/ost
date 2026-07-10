@@ -1,0 +1,93 @@
+# Release - OST (GATED, owner-only)
+# TASK-020 / FR-05. Builds the Tauri bundle (NSIS + MSI), signs the updater
+# artifacts, and drafts a GitHub release. This workflow is manual-dispatch ONLY:
+# it NEVER runs on push, tag, or pull_request, so nothing is ever published
+# automatically. It does NOT replace or weaken ci.yml (lint-and-test still gates
+# every PR); it is an additional, separate, human-triggered pipeline.
+#
+# Signing: the updater PRIVATE key never lives in the repo. It is read at build
+# time from the GitHub Actions secrets TAURI_SIGNING_PRIVATE_KEY (+ its password
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD). The matching PUBLIC key sits in
+# src-tauri/tauri.conf.json (plugins.updater.pubkey). The owner must generate the
+# keypair once with `tauri signer generate` and store the private half in Actions
+# secrets BEFORE the first signed release (see docs/context/tool-changelog.md).
+#
+# Native STT toolchain (ADR-002): the release build also compiles bundled
+# whisper.cpp, so it needs the same CMake + pinned LLVM 19 libclang prerequisites
+# as ci.yml.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "release" to confirm this owner-initiated signed build.'
+        required: true
+        type: string
+
+# One release build at a time; never cancel an in-flight signed build.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # Fail closed unless the dispatcher explicitly typed the confirmation phrase.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify explicit owner confirmation
+        if: ${{ inputs.confirm != 'release' }}
+        run: |
+          echo "Confirmation input must equal 'release'. Aborting."
+          exit 1
+
+  release:
+    needs: guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # --- Native whisper build prerequisites (ADR-002), identical to ci.yml ---
+      - name: Install CMake (whisper.cpp build)
+        run: choco install cmake --version=4.3.4 -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+      - name: Install LLVM 19 (libclang for bindgen)
+        run: choco install llvm --version=19.1.7 -y --no-progress --force
+      - name: Set LIBCLANG_PATH
+        run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      # Fail closed: never produce an unsigned "release". The signing key must be
+      # present in Actions secrets (owner-provisioned) or this build stops here.
+      - name: Ensure updater signing key is configured
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            Write-Error "TAURI_SIGNING_PRIVATE_KEY secret is not set. The owner must run 'tauri signer generate' and add the private key (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) to GitHub Actions secrets before a signed release."
+            exit 1
+          }
+      # Build + sign + DRAFT release. releaseDraft:true means artifacts are attached
+      # to an unpublished draft the owner reviews and publishes by hand - the CI run
+      # itself never pushes an update to end users.
+      - name: Build, sign and draft release (Tauri bundler)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: 'OST v__VERSION__'
+          releaseDraft: true
+          prerelease: false
+          args: --verbose

@@ -36,6 +36,12 @@ url = "2.5.8"
 tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-clipboard-manager = "2.3.2"
 
+# --- TASK-020 signed auto-update (FR-05, infra) ---
+# Signature-verified updater. Update artifacts are signed with a minisign keypair;
+# the PUBLIC key lives in tauri.conf.json (updater.pubkey); the PRIVATE key lives
+# ONLY in GitHub Actions secrets (never committed). rustls-tls to match reqwest.
+tauri-plugin-updater = "=2.10.1"
+
 # --- TASK-009 settings persistence (FR-03/FR-04): names only, never keys ---
 # --- TASK-007 shared model-consent facility (FR-02; whisper reuses in Phase 2) ---
 # Persists settings (key names only, never keys) and first-run model-download
