@@ -4,6 +4,14 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
 
 ## 2026-07-10
 
+- Tich hop pipeline FR-02 (TASK-007, FR-02): them dependency moi. `xcap = "=0.9.6"` (chup
+  vung man hinh sau trait `ScreenCapturer`; default-features, KHONG feature png/save nen
+  khong ghi dia). `tauri-plugin-store = "=2.4.3"` (luu co dong thuan tai model trong
+  facility `src-tauri/src/models/`, flags/names only - KHONG bao gio secret).
+  `sha2 = "=0.10.9"` + `hex = "=0.4.3"` (xac minh SHA256 cho consumer tu tai). Tat ca
+  pin chinh xac. Kiem chung: `cargo fmt --check` sach, `cargo clippy --all-targets -- -D
+  warnings` sach, `cargo test -j 2` 109 passed.
+
 - Spike R2 OCR (TASK-007, FR-02, ADR-004 R2): vòng đo thứ hai để đóng khoảng cách chất
   lượng tiếng Việt của R1 (0.741/0.727 < bar 0.85). KHÔNG thêm/đổi dependency nào - chỉ
   dùng lại `oar-ocr = "=0.8.0"` + `image = "=0.25.8"` sẵn có. Thay đổi harness (feature
