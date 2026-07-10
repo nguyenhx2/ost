@@ -40,7 +40,7 @@ preview overlay gần như tức thì, cập nhật trực tiếp khi nội dung
 | FR-02.3 | Preview hiện text OCR ngay, bản dịch cập nhật sau | Must | AC-02.3 |
 | FR-02.4 | Live update khi nội dung vùng thay đổi | Must | AC-02.4 |
 | FR-02.5 | Ảnh chỉ trong RAM; mặc định chỉ TEXT OCR gửi provider; OCR đám mây opt-in gửi crop đã thu nhỏ theo BR-09 | Must | AC-02.5 |
-| FR-02.6 | Confidence flag cho vùng nhận dạng kém (`PerLine` dùng ngưỡng OI-07; `Unavailable` dùng banner cố định) | Must | AC-02.6 |
+| FR-02.6 | Confidence flag cho vùng nhận dạng kém (`PerLine` dùng ngưỡng OI-07; `Unavailable` dùng banner cố định); ngôn ngữ nguồn `Degraded` (charset-capped, ví dụ vi trên PP-OCRv5) dùng notice cố định độc lập với confidence | Must | AC-02.6 |
 | FR-02.7 | Trạng thái "không nhận dạng được text", không gọi LLM khi OCR trống | Must | AC-02.7 |
 | FR-02.8 | Re-translate cùng text OCR, đổi được provider/model trước khi gửi | Must | AC-02.8 |
 | FR-02.9 | Preview đủ điều khiển: copy, re-translate, pin, đóng; badge provider/model; thao tác đủ bàn phím | Must | AC-02.9 |
