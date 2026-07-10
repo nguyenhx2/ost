@@ -11,6 +11,7 @@
 //! [`ModelSet`] shares the one detection model.
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use image::RgbImage;
 use oar_ocr::oarocr::{OAROCRBuilder, OAROCR};
@@ -23,6 +24,15 @@ use crate::models::{ModelArtifact, ModelError, ModelGate, ModelHost, ModelSetDes
 /// enables the whole OCR feature regardless of which per-language engine loads
 /// (the download host is the same ModelScope registry for every artifact).
 pub const OCR_MODEL_SET_ID: &str = "ocr-ppocrv5";
+
+/// Upper bound for the first-run model download + ORT session build (TASK-021).
+/// `OAROCRBuilder::build()` fetches the PP-OCRv5 artifacts from ModelScope as a
+/// BLOCKING network call with no internal timeout, under the engine `pipeline`
+/// Mutex. Without this bound a slow or unreachable host parks OCR forever; when
+/// it elapses we surface an actionable [`OcrError::ModelLoad`] instead of a
+/// silent hang (human-in-the-loop.md). Generous because the first fetch is
+/// ~90MB; subsequent builds hit the local cache and return immediately.
+const MODEL_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Approximate artifact sizes from the oar-ocr model table (docs/models.md); the
 /// dictionaries are small text files. Used for the consent disclosure only.
@@ -197,17 +207,93 @@ impl PaddleOcrEngine {
     }
 
     /// Builds the oar-ocr pipeline (downloads models on first call, then builds
-    /// the ORT session).
+    /// the ORT session) under a BOUNDED timeout (TASK-021).
+    ///
+    /// The build runs on a dedicated worker thread joined via `recv_timeout`, so
+    /// a slow/unreachable ModelScope host maps to an actionable `ModelLoad` error
+    /// rather than hanging under the `pipeline` Mutex. The download stays
+    /// fail-closed and SHA-256-verified (oar-ocr internal) - this only bounds the
+    /// wait, it does not open the egress path.
     fn build_pipeline(&self) -> Result<OAROCR, OcrError> {
-        OAROCRBuilder::new(self.models.det, self.models.rec, self.models.dict)
-            .build()
-            .map_err(|e| OcrError::ModelLoad(e.to_string()))
+        let (det, rec, dict) = (self.models.det, self.models.rec, self.models.dict);
+        let built = run_bounded(MODEL_DOWNLOAD_TIMEOUT, "ost-ocr-model-build", move || {
+            OAROCRBuilder::new(det, rec, dict)
+                .build()
+                .map_err(|e| e.to_string())
+        });
+        match built {
+            Ok(Ok(pipeline)) => Ok(pipeline),
+            Ok(Err(message)) => Err(OcrError::ModelLoad(message)),
+            Err(BoundedError::Timeout) => Err(OcrError::ModelLoad(format!(
+                "model download/build timed out after {}s (host slow or unreachable)",
+                MODEL_DOWNLOAD_TIMEOUT.as_secs()
+            ))),
+            Err(BoundedError::Disconnected) => Err(OcrError::ModelLoad(
+                "model build thread ended without returning a pipeline".into(),
+            )),
+            Err(BoundedError::Spawn(e)) => Err(OcrError::ModelLoad(format!(
+                "could not spawn the model build thread: {e}"
+            ))),
+        }
+    }
+}
+
+/// Outcome of a bounded worker-thread join that did not produce a value.
+#[derive(Debug)]
+enum BoundedError {
+    /// The worker did not finish within the timeout (slow/unreachable host).
+    Timeout,
+    /// The worker thread died without sending a result.
+    Disconnected,
+    /// The worker thread could not be spawned.
+    Spawn(String),
+}
+
+/// Runs a blocking, potentially slow producer `f` on a dedicated worker thread
+/// and joins it under `timeout` (TASK-021 download-timeout plumbing). This is the
+/// single choke point that turns an unbounded blocking call (the ModelScope model
+/// download inside `OAROCRBuilder::build`) into a bounded one: on timeout the
+/// caller gets an actionable error instead of a hang. Extracted so the timeout
+/// behavior is unit-tested without any real network or model.
+fn run_bounded<T, F>(timeout: Duration, name: &str, f: F) -> Result<T, BoundedError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::sync_channel::<T>(1);
+    std::thread::Builder::new()
+        .name(name.to_string())
+        .spawn(move || {
+            // Ignored if the receiver already timed out and dropped.
+            let _ = tx.send(f());
+        })
+        .map_err(|e| BoundedError::Spawn(e.to_string()))?;
+
+    match rx.recv_timeout(timeout) {
+        Ok(value) => Ok(value),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(BoundedError::Timeout),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(BoundedError::Disconnected),
     }
 }
 
 impl OcrEngine for PaddleOcrEngine {
     fn id(&self) -> &'static str {
         self.id
+    }
+
+    fn ensure_ready(&self) -> Result<(), OcrError> {
+        // ORDERING (TASK-021 S2): consult the fail-closed consent gate WITHOUT
+        // building anything or capturing the screen, so first-run raises
+        // ConsentRequired before a single pixel is grabbed. Once the session is
+        // built the models are already local, so no gate check is needed.
+        if self.is_loaded() {
+            return Ok(());
+        }
+        if let Some(gate) = &self.gate {
+            gate.ensure_download_allowed(OCR_MODEL_SET_ID)
+                .map_err(map_consent_error)?;
+        }
+        Ok(())
     }
 
     fn recognize(&self, image: &RgbImage) -> Result<OcrOutput, OcrError> {
@@ -366,6 +452,60 @@ mod tests {
         }
         // The download-triggering session build was never reached.
         assert!(!engine.is_loaded());
+    }
+
+    #[test]
+    fn ensure_ready_fails_closed_before_consent_and_never_downloads() {
+        // TASK-021 ORDERING: the region pipeline calls `ensure_ready` BEFORE it
+        // captures the screen. Without consent it must raise ConsentRequired and
+        // build/download nothing, so on first run no pixel is grabbed before the
+        // consent dialog. After the grant it returns Ok WITHOUT a download (the
+        // session is built lazily later, in `recognize`).
+        use crate::models::{InMemoryConsentStore, ModelGate};
+        use std::sync::Arc;
+
+        let gate = Arc::new(ModelGate::new(
+            Arc::new(InMemoryConsentStore::default()),
+            vec![ocr_model_set_descriptor(std::path::PathBuf::from("/cache"))],
+        ));
+        let engine = PaddleOcrEngine::latin().with_consent_gate(Arc::clone(&gate));
+
+        match engine.ensure_ready() {
+            Err(OcrError::ConsentRequired(disclosure)) => {
+                assert_eq!(disclosure.model_set_id, OCR_MODEL_SET_ID);
+            }
+            other => panic!("expected ConsentRequired without a download, got {other:?}"),
+        }
+        assert!(
+            !engine.is_loaded(),
+            "ensure_ready must not build the session"
+        );
+
+        // Consent granted: ensure_ready is Ok and STILL loads nothing (no network
+        // in this test - the lazy build happens on the later recognize call).
+        gate.grant(OCR_MODEL_SET_ID).unwrap();
+        assert!(engine.ensure_ready().is_ok());
+        assert!(!engine.is_loaded());
+    }
+
+    #[test]
+    fn run_bounded_returns_a_fast_value_and_times_out_a_slow_one() {
+        // TASK-021 download-timeout plumbing: the exact bounded-join helper
+        // `build_pipeline` uses to wrap the ModelScope download. A producer that
+        // finishes in time returns its value; one that overruns the timeout maps
+        // to `BoundedError::Timeout` (which `build_pipeline` renders as an
+        // actionable ModelLoad error) instead of blocking forever.
+        let fast = run_bounded(Duration::from_secs(5), "test-fast", || 42u32);
+        assert!(matches!(fast, Ok(42)));
+
+        let slow = run_bounded(Duration::from_millis(20), "test-slow", || {
+            std::thread::sleep(Duration::from_millis(400));
+            7u32
+        });
+        assert!(
+            matches!(slow, Err(BoundedError::Timeout)),
+            "an overrunning producer must time out, not hang"
+        );
     }
 
     #[test]

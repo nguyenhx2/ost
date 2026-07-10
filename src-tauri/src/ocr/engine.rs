@@ -120,6 +120,17 @@ pub trait OcrEngine: Send + Sync {
     /// A short, stable identifier for the backend (telemetry/UI badge).
     fn id(&self) -> &'static str;
 
+    /// Consults any fail-closed download/consent gate WITHOUT capturing the
+    /// screen or building the model session (TASK-021 ordering fix). The region
+    /// pipeline calls this BEFORE `capture` so a first-run consent refusal (raised
+    /// as [`OcrError::ConsentRequired`]) or any other not-ready condition fires
+    /// before a single pixel is grabbed (security-privacy.md fail-closed,
+    /// human-in-the-loop.md). The default is "always ready" for backends that
+    /// need no download (mocks, the future Windows.Media.Ocr impl).
+    fn ensure_ready(&self) -> Result<(), OcrError> {
+        Ok(())
+    }
+
     /// Recognizes text in one region crop.
     fn recognize(&self, image: &RgbImage) -> Result<OcrOutput, OcrError>;
 

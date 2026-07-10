@@ -41,6 +41,7 @@ Selecting a region on the RELEASE build must never hang: it reaches a consent di
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-11 | orchestrator | Registered from the owner release-hang report; debugger root cause attached; dispatching screen-translate-dev to fix all 3 defects | Active |
+| 2026-07-11 | screen-translate-dev | Fixed all 3 defects: (1) capture runs on a COM-initialized worker thread with a 5s bounded timeout (CaptureError::Backend -> region:ocr-error), + wait_for_selection_overlay_closed before capture kills the capture-of-self/DWM race; (2) OcrEngine::ensure_ready consulted BEFORE capturer.capture() so first-run raises ConsentRequired without grabbing pixels; (3) OAROCRBuilder::build() wrapped in a 180s bounded run_bounded helper -> actionable ModelLoad error. Added bring-up tracing around capturer.capture(). Added windows 0.62 (Win32_System_Com) dep. TDD: gate-before-capture (panicking capturer), capture-timeout->ocr-error, ensure_ready fail-closed, run_bounded timeout. Updated ipc.md. fmt clean | In progress |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
