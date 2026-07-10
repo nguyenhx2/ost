@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ost",
+  "productName": "OST",
   "version": "0.1.0",
   "identifier": "com.ost.app",
   "build": {
@@ -24,12 +24,39 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "OST",
+    "category": "Productivity",
+    "homepage": "https://github.com/nguyenhx2/ost",
+    "shortDescription": "On-Screen Translator - live audio and screen-region translation overlays",
+    "longDescription": "OST translates live system audio (local whisper.cpp STT) and user-selected screen regions (capture plus OCR) into low-latency on-screen overlays, using the user's own AI provider keys stored in the OS keychain.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "languages": ["English"]
+      },
+      "wix": {
+        "language": "en-US"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/nguyenhx2/ost/releases/latest/download/latest.json"
+      ],
+      "pubkey": "PLACEHOLDER_TAURI_UPDATER_PUBKEY_REPLACE_BEFORE_FIRST_SIGNED_RELEASE",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

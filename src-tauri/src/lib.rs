@@ -41,6 +41,13 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder.plugin(shell::hotkeys::plugin());
 
+    // Desktop-only signed auto-update (FR-05, TASK-020). Update artifacts are
+    // signature-verified against updater.pubkey in tauri.conf.json before install;
+    // the private signing key lives ONLY in CI secrets (never in the repo). This
+    // wires the plugin - checking/applying an update stays a user-initiated action.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
     builder
         // Close-to-tray + audio:stopped sync for the caption overlay (FR-04).
         .on_window_event(shell::on_window_event)
