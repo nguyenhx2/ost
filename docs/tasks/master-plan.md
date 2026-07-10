@@ -42,7 +42,7 @@ overlay system.
 | TASK-014 | Local STT: whisper.cpp + first-run download + hardware probe | audio-pipeline-dev | TASK-013, TASK-007 | P0 | 2 | Done |
 | TASK-015 | Audio session pipeline wiring + audio p95 under 3s benchmark | audio-pipeline-dev | TASK-013, TASK-014 | P0 | 2 | Done |
 | TASK-016 | Caption overlay UI (bilingual subtitles) | frontend-ui-dev | TASK-015, TASK-008 | P0 | 2 | Done |
-| TASK-017 | Global hotkeys + tray UX | frontend-ui-dev | TASK-016 | P0 | 3 | Active |
+| TASK-017 | Global hotkeys + tray UX | frontend-ui-dev | TASK-016 | P0 | 3 | Done |
 | TASK-018 | Translation history (BR-06) | frontend-ui-dev | TASK-009 | P1 | 3 | Done |
 | TASK-019 | Idle-budget enforcement + session-drop discipline | audio-pipeline-dev | TASK-007, TASK-015 | P0 | 3 | Done |
 | TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Planned |
