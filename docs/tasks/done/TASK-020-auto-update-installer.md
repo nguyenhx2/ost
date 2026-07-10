@@ -1,6 +1,6 @@
 ---
 title: "TASK-020: Auto-update + installer/bundler (gated release)"
-status: Active
+status: Done
 fr: "FR-05"
 owner: devops
 deps: "TASK-004"
@@ -40,6 +40,10 @@ Set up the Tauri installer/bundler and signed auto-update via tauri-plugin-updat
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | devops | Configured Windows bundler + wired tauri-plugin-updater =2.10.1 + added gated release.yml + documented owner procedure | Config only - NO keys generated/committed, NO release published |
+| 2026-07-10 | qa-test | Verified: Rust compiles with tauri-plugin-updater 2.10.1 (clippy -D warnings + fmt clean); tauri.conf.json valid JSON (NSIS+MSI, updater block); release.yml valid YAML, workflow_dispatch-only; ci.yml UNTOUCHED; frontend unaffected; no key committed, no publish. | Green |
+| 2026-07-10 | code-reviewer | PASS. workflow_dispatch-only release, no committed key (placeholder pubkey + secret refs), ci.yml untouched, updater plugin init minimal + does NOT auto-apply (human-in-the-loop), dep pinned+logged, master-plan only TASK-020 row. | PASS |
+| 2026-07-10 | security-reviewer | MANDATORY (release/signing/egress). PASS. NO private key/secret committed; release workflow gated fail-closed (dispatch-only + confirm guard, signs only from Actions secrets, draft-only, no auto-publish, no key echo); updater verifies minisign signatures against pinned pubkey over HTTPS + no auto-download/apply; ci.yml not weakened. | PASS |
+| 2026-07-10 | orchestrator | Rebased onto main (fixed stale TASK-017 row - single-row diff verified). Merged PR #36 (merge commit 9f137e3); CI GREEN; secret-scan clean; release NOT triggered. Closed: Done in frontmatter + board, moved to done/. | Done |
 
 ## Result
 

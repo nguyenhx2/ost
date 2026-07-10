@@ -45,4 +45,4 @@ overlay system.
 | TASK-017 | Global hotkeys + tray UX | frontend-ui-dev | TASK-016 | P0 | 3 | Done |
 | TASK-018 | Translation history (BR-06) | frontend-ui-dev | TASK-009 | P1 | 3 | Done |
 | TASK-019 | Idle-budget enforcement + session-drop discipline | audio-pipeline-dev | TASK-007, TASK-015 | P0 | 3 | Done |
-| TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Active |
+| TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Done |
