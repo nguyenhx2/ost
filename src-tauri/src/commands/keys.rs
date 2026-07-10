@@ -18,7 +18,7 @@ use tauri::State;
 
 use crate::keys::{ApiKey, KeyStore, KeyStoreError, ProviderKeyStatus};
 use crate::providers::{
-    GeminiClient, KeyValidation, ProviderError, ProviderId, TranslationProvider,
+    build_provider, KeyValidation, ProviderError, ProviderId, TranslationProvider,
 };
 
 /// Typed, serializable command error. Serialized as `{ "kind": "<kind>" }` so
@@ -105,20 +105,16 @@ pub enum SaveKeyOutcome {
     Invalid { reason: String },
 }
 
-/// Provider-client factory. Returns `Ok(None)` for providers without a client
-/// yet, so their keys can still be stored (AC-03.1) without a live check.
+/// Provider-client factory. All four providers now have a client
+/// (TASK-010), so every provider gets a live key check (AC-03.1, AC-03.4).
+/// The `Option` return is kept so `save_key_impl`/`check_key_impl` stay
+/// testable with an injected `None` (no-client) path.
 fn provider_client(
     provider: ProviderId,
 ) -> Result<Option<Box<dyn TranslationProvider>>, KeyCommandError> {
-    match provider {
-        ProviderId::Gemini => {
-            let client = GeminiClient::new().map_err(|_| KeyCommandError::Config)?;
-            Ok(Some(Box::new(client)))
-        }
-        // Follow-up provider modules implement the same trait (zero call-site
-        // changes); until then their keys are stored unvalidated.
-        ProviderId::Anthropic | ProviderId::OpenAI | ProviderId::OpenRouter => Ok(None),
-    }
+    build_provider(provider)
+        .map(Some)
+        .map_err(|_| KeyCommandError::Config)
 }
 
 /// Parse a provider id string coming from the WebView.
