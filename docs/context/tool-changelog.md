@@ -4,6 +4,28 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
 
 ## 2026-07-10
 
+- Installer + auto-update FR-05 (TASK-020, infra): them dependency truc tiep PIN
+  `tauri-plugin-updater = "=2.10.1"` (keo `minisign-verify`, `zip`, `tar`; feature
+  `rustls-tls` khop reqwest, KHONG native-tls). Wire plugin desktop-only trong
+  `src-tauri/src/lib.rs` (`tauri_plugin_updater::Builder::new().build()`), khong tu
+  dong check/apply - update van la hanh dong user khoi xuong. Config bundler Windows
+  trong `tauri.conf.json`: productName "OST", publisher, category, install NSIS
+  `currentUser` + WiX en-US, `createUpdaterArtifacts: true`, target `all` (Windows =
+  NSIS + MSI). Block `plugins.updater`: endpoints (GitHub releases `latest.json`) +
+  `pubkey` la PLACEHOLDER ro rang - owner phai chay `tauri signer generate` tao keypair
+  that va nap private key vao Actions secrets TRUOC lan release ky dau tien. KHONG tao,
+  KHONG commit key that nao; KHONG publish/tag/chay release. Them workflow GATED
+  `.github/workflows/release.yml`: CHI `workflow_dispatch` (owner bam tay, nhap xac nhan
+  "release"), fail-closed neu thieu `TAURI_SIGNING_PRIVATE_KEY`, build+sign qua
+  `tauri-apps/tauri-action` roi tao release DRAFT (owner review + publish tay). KHONG
+  chay tren push/tag/PR, KHONG dung/lam yeu `ci.yml` `lint-and-test`. Cai lai toolchain
+  whisper (CMake 4.3.4 + LLVM 19.1.7 + LIBCLANG_PATH) giong ci.yml vi release build cung
+  compile whisper. Kiem chung THUC TE (reuse warm target D:	15, vcvars64 + Ninja `-j 2`):
+  `cargo check` xanh (Finished, tauri-plugin-updater 2.10.1 compile OK), `cargo clippy
+  --manifest-path src-tauri/Cargo.toml -j 2 -- -D warnings` sach, `cargo fmt --check`
+  sach; `tauri.conf.json` valid JSON, `release.yml`/`ci.yml` valid YAML. Refs: FR-05,
+  TASK-020.
+
 - STT local FR-01 (TASK-014, ADR-002): them dependency truc tiep `whisper-rs = "=0.14.4"`
   (keo `whisper-rs-sys 0.13.1` build bundled whisper.cpp qua CMake/Ninja + bindgen). CPU-only
   (KHONG bat feature GPU) cho MVP Windows; chi TEXT transcribe roi module, audio o RAM
