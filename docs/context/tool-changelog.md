@@ -4,6 +4,22 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
 
 ## 2026-07-10
 
+- Toolchain build STT native (ADR-002, chuan bi cho TASK-014/FR-01): cai host prereq cho
+  `whisper-rs 0.14.4 -> whisper-rs-sys 0.13.1`. Truoc do build fail vi thieu (1) libclang
+  cho bindgen, (2) `cmake.exe`. Da cai qua winget: **CMake 4.3.4** (Kitware.CMake) va
+  **LLVM/libclang 19.1.7** (LLVM.LLVM). LIBCLANG_PATH = `C:\Program Files\LLVM\bin`. Ban dau
+  cai LLVM 22.1.8 (latest) nhung bindgen 0.71.1 (do whisper-rs-sys keo vao) sinh binding sai
+  voi libclang >= 21: `whisper_full_params` bi emit thanh opaque size-1, layout-assert
+  `size_of - 264` overflow -> **PIN LLVM 19.x** (bindgen 0.71 compat). Prebuilt `src/bindings.rs`
+  cua crate la Linux-only (glibc `_IO_FILE`) nen KHONG dung duoc tren Windows MSVC -> buoc phai
+  chay bindgen. Them **Ninja 1.13.2** (Ninja-build.Ninja) vi generator mac dinh "Visual Studio
+  18 2026" cua CMake fail compiler-ID tren host dev (VS 18 Enterprise preview); ep
+  `CMAKE_GENERATOR=Ninja` (dung cl.exe tu vcvars64). Kiem chung THUC TE: build
+  `whisper-rs-sys 0.13.1` trong probe co lap `C:\wp\whisper-probe` (path ngan tranh MAX_PATH
+  C1041 tren PDB) qua wrapper vcvars64 `-j 2`: `Finished dev profile ... in 2m 02s` (xanh).
+  CI (`.github/workflows/ci.yml`): them 3 step cai CMake 4.3.4 + LLVM 19.1.7 (choco, pin) va
+  set LIBCLANG_PATH truoc cac step cargo; windows-latest tu locate MSVC nen KHONG can vcvars
+  wrapper nhu host dev. KHONG lam yeu/bo qua check nao. Refs: ADR-002, TASK-014, FR-01.
 - Audio capture FR-01 (TASK-013, FR-01): them dependency Windows-only cho WASAPI loopback
   sau trait `AudioSource`. Pin chinh xac, target-gated: `[target.'cfg(windows)'.dependencies]
   wasapi = "=0.23.0"` (mo default render endpoint o che do loopback capture; tra ve buffer
