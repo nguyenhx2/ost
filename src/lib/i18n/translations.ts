@@ -54,6 +54,37 @@ const en = {
   "preview.dragHandle": "Drag to reposition",
   "preview.moveHandle": "Move overlay (arrow keys while focused)",
 
+  // SCR-01: live caption overlay (FR-01)
+  "caption.title": "Live captions",
+  "caption.sourceLabel": "Heard",
+  "caption.translationLabel": "Translation",
+  "caption.waiting": "Listening for speech...",
+  "caption.lowConfidence": "Low confidence - this caption may be inaccurate",
+  "caption.detectedLanguage": "Detected language",
+  "caption.pinnedLanguage": "Source language (pinned)",
+  "caption.error":
+    "A caption could not be produced - the session is still running",
+  "caption.noProviderKey":
+    "No provider key is configured - open Settings to add one",
+  "caption.startError": "Could not start the audio session - please try again",
+  "caption.modelBlocked":
+    "The speech model download must be allowed before captions can start.",
+  "caption.openSettings": "Open Settings",
+  "caption.copy": "Copy caption",
+  "caption.copied": "Copied to clipboard",
+  "caption.pin": "Pin overlay",
+  "caption.unpin": "Unpin overlay",
+  "caption.close": "Stop and close",
+  "caption.opacity": "Background opacity",
+  "caption.moveHandle": "Move overlay (arrow keys while focused)",
+  "caption.providerBadge": "Active provider and model",
+  "caption.retry": "Retry",
+
+  // Whisper STT model-download consent (reuses the shared disclosure dialog)
+  "consent.whisperTitle": "Download speech-to-text model",
+  "consent.whisperIntro":
+    "OST needs to download the local speech-to-text (whisper) model before it can translate live audio. The files below are fetched over HTTPS from the host named here. No captured audio or keys are sent - audio never leaves your machine; only the model files are downloaded.",
+
   // SCR-04: Settings - providers and keys (FR-03)
   "settings.title": "Settings",
   "settings.providersHeading": "Providers and API keys",
@@ -149,6 +180,24 @@ const en = {
   "settings.historyError":
     "Could not change the history setting - please try again",
 
+  // Settings - live audio translation (FR-01, AC-01.4/01.5/01.8)
+  "settings.audioHeading": "Live audio translation",
+  "settings.audioHint":
+    "Translate live system audio. Speech-to-text runs locally on your machine; only the transcribed and translated text is sent to your chosen provider.",
+  "settings.audioSourceLanguage": "Source language",
+  "settings.audioTargetLanguage": "Target language",
+  "settings.audioProvider": "Uses the active provider and model: {provider}",
+  "settings.audioRecommendedModel": "Recommended speech model",
+  "settings.audioModelReady": "Speech model download allowed",
+  "settings.audioModelNotReady":
+    "The speech model has not been downloaded yet. Allow the download now, or you will be asked when the first session starts.",
+  "settings.audioReviewDownload": "Review model download",
+  "settings.audioStart": "Start audio session",
+  "settings.audioStop": "Stop audio session",
+  "settings.audioRunning": "Audio session running",
+  "settings.audioStartError":
+    "Could not start the audio session - please try again",
+
   // Shared primitives
   "ui.select.placeholder": "Choose...",
 } as const;
@@ -200,6 +249,35 @@ const vi: Record<I18nKey, string> = {
   "preview.providerBadge": "Provider và model đang dịch",
   "preview.dragHandle": "Kéo để đổi vị trí",
   "preview.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
+
+  "caption.title": "Phụ đề trực tiếp",
+  "caption.sourceLabel": "Nghe được",
+  "caption.translationLabel": "Bản dịch",
+  "caption.waiting": "Đang lắng nghe lời nói...",
+  "caption.lowConfidence":
+    "Độ tin cậy thấp - phụ đề này có thể không chính xác",
+  "caption.detectedLanguage": "Ngôn ngữ phát hiện",
+  "caption.pinnedLanguage": "Ngôn ngữ nguồn (đã ghim)",
+  "caption.error": "Không tạo được phụ đề - phiên vẫn đang chạy",
+  "caption.noProviderKey":
+    "Chưa cấu hình khoá provider - mở Cài đặt để thêm khoá",
+  "caption.startError": "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
+  "caption.modelBlocked":
+    "Cần cho phép tải mô hình giọng nói trước khi bắt đầu tạo phụ đề.",
+  "caption.openSettings": "Mở Cài đặt",
+  "caption.copy": "Chép phụ đề",
+  "caption.copied": "Đã chép vào clipboard",
+  "caption.pin": "Ghim overlay",
+  "caption.unpin": "Bỏ ghim overlay",
+  "caption.close": "Dừng và đóng",
+  "caption.opacity": "Độ mờ nền",
+  "caption.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
+  "caption.providerBadge": "Provider và model đang dịch",
+  "caption.retry": "Thử lại",
+
+  "consent.whisperTitle": "Tải mô hình chuyển giọng nói thành văn bản",
+  "consent.whisperIntro":
+    "OST cần tải mô hình chuyển giọng nói thành văn bản (whisper) cục bộ trước khi có thể dịch âm thanh trực tiếp. Các tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có âm thanh đã chụp hay khoá nào được gửi đi - âm thanh không bao giờ rời khỏi máy của bạn; chỉ tải các tệp mô hình.",
 
   "settings.title": "Cài đặt",
   "settings.providersHeading": "Provider và API key",
@@ -291,6 +369,23 @@ const vi: Record<I18nKey, string> = {
   "settings.historyToggle": "Ghi lịch sử dịch",
   "settings.historyError":
     "Không thay đổi được cài đặt lịch sử - vui lòng thử lại",
+
+  "settings.audioHeading": "Dịch âm thanh trực tiếp",
+  "settings.audioHint":
+    "Dịch âm thanh hệ thống trực tiếp. Chuyển giọng nói thành văn bản chạy cục bộ trên máy của bạn; chỉ văn bản đã phiên âm và đã dịch được gửi tới provider bạn chọn.",
+  "settings.audioSourceLanguage": "Ngôn ngữ nguồn",
+  "settings.audioTargetLanguage": "Ngôn ngữ đích",
+  "settings.audioProvider": "Dùng provider và model đang hoạt động: {provider}",
+  "settings.audioRecommendedModel": "Mô hình giọng nói khuyến nghị",
+  "settings.audioModelReady": "Đã cho phép tải mô hình giọng nói",
+  "settings.audioModelNotReady":
+    "Mô hình giọng nói chưa được tải. Cho phép tải ngay bây giờ, hoặc bạn sẽ được hỏi khi phiên đầu tiên bắt đầu.",
+  "settings.audioReviewDownload": "Xem lại việc tải mô hình",
+  "settings.audioStart": "Bắt đầu phiên âm thanh",
+  "settings.audioStop": "Dừng phiên âm thanh",
+  "settings.audioRunning": "Phiên âm thanh đang chạy",
+  "settings.audioStartError":
+    "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
 
   "ui.select.placeholder": "Chọn...",
 };

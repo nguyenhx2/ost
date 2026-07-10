@@ -115,6 +115,21 @@ Model whisper dùng lại cổng đồng thuận tải-model dùng chung với `
 (kèm `ConsentDisclosure`) rồi trả lỗi `consentRequired`; sau khi người dùng `grant_model_consent`,
 UI gọi lại `start_audio_session`.
 
+### Commands cửa sổ overlay caption (FR-01, TASK-016)
+
+Do `src-tauri/src/shell/caption.rs` sở hữu; wrapper TypeScript là `captionIpc` trong `ipc.ts`.
+Cửa sổ overlay caption là cửa sổ always-on-top/transparent/không viền riêng (nhãn
+`caption-overlay`), phản chiếu cửa sổ preview vùng chọn. Nó SỞ HỮU vòng đời phiên nó được mở:
+tự gọi `start_audio_session` khi mount, tái phát tín hiệu sau khi cấp đồng thuận, và
+`stop_audio_session` khi đóng. Yêu cầu phiên đi kèm dưới dạng query param CHỈ TÊN
+(provider/model + mã ngôn ngữ) - KHÔNG BAO GIỜ khoá hay âm thanh.
+
+| Command                 | Tham số                        | Vai trò                                                         |
+| ----------------------- | ------------------------------ | -------------------------------------------------------------- |
+| `open_caption_overlay`  | `request: AudioSessionRequest` | Mở (hoặc focus) cửa sổ overlay caption cho phiên, truyền TÊN qua query. |
+| `close_caption_overlay` | -                              | Đóng cửa sổ overlay caption. Idempotent.                       |
+| `nudge_caption_overlay` | `dx: number, dy: number`       | Dời overlay caption bằng bàn phím (AC-04.3); dùng lại kẹp `clamp_nudge` của vùng chọn. |
+
 ## Commands quản lý khoá provider (FR-03)
 
 Do `src-tauri/src/commands/keys.rs` sở hữu; wrapper TypeScript là `keysIpc` trong `ipc.ts`.

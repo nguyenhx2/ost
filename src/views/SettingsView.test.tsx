@@ -14,6 +14,15 @@ const mocks = vi.hoisted(() => ({
     grantConsent: vi.fn(),
     revokeConsent: vi.fn(),
   },
+  audioIpc: {
+    start: vi.fn(),
+    stop: vi.fn(),
+  },
+  captionIpc: {
+    openOverlay: vi.fn(),
+    closeOverlay: vi.fn(),
+    nudgeOverlay: vi.fn(),
+  },
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
   isHistoryEnabled: vi.fn(),
@@ -22,7 +31,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../lib/ipc", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/ipc")>();
-  return { ...actual, keysIpc: mocks.keysIpc, modelIpc: mocks.modelIpc };
+  return {
+    ...actual,
+    keysIpc: mocks.keysIpc,
+    modelIpc: mocks.modelIpc,
+    audioIpc: mocks.audioIpc,
+    captionIpc: mocks.captionIpc,
+  };
 });
 
 vi.mock("../lib/settings", async (importOriginal) => {
@@ -41,7 +56,11 @@ vi.mock("../lib/history", () => ({
 }));
 
 import { DEFAULT_PROVIDER_SETTINGS } from "../lib/settings";
-import { OCR_MODEL_SET_ID, type ModelConsentStatus } from "../lib/ipc";
+import {
+  OCR_MODEL_SET_ID,
+  WHISPER_MODEL_SET_ID,
+  type ModelConsentStatus,
+} from "../lib/ipc";
 import { SettingsView } from "./SettingsView";
 
 function statusList(present: Partial<Record<string, boolean>> = {}) {
@@ -69,16 +88,54 @@ function consentStatus(granted: boolean): ModelConsentStatus {
   };
 }
 
+function whisperStatus(granted: boolean): ModelConsentStatus {
+  return {
+    modelSetId: WHISPER_MODEL_SET_ID,
+    granted,
+    disclosure: {
+      modelSetId: WHISPER_MODEL_SET_ID,
+      displayName: "Whisper base (recommended)",
+      hostName: "Hugging Face",
+      hostDomain: "huggingface.co",
+      artifacts: [{ filename: "ggml-base.bin", approxSizeBytes: 142_000_000 }],
+      totalApproxSizeBytes: 142_000_000,
+      destination: "~/.cache/whisper",
+    },
+  };
+}
+
+/**
+ * Id-aware consent-status mock: OCR (useModelConsent) and whisper
+ * (useAudioSession) both query this on mount, so the response must depend on the
+ * requested id. `ocrGranted` is mutable so the revoke tests can flip it.
+ */
+let ocrGranted = true;
+let whisperGranted = true;
+function consentStatusForId(id: string): ModelConsentStatus {
+  return id === WHISPER_MODEL_SET_ID
+    ? whisperStatus(whisperGranted)
+    : consentStatus(ocrGranted);
+}
+
 beforeEach(() => {
+  ocrGranted = true;
+  whisperGranted = true;
   mocks.keysIpc.statuses.mockReset().mockResolvedValue(statusList());
   mocks.keysIpc.saveKey.mockReset();
   mocks.keysIpc.checkKey.mockReset();
   mocks.keysIpc.deleteKey.mockReset().mockResolvedValue(undefined);
   mocks.modelIpc.consentStatus
     .mockReset()
-    .mockResolvedValue(consentStatus(true));
+    .mockImplementation((id: string) =>
+      Promise.resolve(consentStatusForId(id)),
+    );
   mocks.modelIpc.grantConsent.mockReset().mockResolvedValue(undefined);
   mocks.modelIpc.revokeConsent.mockReset().mockResolvedValue(undefined);
+  mocks.audioIpc.start.mockReset().mockResolvedValue(undefined);
+  mocks.audioIpc.stop.mockReset().mockResolvedValue(undefined);
+  mocks.captionIpc.openOverlay.mockReset().mockResolvedValue(undefined);
+  mocks.captionIpc.closeOverlay.mockReset().mockResolvedValue(undefined);
+  mocks.captionIpc.nudgeOverlay.mockReset().mockResolvedValue(undefined);
   mocks.loadProviderSettings
     .mockReset()
     .mockResolvedValue({ ...DEFAULT_PROVIDER_SETTINGS });
@@ -233,10 +290,11 @@ describe("SettingsView", () => {
   });
 
   it("revoke calls revoke_model_consent for the model set id", async () => {
-    // First read grants; after revoke the gate is closed (granted:false).
-    mocks.modelIpc.consentStatus
-      .mockResolvedValueOnce(consentStatus(true))
-      .mockResolvedValue(consentStatus(false));
+    // After a successful revoke the gate is closed again (granted:false); the
+    // id-aware mock reads the flipped `ocrGranted` on the refresh.
+    mocks.modelIpc.revokeConsent.mockImplementation(async () => {
+      ocrGranted = false;
+    });
     render(<SettingsView />);
     await waitFor(() =>
       expect(
@@ -272,7 +330,7 @@ describe("SettingsView", () => {
   });
 
   it("shows the empty state when no model download is consented", async () => {
-    mocks.modelIpc.consentStatus.mockResolvedValue(consentStatus(false));
+    ocrGranted = false;
     render(<SettingsView />);
     await waitFor(() =>
       expect(screen.getByText("Model downloads")).toBeInTheDocument(),
@@ -333,5 +391,98 @@ describe("SettingsView", () => {
       expect(mocks.setHistoryEnabled).toHaveBeenCalledWith(false),
     );
     expect(toggle).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("starts a session with the pinned source and vi target (AC-01.4/01.5)", async () => {
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
+    );
+
+    // Pin the source language to Japanese (default is Auto).
+    await userEvent.click(
+      screen.getByRole("button", { name: "Source language" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Japanese" }));
+
+    // Target defaults to Vietnamese (AC-01.5).
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start audio session" }),
+    );
+
+    // The overlay is opened with the request (NAMES only) that carries the
+    // pinned source + vi target; the overlay window owns start_audio_session.
+    await waitFor(() =>
+      expect(mocks.captionIpc.openOverlay).toHaveBeenCalledWith({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        sourceLanguage: "ja",
+        targetLanguage: "vi",
+      }),
+    );
+    // No key/audio ever crosses the request.
+    const arg = mocks.captionIpc.openOverlay.mock.calls[0][0];
+    const json = JSON.stringify(arg).toLowerCase();
+    expect(json).not.toContain("key");
+    expect(json).not.toContain("audio");
+  });
+
+  it("stops the session and closes the overlay (AC-01.10)", async () => {
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start audio session" }),
+    );
+    const stop = await screen.findByRole("button", {
+      name: "Stop audio session",
+    });
+    await userEvent.click(stop);
+
+    await waitFor(() => expect(mocks.audioIpc.stop).toHaveBeenCalledTimes(1));
+    expect(mocks.captionIpc.closeOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the whisper first-run consent and grants the download (AC-01.8)", async () => {
+    whisperGranted = false;
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
+    );
+
+    const review = await screen.findByRole("button", {
+      name: "Review model download",
+    });
+    await userEvent.click(review);
+
+    // The shared disclosure dialog opens with the WHISPER title (not OCR).
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download speech-to-text model",
+    });
+    expect(dialog).toBeInTheDocument();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Allow download" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.modelIpc.grantConsent).toHaveBeenCalledWith(
+        WHISPER_MODEL_SET_ID,
+      ),
+    );
+  });
+
+  it("displays the hardware-recommended whisper model (AC-01.8)", async () => {
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
+    );
+    // The recommended model name comes from the whisper disclosure (plain text).
+    expect(screen.getByText("Whisper base (recommended)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Speech model download allowed"),
+    ).toBeInTheDocument();
   });
 });

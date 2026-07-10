@@ -5,6 +5,7 @@ import "./styles/base.css";
 import App from "./App";
 import { RegionSelectView } from "./views/RegionSelectView";
 import { RegionPreviewView } from "./views/RegionPreviewView";
+import { CaptionOverlayView } from "./views/CaptionOverlayView";
 import { SettingsView } from "./views/SettingsView";
 import { HistoryView } from "./views/HistoryView";
 
@@ -20,6 +21,8 @@ function selectView(): React.ReactElement {
       return <RegionSelectView />;
     case "region-preview":
       return <RegionPreviewView />;
+    case "caption":
+      return <CaptionOverlayView />;
     case "settings":
       return <SettingsView />;
     case "history":

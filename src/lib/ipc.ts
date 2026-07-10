@@ -180,6 +180,105 @@ export interface ModelConsentStatus {
 /** The OCR model set id used by the PP-OCRv5 pipeline (ipc.md). */
 export const OCR_MODEL_SET_ID = "ocr-ppocrv5";
 
+/**
+ * The whisper STT model set id (FR-01). Reuses the SAME shared fail-closed
+ * download-consent gate as OCR - no second consent facility (ipc.md). The
+ * hardware-recommended `ggml-*.bin` artifact is disclosed through the shared
+ * `ModelConsentStatus` / `ConsentDisclosure` types above.
+ */
+export const WHISPER_MODEL_SET_ID = "whisper-ggml";
+
+/* ------------------------------------------------------------------ */
+/* Live audio-translation session (FR-01) contract                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Frontend -> core request to start a live audio-translation session. Carries
+ * NAMES only (provider/model ids, language codes) - never a key (BR-02) and
+ * never audio. Mirrors the Rust `AudioSessionRequest` (ipc.md).
+ */
+export interface AudioSessionRequest {
+  provider: string;
+  model: string;
+  /** Pinned source language (AC-01.4); `"auto"`/empty/absent = auto-detect. */
+  sourceLanguage?: string;
+  /** Target language (AC-01.5); empty/absent = default `vi`. */
+  targetLanguage?: string;
+}
+
+/**
+ * Typed `kind` surfaced when `start_audio_session` rejects (ipc.md). The UI
+ * maps the kind to an i18n message; `noProviderKey` carries a Settings CTA. The
+ * kind never carries key material or captured content.
+ */
+export type AudioErrorKind =
+  | "unknownProvider"
+  | "noProviderKey"
+  | "keychain"
+  | "consentRequired"
+  | "model"
+  | "capture"
+  | "alreadyRunning";
+
+export interface AudioCommandError {
+  kind: AudioErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed audio-session command error. */
+export function asAudioCommandError(err: unknown): AudioCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: AudioErrorKind }).kind };
+  }
+  return { kind: "capture" };
+}
+
+/**
+ * The `audio:caption` event payload (ipc.md). Carries source + translated text,
+ * the language pair, the provider/model that produced it (transparency,
+ * AC-03.5), per-segment confidence + a low-confidence flag (AC-01.7). All text
+ * is untrusted plain-text DATA (rendered via PlainText, never markup).
+ */
+export interface AudioCaptionPayload {
+  /** Monotonic per-session chunk index. */
+  sequence: number;
+  sourceText: string;
+  translatedText: string;
+  /** Detected or pinned source-language code (AC-01.3 / AC-01.4). */
+  sourceLanguage: string;
+  /** `true` when whisper auto-detected; `false` when the user pinned it. */
+  sourceLanguageAutoDetected: boolean;
+  targetLanguage: string;
+  /** Provider that actually translated (AC-03.5 badge transparency). */
+  provider: string;
+  model: string;
+  /** Mean per-token confidence of each transcript segment, in order. */
+  segmentConfidences: number[];
+  /** `true` when any segment fell below threshold (AC-01.7 / BR-05). */
+  lowConfidence: boolean;
+  /** Milliseconds since the session started (monotonic; never wall-clock). */
+  timestampMs: number;
+}
+
+/**
+ * The `audio:error` event payload (ipc.md). `message` is untrusted DATA (no
+ * audio/key content); the UI renders its own localized copy, never this string.
+ * Emitted per failed chunk while the session keeps running (no silent hang,
+ * human-in-the-loop.md).
+ */
+export interface AudioErrorPayload {
+  message: string;
+}
+
+/** Emitted once per translated speech chunk; the caption overlay renders it. */
+export const EVENT_AUDIO_CAPTION = "audio:caption";
+/** Emitted when a chunk fails to transcribe/translate (non-fatal). */
+export const EVENT_AUDIO_ERROR = "audio:error";
+
 /* ------------------------------------------------------------------ */
 /* Provider key management (FR-03) contract                            */
 /* ------------------------------------------------------------------ */
@@ -324,4 +423,36 @@ export const modelIpc = {
   /** Revoke consent (Settings, TASK-012); the next download fails closed again. */
   revokeConsent: (modelSetId: string): Promise<void> =>
     invokeIpc("revoke_model_consent", { modelSetId }),
+};
+
+/**
+ * Live audio-translation session commands (owned by
+ * `src-tauri/src/shell/audio_session.rs`). Audio never crosses IPC - only the
+ * NAMES in the request go down and captions come back over `audio:caption`.
+ */
+export const audioIpc = {
+  /** Start a session (AC-01.1). Rejects with a typed `AudioCommandError`. */
+  start: (request: AudioSessionRequest): Promise<void> =>
+    invokeIpc("start_audio_session", { request }),
+
+  /** Stop the active session (AC-01.10). Idempotent. */
+  stop: (): Promise<void> => invokeIpc("stop_audio_session"),
+};
+
+/**
+ * Caption-overlay window commands (owned by `src-tauri/src/shell/caption.rs`).
+ * The overlay is a separate always-on-top window; the session request is passed
+ * as query NAMES only (no key, no audio). Mirrors the region overlay window.
+ */
+export const captionIpc = {
+  /** Open the caption overlay window for a session request. */
+  openOverlay: (request: AudioSessionRequest): Promise<void> =>
+    invokeIpc("open_caption_overlay", { request }),
+
+  /** Close the caption overlay window. */
+  closeOverlay: (): Promise<void> => invokeIpc("close_caption_overlay"),
+
+  /** Keyboard reposition of the caption overlay (AC-04.3 keyboard-only path). */
+  nudgeOverlay: (dx: number, dy: number): Promise<void> =>
+    invokeIpc("nudge_caption_overlay", { dx, dy }),
 };

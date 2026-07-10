@@ -168,6 +168,43 @@ describe("recordTranslation (AC-04.4)", () => {
     );
   });
 
+  it("serializes concurrent records so neither entry is dropped (atomic write)", async () => {
+    // TASK-018 follow-up: a region completion and an audio completion can fire
+    // at nearly the same time. `store.get`/`set` are async yield points; the
+    // read-modify-write MUST be serialized or the second `set` clobbers the
+    // first. We make the mocked get/set yield (a microtask) so an unserialized
+    // implementation would interleave and drop one; the serialized chain keeps
+    // both. `map` starts empty.
+    storeState.getMock.mockImplementation(async (key: string) => {
+      await Promise.resolve();
+      return storeState.map.get(key);
+    });
+    storeState.setMock.mockImplementation(
+      async (key: string, value: unknown) => {
+        await Promise.resolve();
+        storeState.map.set(key, value);
+      },
+    );
+
+    // Fire both WITHOUT awaiting between them: concurrent record-modify-write.
+    const [a, b] = await Promise.all([
+      recordTranslation({ ...SAMPLE, sessionType: "region", sourceText: "R" }),
+      recordTranslation({ ...SAMPLE, sessionType: "audio", sourceText: "A" }),
+    ]);
+
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    const entries = await loadHistory();
+    // Both survived - neither completion dropped the other's entry.
+    expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e.sourceText).sort()).toEqual(["A", "R"]);
+    // And both session types are represented (region + audio), text-only.
+    expect(entries.map((e) => e.sessionType).sort()).toEqual([
+      "audio",
+      "region",
+    ]);
+  });
+
   it("does NOT record while history is disabled (AC-04.6)", async () => {
     storeState.map.set("enabled", false);
     const entry = await recordTranslation(SAMPLE);
