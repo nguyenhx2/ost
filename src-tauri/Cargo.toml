@@ -61,6 +61,14 @@ xcap = "=0.9.6"
 ab_glyph = { version = "=0.2.31", optional = true }
 imageproc = { version = "=0.27.0", default-features = false, features = ["text"], optional = true }
 
+# --- TASK-014 local STT (FR-01, ADR-002) ---
+# whisper.cpp via whisper-rs behind the `SpeechToText` trait. whisper-rs-sys
+# builds bundled whisper.cpp (CMake/Ninja) and generates FFI bindings with
+# bindgen (libclang 19 pinned). CPU build only (no GPU features) for the Windows
+# MVP. Transcribed TEXT is the only output; audio stays in RAM (AC-01.6/BR-01).
+# Whisper models (*.bin) are downloaded at first run and never committed.
+whisper-rs = "=0.14.4"
+
 # --- TASK-013 system-audio capture (FR-01) ---
 # WASAPI loopback capture behind the `AudioSource` trait, Windows-only. Captured
 # audio stays in in-memory f32 buffers - never written to disk (AC-01.6/BR-01).
@@ -71,6 +79,10 @@ wasapi = "=0.23.0"
 # R1 OCR spike: synthetic fixture rendering + accuracy/latency harness. Off by
 # default so production builds do not pull the font-rendering stack.
 ocr-spike = ["dep:ab_glyph", "dep:imageproc"]
+# Live whisper inference test: loads a REAL ggml model from OST_WHISPER_TEST_MODEL
+# and transcribes synthetic audio. Off by default so it NEVER runs in CI and no
+# model is downloaded there (testing.md: no real models in CI).
+stt-live = []
 
 [[bench]]
 name = "ocr_stage"

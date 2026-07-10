@@ -13,7 +13,9 @@ pub mod models;
 pub mod ocr;
 pub mod providers;
 mod shell;
-mod stt;
+// Public for the audio session pipeline wiring (TASK-015) + STT benchmark
+// harness; the whisper model stays in RAM and audio never leaves the machine.
+pub mod stt;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -51,8 +53,19 @@ pub fn run() {
             let store = app.store(models::CONSENT_STORE_FILE)?;
             let consent: Arc<dyn models::ConsentStore> =
                 Arc::new(models::StoreConsentStore::new(store));
-            let descriptor = ocr::ocr_model_set_descriptor(models::resolve_model_cache_dir());
-            let gate = Arc::new(models::ModelGate::new(consent, vec![descriptor]));
+            let ocr_descriptor = ocr::ocr_model_set_descriptor(models::resolve_model_cache_dir());
+            // Whisper STT (FR-01): probe the machine and disclose the RECOMMENDED
+            // model (BR-08 / AC-01.8) in the same fail-closed gate - one facility,
+            // no second consent gate. The download only starts after the user
+            // grants consent over IPC (security-privacy.md).
+            let recommended =
+                stt::WhisperModel::for_size(stt::recommend_model(&stt::probe_hardware()));
+            let whisper_descriptor =
+                stt::whisper_model_set_descriptor(recommended, stt::resolve_whisper_model_dir());
+            let gate = Arc::new(models::ModelGate::new(
+                consent,
+                vec![ocr_descriptor, whisper_descriptor],
+            ));
 
             app.manage(models::ModelConsent::new(Arc::clone(&gate)));
             app.manage(shell::region::RegionPipeline::new_default(gate));

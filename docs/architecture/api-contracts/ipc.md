@@ -135,6 +135,9 @@ chỉ cờ/tên, không bao giờ bí mật) và CÓ THỂ THU HỒI.
 | `revoke_model_consent`  | `modelSetId: string`    | Thu hồi đồng thuận (Settings). Lần tải kế tiếp lại fail-closed.                 |
 
 `modelSetId` hiện dùng của OCR là `"ocr-ppocrv5"` (det + main/latin/korean rec + dict).
+STT whisper (FR-01, TASK-014) đăng ký thêm `modelSetId` = `"whisper-ggml"` vào cùng cổng
+này (host Hugging Face, artifact là model `ggml-*.bin` được HW-probe khuyến nghị theo BR-08);
+KHÔNG có lệnh IPC mới - UI dùng lại 3 lệnh trên với id `"whisper-ggml"`.
 
 #### `ModelConsentStatus` / `ConsentDisclosure`
 
