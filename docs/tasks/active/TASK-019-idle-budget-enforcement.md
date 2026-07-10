@@ -1,6 +1,6 @@
 ---
 title: "TASK-019: Idle-budget enforcement + session-drop discipline"
-status: Planned
+status: Active
 fr: "FR-05"
 owner: audio-pipeline-dev
 deps: "TASK-007, TASK-015"
@@ -39,6 +39,7 @@ Enforce the idle resource budget (RAM < 100MB, CPU < 1%) and the one-heavy-sessi
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+| 2026-07-10 | audio-pipeline-dev | Flip status Planned -> Active; begin idle-budget + one-session coordinator | Active |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
