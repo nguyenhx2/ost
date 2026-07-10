@@ -11,9 +11,51 @@
 .ost-slider:focus-visible,
 .ost-select-trigger:focus-visible,
 .ost-select-listbox:focus-visible,
+.ost-input:focus-visible,
 .ost-move-handle:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* ---------- Input ---------- */
+
+.ost-input-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ost-input-label {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.ost-input {
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.ost-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ost-input:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.ost-input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.ost-input:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
 }
 
 /* ---------- Button ---------- */

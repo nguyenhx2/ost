@@ -66,6 +66,41 @@ tuần tự hoá, không chứa nội dung người dùng hay bí mật).
 | `close_region_preview`      | -                                   | Đóng overlay preview.                                                    |
 | `nudge_region_preview`      | `dx: number, dy: number`            | Dời overlay preview bằng bàn phím (AC-04.3); mỗi bước bị kẹp `<= 256`.  |
 
+## Commands quản lý khoá provider (FR-03)
+
+Do `src-tauri/src/commands/keys.rs` sở hữu; wrapper TypeScript là `keysIpc` trong `ipc.ts`.
+Bất biến bảo mật (BR-02, NFR-SEC-01, AC-03.2/03.3): WebView gửi giá trị key XUỐNG đúng một
+lần khi nhập, KHÔNG BAO GIỜ nhận lại key; mọi kiểu trả về chỉ là trạng thái masked, phán
+quyết kiểm tra, hoặc lỗi có kiểu. Không command nào trả về `ApiKey` hay chuỗi key. Cửa sổ
+Settings mở qua `open_settings` (`src-tauri/src/shell/settings.rs`).
+
+| Command                 | Tham số                        | Trả về                        | Vai trò                                                                     |
+| ----------------------- | ------------------------------ | ----------------------------- | -------------------------------------------------------------------------- |
+| `provider_key_statuses` | -                              | `ProviderKeyStatus[]`         | Trạng thái masked (tên provider + `key_present`) cho cả 4 provider (AC-03.1/03.3). |
+| `save_provider_key`     | `provider: string, key: string`| `SaveKeyOutcome`              | Kiểm tra (một lệnh gọi tối thiểu, AC-03.4) rồi lưu vào keychain (AC-03.2). Key sai KHÔNG được lưu. |
+| `check_provider_key`    | `provider: string`             | `KeyValidation`               | Kiểm tra lại key đã lưu (đọc từ keychain trong core, key không qua IPC) - AC-03.4. |
+| `delete_provider_key`   | `provider: string`             | `void`                        | Xoá key khỏi keychain (AC-03.7). Idempotent.                               |
+| `open_settings`         | -                              | `void`                        | Mở cửa sổ Settings.                                                         |
+
+Kiểu dữ liệu:
+
+- `ProviderKeyStatus` = `{ provider_id: "gemini"|"anthropic"|"openai"|"openrouter", key_present: boolean }`
+  (serde snake_case, khớp `keys/store.rs`). Đây là kiểu DUY NHẤT liên quan tới key mà WebView
+  được nhận.
+- `SaveKeyOutcome` = `{ status: "valid" } | { status: "stored" } | { status: "invalid", reason }`.
+  `stored` = đã lưu nhưng chưa có client để kiểm tra trực tiếp (chỉ Gemini có client ở MVP).
+  `reason` là chuỗi đã redact, không chứa key - UI hiển thị thông báo i18n của chính nó.
+- `KeyValidation` = `{ status: "valid" } | { status: "invalid", reason }`.
+- Lỗi command tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownProvider | invalidInput |
+  notConfigured | network | quota | timeout | config | keychain | provider`; UI ánh xạ `kind`
+  sang thông báo i18n, không bao giờ render chuỗi backend thô.
+
+## Lưu cấu hình lựa chọn provider (FR-03)
+
+Lựa chọn provider/model mặc định + thứ tự fallback được lưu bằng `tauri-plugin-store`
+(`settings.json`, khoá `providerSelection`) qua `src/lib/settings.ts`. CHỈ lưu TÊN
+(provider id, model id, thứ tự) - KHÔNG BAO GIỜ lưu key (BR-02).
+
 ## Events (core -> WebView)
 
 Phát tới cửa sổ `region-preview` bằng `emit_to`. Tên hằng số nằm ở `region.rs`

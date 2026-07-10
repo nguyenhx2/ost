@@ -2,6 +2,7 @@
 
 pub mod hotkeys;
 pub mod region;
+pub mod settings;
 pub mod tray;
 
 use tauri::AppHandle;

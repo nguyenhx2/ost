@@ -22,6 +22,7 @@ export from the barrel, test, and add a row here IN THE SAME PR.
 |-----------|------|---------|
 | `Button` | `src/components/ui/Button.tsx` | Text button (default/primary variants) |
 | `IconButton` | `src/components/ui/IconButton.tsx` | Icon-only button with mandatory `aria-label`; `pressed` for toggles |
+| `Input` | `src/components/ui/Input.tsx` | Text/password field (only text-entry element); `password` masks + disables autocomplete for key entry |
 | `Select` | `src/components/ui/Select.tsx` | Custom listbox select (native `<select>` banned); full keyboard nav |
 | `Switch` | `src/components/ui/Switch.tsx` | `role="switch"` toggle, keyboard operable |
 | `Slider` | `src/components/ui/Slider.tsx` | Token-styled range input (opacity control) |

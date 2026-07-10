@@ -15,10 +15,13 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
 }));
 
 import {
+  asKeyCommandError,
   copyToClipboard,
   invokeIpc,
+  keysIpc,
   listenIpc,
   regionIpc,
+  settingsIpc,
   type OcrResultPayload,
 } from "./ipc";
 
@@ -112,6 +115,68 @@ describe("regionIpc", () => {
       "cancel_region_selection",
       undefined,
     );
+  });
+});
+
+describe("keysIpc (FR-03)", () => {
+  it("statuses invokes the masked-status command", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce([
+      { provider_id: "gemini", key_present: true },
+    ]);
+    const result = await keysIpc.statuses();
+    expect(invokeMock).toHaveBeenCalledWith("provider_key_statuses", undefined);
+    expect(result).toEqual([{ provider_id: "gemini", key_present: true }]);
+  });
+
+  it("saveKey sends the provider and key down and returns the outcome", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce({ status: "valid" });
+    const outcome = await keysIpc.saveKey("gemini", "FAKE-key");
+    expect(invokeMock).toHaveBeenCalledWith("save_provider_key", {
+      provider: "gemini",
+      key: "FAKE-key",
+    });
+    expect(outcome).toEqual({ status: "valid" });
+  });
+
+  it("checkKey invokes the check command with the provider only", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce({ status: "valid" });
+    await keysIpc.checkKey("gemini");
+    expect(invokeMock).toHaveBeenCalledWith("check_provider_key", {
+      provider: "gemini",
+    });
+  });
+
+  it("deleteKey invokes the delete command", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await keysIpc.deleteKey("openai");
+    expect(invokeMock).toHaveBeenCalledWith("delete_provider_key", {
+      provider: "openai",
+    });
+  });
+});
+
+describe("asKeyCommandError", () => {
+  it("passes a typed kind through", () => {
+    expect(asKeyCommandError({ kind: "quota" })).toEqual({ kind: "quota" });
+  });
+
+  it("maps an untyped failure to the provider kind", () => {
+    expect(asKeyCommandError(new Error("boom"))).toEqual({ kind: "provider" });
+    expect(asKeyCommandError("nope")).toEqual({ kind: "provider" });
+    expect(asKeyCommandError(null)).toEqual({ kind: "provider" });
+  });
+});
+
+describe("settingsIpc", () => {
+  it("open invokes the open_settings command", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await settingsIpc.open();
+    expect(invokeMock).toHaveBeenCalledWith("open_settings", undefined);
   });
 });
 

@@ -36,6 +36,9 @@ url = "2.5.8"
 tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-clipboard-manager = "2.3.2"
 
+# --- TASK-009 settings persistence (FR-03/FR-04): names only, never keys ---
+tauri-plugin-store = "2.2.0"
+
 [dev-dependencies]
 # --- TASK-006 provider layer (FR-03) ---
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }

@@ -40,6 +40,46 @@ const en = {
   "preview.dragHandle": "Drag to reposition",
   "preview.moveHandle": "Move overlay (arrow keys while focused)",
 
+  // SCR-04: Settings - providers and keys (FR-03)
+  "settings.title": "Settings",
+  "settings.providersHeading": "Providers and API keys",
+  "settings.providersHint":
+    "Keys are stored only in your operating system keychain - never in files, logs, or history.",
+  "settings.keyLabel": "{provider} API key",
+  "settings.keyPlaceholder": "Paste API key",
+  "settings.statusConfigured": "Key configured",
+  "settings.statusNotConfigured": "No key",
+  "settings.save": "Save key",
+  "settings.saving": "Saving...",
+  "settings.check": "Check key",
+  "settings.remove": "Remove key",
+  "settings.model": "Model",
+  "settings.result.saved": "Key validated and saved",
+  "settings.result.storedUnvalidated":
+    "Key saved - live validation is not available for this provider yet",
+  "settings.result.valid": "Key is valid",
+  "settings.result.invalid":
+    "Key is invalid - please check it and enter it again",
+  "settings.error.network": "Network error - could not reach the provider",
+  "settings.error.quota":
+    "Provider quota or rate limit reached - please try again later",
+  "settings.error.timeout": "The provider request timed out - please try again",
+  "settings.error.config": "Provider configuration error",
+  "settings.error.keychain": "Could not access the operating system keychain",
+  "settings.error.invalidInput": "The key format is invalid",
+  "settings.error.unknownProvider": "Unknown provider",
+  "settings.error.notConfigured": "No key is configured for this provider",
+  "settings.error.provider": "Provider error - please try again",
+  "settings.error.persist": "Could not save the setting - please try again",
+  "settings.activeHeading": "Active provider and model",
+  "settings.defaultProvider": "Default provider",
+  "settings.fallbackHeading": "Fallback order",
+  "settings.fallbackHint":
+    "When the active provider fails, the next configured provider is tried in this order.",
+  "settings.moveUp": "Move up",
+  "settings.moveDown": "Move down",
+  "settings.fallbackNoKey": "no key",
+
   // Shared primitives
   "ui.select.placeholder": "Choose...",
 } as const;
@@ -78,6 +118,46 @@ const vi: Record<I18nKey, string> = {
   "preview.providerBadge": "Provider và model đang dịch",
   "preview.dragHandle": "Kéo để đổi vị trí",
   "preview.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
+
+  "settings.title": "Cài đặt",
+  "settings.providersHeading": "Provider và API key",
+  "settings.providersHint":
+    "Key chỉ được lưu trong keychain của hệ điều hành - không bao giờ nằm trong tập tin, log hay lịch sử.",
+  "settings.keyLabel": "API key của {provider}",
+  "settings.keyPlaceholder": "Dán API key",
+  "settings.statusConfigured": "Đã có key",
+  "settings.statusNotConfigured": "Chưa có key",
+  "settings.save": "Lưu key",
+  "settings.saving": "Đang lưu...",
+  "settings.check": "Kiểm tra key",
+  "settings.remove": "Xoá key",
+  "settings.model": "Model",
+  "settings.result.saved": "Key hợp lệ và đã được lưu",
+  "settings.result.storedUnvalidated":
+    "Đã lưu key - provider này chưa hỗ trợ kiểm tra trực tiếp",
+  "settings.result.valid": "Key hợp lệ",
+  "settings.result.invalid":
+    "Key không hợp lệ - vui lòng kiểm tra lại và nhập lần nữa",
+  "settings.error.network": "Lỗi mạng - không kết nối được tới provider",
+  "settings.error.quota":
+    "Provider đã hết hạn mức hoặc bị giới hạn tần suất - vui lòng thử lại sau",
+  "settings.error.timeout":
+    "Yêu cầu tới provider quá thời gian chờ - vui lòng thử lại",
+  "settings.error.config": "Lỗi cấu hình provider",
+  "settings.error.keychain": "Không truy cập được keychain của hệ điều hành",
+  "settings.error.invalidInput": "Định dạng key không hợp lệ",
+  "settings.error.unknownProvider": "Provider không xác định",
+  "settings.error.notConfigured": "Provider này chưa được cấu hình key",
+  "settings.error.provider": "Lỗi provider - vui lòng thử lại",
+  "settings.error.persist": "Không lưu được cài đặt - vui lòng thử lại",
+  "settings.activeHeading": "Provider và model đang hoạt động",
+  "settings.defaultProvider": "Provider mặc định",
+  "settings.fallbackHeading": "Thứ tự dự phòng",
+  "settings.fallbackHint":
+    "Khi provider đang hoạt động gặp lỗi, provider kế tiếp đã cấu hình sẽ được thử theo thứ tự này.",
+  "settings.moveUp": "Đưa lên",
+  "settings.moveDown": "Đưa xuống",
+  "settings.fallbackNoKey": "chưa có key",
 
   "ui.select.placeholder": "Chọn...",
 };
