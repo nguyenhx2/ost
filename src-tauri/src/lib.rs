@@ -60,15 +60,27 @@ pub fn run() {
             // grants consent over IPC (security-privacy.md).
             let recommended =
                 stt::WhisperModel::for_size(stt::recommend_model(&stt::probe_hardware()));
+            let whisper_dir = stt::resolve_whisper_model_dir();
             let whisper_descriptor =
-                stt::whisper_model_set_descriptor(recommended, stt::resolve_whisper_model_dir());
+                stt::whisper_model_set_descriptor(recommended, whisper_dir.clone());
             let gate = Arc::new(models::ModelGate::new(
                 consent,
                 vec![ocr_descriptor, whisper_descriptor],
             ));
 
             app.manage(models::ModelConsent::new(Arc::clone(&gate)));
-            app.manage(shell::region::RegionPipeline::new_default(gate));
+            app.manage(shell::region::RegionPipeline::new_default(Arc::clone(
+                &gate,
+            )));
+            // Live audio-translation session pipeline (FR-01/FR-05): capture ->
+            // whisper STT -> provider translate -> audio:caption. The whisper
+            // model + context load lazily; the session starts on demand.
+            app.manage(shell::audio_session::AudioSessionPipeline::new_default(
+                Arc::new(keys::KeyStore::new_os_keychain()),
+                gate,
+                recommended,
+                whisper_dir,
+            ));
 
             #[cfg(desktop)]
             shell::init(app.handle())?;
@@ -84,6 +96,8 @@ pub fn run() {
             shell::region::set_region_live_update,
             shell::region::close_region_preview,
             shell::region::nudge_region_preview,
+            shell::audio_session::start_audio_session,
+            shell::audio_session::stop_audio_session,
             shell::settings::open_settings,
             commands::keys::provider_key_statuses,
             commands::keys::save_provider_key,

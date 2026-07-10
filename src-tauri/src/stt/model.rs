@@ -58,11 +58,14 @@ pub struct WhisperModel {
     /// "Memory usage"); the hardware probe keeps this under available RAM.
     pub approx_ram_bytes: u64,
     /// Expected content SHA-256 for the self-fetch verification path
-    /// (`crate::models::verify_sha256`). `None` until the official per-file
-    /// digests are pinned from the whisper.cpp manifest - the TASK-015 download
-    /// step MUST refuse to ship a model whose bytes do not match once set
-    /// (security-privacy.md supply-chain). The consent gate is fail-closed
-    /// regardless of this field.
+    /// (`crate::models::verify_sha256`). Pinned to the official per-file digests
+    /// from the `ggerganov/whisper.cpp` Hugging Face repo (git-LFS pointer
+    /// metadata: `resolve/main/ggml-<size>.bin` `oid sha256:` + matching `size`).
+    /// The download step (`super::download`) enforces this on the fetched bytes
+    /// BEFORE the ggml file is written or loaded and REFUSES the download when it
+    /// is `None` (security-privacy.md supply-chain: an unverified native ggml
+    /// binary is a code-exec surface). The consent gate is fail-closed regardless
+    /// of this field.
     pub sha256: Option<&'static str>,
 }
 
@@ -72,28 +75,28 @@ impl WhisperModel {
         filename: "ggml-tiny.bin",
         approx_download_bytes: 77_691_713,
         approx_ram_bytes: 390_000_000,
-        sha256: None,
+        sha256: Some("be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"),
     };
     pub const BASE: WhisperModel = WhisperModel {
         size: WhisperModelSize::Base,
         filename: "ggml-base.bin",
         approx_download_bytes: 147_951_465,
         approx_ram_bytes: 500_000_000,
-        sha256: None,
+        sha256: Some("60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"),
     };
     pub const SMALL: WhisperModel = WhisperModel {
         size: WhisperModelSize::Small,
         filename: "ggml-small.bin",
         approx_download_bytes: 487_601_967,
         approx_ram_bytes: 1_000_000_000,
-        sha256: None,
+        sha256: Some("1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"),
     };
     pub const MEDIUM: WhisperModel = WhisperModel {
         size: WhisperModelSize::Medium,
         filename: "ggml-medium.bin",
         approx_download_bytes: 1_533_763_059,
         approx_ram_bytes: 2_600_000_000,
-        sha256: None,
+        sha256: Some("6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"),
     };
 
     /// Resolves a model from its size.
@@ -226,5 +229,34 @@ mod tests {
     fn model_path_joins_filename() {
         let p = WhisperModel::TINY.path_in(std::path::Path::new("/cache"));
         assert!(p.ends_with("ggml-tiny.bin"));
+    }
+
+    #[test]
+    fn every_model_has_a_pinned_sha256_of_the_right_shape() {
+        // Hardening (TASK-014 review): every WhisperModel MUST carry a pinned
+        // SHA-256 so the download step can verify the fetched ggml bytes and
+        // never load an unverified native binary (security-privacy.md). A None
+        // here means the fail-closed download would refuse - we require the pin.
+        for model in [
+            WhisperModel::TINY,
+            WhisperModel::BASE,
+            WhisperModel::SMALL,
+            WhisperModel::MEDIUM,
+        ] {
+            let digest = model
+                .sha256
+                .unwrap_or_else(|| panic!("{} must pin a SHA-256", model.filename));
+            assert_eq!(
+                digest.len(),
+                64,
+                "{} digest must be 64 hex chars",
+                model.filename
+            );
+            assert!(
+                digest.bytes().all(|b| b.is_ascii_hexdigit()),
+                "{} digest must be hex",
+                model.filename
+            );
+        }
     }
 }

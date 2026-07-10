@@ -11,11 +11,13 @@
 //! to 16 kHz); only the transcribed TEXT leaves this module. STT is local, so
 //! audio never reaches the network (ADR-002).
 
+pub mod download;
 pub mod engine;
 pub mod hardware;
 pub mod model;
 pub mod whisper;
 
+pub use download::{ensure_model_available, verify_model_bytes, DownloadError};
 pub use engine::{
     mean_token_confidence, DetectedLanguage, SpeechToText, SttError, TranscribeOptions, Transcript,
     TranscriptSegment,

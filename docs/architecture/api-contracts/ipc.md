@@ -84,6 +84,37 @@ tuần tự hoá, không chứa nội dung người dùng hay bí mật).
 | `close_region_preview`      | -                                   | Đóng overlay preview.                                                    |
 | `nudge_region_preview`      | `dx: number, dy: number`            | Dời overlay preview bằng bàn phím (AC-04.3); mỗi bước bị kẹp `<= 256`.  |
 
+## Commands phiên âm thanh trực tiếp (FR-01)
+
+Do `src-tauri/src/shell/audio_session.rs` sở hữu; trả về `Result<(), AudioError>` (lỗi tuần
+tự hoá thành `{ kind }`, không chứa nội dung âm thanh/khoá). Pipeline chạy HOÀN TOÀN ngoài
+luồng UI: chụp WASAPI + VAD + chunk trên luồng riêng, whisper suy luận trên `spawn_blocking`,
+dịch qua lớp provider, rồi phát sự kiện `audio:caption`. Âm thanh KHÔNG BAO GIỜ rời máy
+(STT cục bộ) - chỉ TEXT phiên âm + bản dịch đi tới provider (security-privacy.md, AC-01.6).
+
+| Command               | Tham số                     | Vai trò                                                                                     |
+| --------------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
+| `start_audio_session` | `request: AudioSessionRequest` | Bắt đầu phiên dịch âm thanh (AC-01.1). Kiểm tra khoá provider TRƯỚC (AC-01.11: không có khoá -> lỗi `noProviderKey` hướng người dùng tới Settings, không chụp, không crash), bảo đảm model whisper đã tải + verify SHA-256 qua cổng đồng thuận fail-closed, rồi spawn chụp + vòng lặp caption. |
+| `stop_audio_session`  | -                           | Dừng phiên đang chạy (AC-01.10): chụp dừng trong <= 1s và model whisper được giải phóng. Idempotent. |
+
+### `AudioSessionRequest`
+
+| Trường           | Kiểu               | Ghi chú                                                                 |
+| ---------------- | ------------------ | ---------------------------------------------------------------------- |
+| `provider`       | `string`           | Provider được chọn (gemini/anthropic/openai/openrouter).               |
+| `model`          | `string`           | Model được chọn.                                                       |
+| `sourceLanguage` | `string \| null`   | Ghim ngôn ngữ nguồn (AC-01.4); rỗng/`"auto"`/absent = tự phát hiện (AC-01.3). |
+| `targetLanguage` | `string \| null`   | Ngôn ngữ đích (AC-01.5); rỗng/absent = mặc định `vi`.                  |
+
+`AudioError` tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownProvider | noProviderKey |
+keychain | consentRequired | model | capture | alreadyRunning`; UI ánh xạ `kind` sang thông
+báo i18n (với `noProviderKey` là CTA mở Settings), không render chuỗi backend thô.
+
+Model whisper dùng lại cổng đồng thuận tải-model dùng chung với `modelSetId` = `"whisper-ggml"`
+(xem mục dưới). Khi chưa có đồng thuận, `start_audio_session` phát `models:consent-required`
+(kèm `ConsentDisclosure`) rồi trả lỗi `consentRequired`; sau khi người dùng `grant_model_consent`,
+UI gọi lại `start_audio_session`.
+
 ## Commands quản lý khoá provider (FR-03)
 
 Do `src-tauri/src/commands/keys.rs` sở hữu; wrapper TypeScript là `keysIpc` trong `ipc.ts`.
@@ -252,6 +283,37 @@ Phát khi OCR bị chặn vì chưa có đồng thuận tải model lần đầu
 Namespace `models:` vì dùng chung (whisper STT tái dùng ở Phase 2). Hằng số:
 `EVENT_MODEL_CONSENT_REQUIRED` (`region.rs`). Sau khi người dùng gọi `grant_model_consent`,
 UI kích hoạt lại luồng preview (`region_preview_ready`) để chạy OCR.
+
+### `audio:caption` -> `AudioCaptionPayload`
+
+Phát MỘT lần cho mỗi chunk lời nói đã dịch (FR-01). Overlay caption (TASK-016) render. Phát
+toàn cục (`app.emit`) để cửa sổ caption nhận bất kể nhãn. Hằng số: `EVENT_AUDIO_CAPTION`
+(`audio_session.rs`). Mọi text là DATA không tin cậy (render plain-text, không diễn giải
+markup - human-in-the-loop.md, design-system.md).
+
+| Trường                       | Kiểu       | Ghi chú                                                                 |
+| ---------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `sequence`                   | `number`   | Chỉ số chunk đơn điệu trong phiên (từ bộ chunk chụp).                  |
+| `sourceText`                 | `string`   | Text phiên âm (nguồn).                                                 |
+| `translatedText`             | `string`   | Bản dịch (plain text).                                                 |
+| `sourceLanguage`             | `string`   | Ngôn ngữ nguồn phát hiện được hoặc đã ghim (AC-01.3/AC-01.4).          |
+| `sourceLanguageAutoDetected` | `boolean`  | `true` khi whisper tự phát hiện; `false` khi người dùng ghim.          |
+| `targetLanguage`             | `string`   | Ngôn ngữ đích của bản dịch (AC-01.5).                                  |
+| `provider`                   | `string`   | Provider thực sự đã dịch (AC-03.5, badge minh bạch).                   |
+| `model`                      | `string`   | Model thực sự đã dịch.                                                 |
+| `segmentConfidences`         | `number[]` | Độ tin cậy trung bình theo token của từng segment, theo thứ tự.       |
+| `lowConfidence`              | `boolean`  | `true` khi CÓ segment dưới ngưỡng (AC-01.7/BR-05); overlay gắn cờ không chắc chắn. |
+| `timestampMs`                | `number`   | Mili-giây kể từ khi phiên bắt đầu (đơn điệu; không phải wall-clock).   |
+
+### `audio:error` -> `AudioErrorPayload`
+
+Phát khi một chunk thất bại khi phiên âm hoặc dịch (không phải lỗi thiếu đồng thuận - trường
+hợp đó dùng `models:consent-required`). Phiên VẪN chạy cho các chunk sau; đây là tín hiệu để
+overlay không treo im lặng (human-in-the-loop.md). Hằng số: `EVENT_AUDIO_ERROR`.
+
+| Trường    | Kiểu     | Ghi chú                                                                                       |
+| --------- | -------- | -------------------------------------------------------------------------------------------- |
+| `message` | `string` | Chuỗi chẩn đoán, coi là DATA không tin cậy (không chứa âm thanh/khoá); UI hiển thị i18n riêng. |
 
 ## Trình tự vòng đời preview (SCR-03)
 
