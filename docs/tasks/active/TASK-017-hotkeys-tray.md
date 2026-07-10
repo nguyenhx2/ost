@@ -1,6 +1,6 @@
 ---
 title: "TASK-017: Global hotkeys + tray UX"
-status: Planned
+status: Active
 fr: "FR-04"
 owner: frontend-ui-dev
 deps: "TASK-016"
@@ -41,6 +41,7 @@ Give the app full background control via global hotkeys and a system tray menu, 
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+| 2026-07-10 | frontend-ui-dev | Flip status Planned -> Active; begin hotkeys + tray + history-window work | Active |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
