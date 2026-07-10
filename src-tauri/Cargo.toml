@@ -89,6 +89,14 @@ name = "ocr_stage"
 harness = false
 required-features = ["ocr-spike"]
 
+# Audio caption end-to-end latency guard (AC-01.2/AC-05.5, p95 < 3s). Requires a
+# real whisper model (fetched once via the pinned + SHA-256-verified download);
+# behind `stt-live` so it NEVER runs in default CI and downloads nothing there.
+[[bench]]
+name = "audio_caption"
+harness = false
+required-features = ["stt-live"]
+
 [dev-dependencies]
 # --- TASK-006 provider layer (FR-03) ---
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }

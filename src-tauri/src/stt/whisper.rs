@@ -40,11 +40,12 @@ pub struct WhisperStt {
     model: WhisperModel,
     /// Directory the `ggml-*.bin` model lives in (never the repo tree).
     model_dir: PathBuf,
-    /// Fail-closed consent gate consulted BEFORE the first (download-triggering)
-    /// model load. `None` only in the live-model test harness behind an explicit
-    /// feature flag; the production engine always carries a gate so no silent
-    /// download can occur (security-privacy.md).
-    gate: Option<Arc<ModelGate>>,
+    /// Fail-closed consent gate, consulted BEFORE every (download-triggering)
+    /// model load. REQUIRED at construction (no optional/None path): a production
+    /// engine can never reach a model load without having passed the fail-closed
+    /// consent check, so no silent native-binary download can occur
+    /// (security-privacy.md; TASK-014 review hardening).
+    gate: Arc<ModelGate>,
     /// Inference thread count.
     n_threads: i32,
     /// Lazily-built whisper context. `None` until the first `transcribe`. The
@@ -56,24 +57,19 @@ pub struct WhisperStt {
 impl WhisperStt {
     /// Creates an engine for `model` located under `model_dir` without loading
     /// anything (no whisper context, no download until the first `transcribe`).
+    ///
+    /// The fail-closed consent `gate` is REQUIRED: every model load passes
+    /// through it, so there is no construction path that could reach a
+    /// download/load without consent (security-privacy.md fail-closed download).
     #[must_use]
-    pub fn new(model: WhisperModel, model_dir: PathBuf) -> Self {
+    pub fn new(model: WhisperModel, model_dir: PathBuf, gate: Arc<ModelGate>) -> Self {
         Self {
             model,
             model_dir,
-            gate: None,
+            gate,
             n_threads: default_threads(),
             ctx: Mutex::new(None),
         }
-    }
-
-    /// Attaches the fail-closed consent gate. The production pipeline calls this
-    /// so the first model download is refused until the user grants consent over
-    /// IPC (security-privacy.md); the live-model test harness omits it.
-    #[must_use]
-    pub fn with_consent_gate(mut self, gate: Arc<ModelGate>) -> Self {
-        self.gate = Some(gate);
-        self
     }
 
     /// Overrides the inference thread count (benchmarks/tuning).
@@ -104,25 +100,12 @@ impl WhisperStt {
             return Ok(());
         }
 
-        // A production engine MUST carry the gate; a `None` gate would re-open
-        // the silent-download hole a caller could hit by forgetting
-        // with_consent_gate(). The live-model harness legitimately runs
-        // gate-less behind the `stt-live` feature, so the assertion compiles out.
-        #[cfg(not(feature = "stt-live"))]
-        debug_assert!(
-            self.gate.is_some(),
-            "WhisperStt reached a model load without a consent gate; call \
-             with_consent_gate() (security-privacy.md fail-closed download)"
-        );
-        if let Some(gate) = &self.gate {
-            gate.ensure_download_allowed(WHISPER_MODEL_SET_ID)
-                .map_err(map_consent_error)?;
-        } else {
-            tracing::warn!(
-                engine = self.id(),
-                "STT engine has no consent gate; skipping the fail-closed download check"
-            );
-        }
+        // FAIL-CLOSED: the gate is a required field, so this check can never be
+        // skipped. An already-present model still requires that consent was
+        // granted for its download (security-privacy.md).
+        self.gate
+            .ensure_download_allowed(WHISPER_MODEL_SET_ID)
+            .map_err(map_consent_error)?;
 
         let path = self.model_path();
         if !path.exists() {
@@ -334,6 +317,30 @@ mod tests {
         }
     }
 
+    /// Builds a real [`ModelGate`] over an in-memory store registering the
+    /// whisper descriptor. `granted` controls whether consent is pre-recorded,
+    /// so tests exercise both the fail-closed and post-consent paths with no
+    /// network and no model file.
+    fn test_gate(granted: bool) -> Arc<ModelGate> {
+        let gate = Arc::new(ModelGate::new(
+            Arc::new(InMemoryConsentStore::default()),
+            vec![whisper_model_set_descriptor(
+                WhisperModel::TINY,
+                PathBuf::from("/cache"),
+            )],
+        ));
+        if granted {
+            gate.grant(WHISPER_MODEL_SET_ID).unwrap();
+        }
+        gate
+    }
+
+    /// A cheap engine with a granted gate for the guards that never reach a load
+    /// (empty/zero-rate input, lazy-load and unload probes).
+    fn engine(model: WhisperModel, dir: &str) -> WhisperStt {
+        WhisperStt::new(model, PathBuf::from(dir), test_gate(true))
+    }
+
     #[test]
     fn resample_passthrough_at_16k() {
         let s = vec![0.1, -0.2, 0.3, 0.4];
@@ -367,7 +374,7 @@ mod tests {
 
     #[test]
     fn empty_chunk_is_rejected_without_loading() {
-        let engine = WhisperStt::new(WhisperModel::TINY, PathBuf::from("/nonexistent"));
+        let engine = engine(WhisperModel::TINY, "/nonexistent");
         assert!(matches!(
             engine.transcribe(&chunk(vec![], 48_000), &TranscribeOptions::auto()),
             Err(SttError::InvalidInput(_))
@@ -377,7 +384,7 @@ mod tests {
 
     #[test]
     fn zero_rate_chunk_is_rejected_without_loading() {
-        let engine = WhisperStt::new(WhisperModel::TINY, PathBuf::from("/nonexistent"));
+        let engine = engine(WhisperModel::TINY, "/nonexistent");
         assert!(matches!(
             engine.transcribe(&chunk(vec![0.1; 10], 0), &TranscribeOptions::auto()),
             Err(SttError::InvalidInput(_))
@@ -388,13 +395,13 @@ mod tests {
     #[test]
     fn new_engine_does_not_load_the_whisper_context() {
         // Lazy load (NFR-REL-02): construction must not build the context.
-        let engine = WhisperStt::new(WhisperModel::BASE, PathBuf::from("/models"));
+        let engine = engine(WhisperModel::BASE, "/models");
         assert!(!engine.is_loaded());
     }
 
     #[test]
     fn unload_is_idempotent_on_an_unloaded_engine() {
-        let engine = WhisperStt::new(WhisperModel::BASE, PathBuf::from("/models"));
+        let engine = engine(WhisperModel::BASE, "/models");
         engine.unload();
         assert!(!engine.is_loaded());
     }
@@ -405,15 +412,11 @@ mod tests {
         // with NO consent recorded refuses transcription with ConsentRequired and
         // never reaches the download-triggering model load - so this test makes
         // no network call and needs no model file. Mirrors ocr::paddle's guard.
-        let gate = Arc::new(ModelGate::new(
-            Arc::new(InMemoryConsentStore::default()),
-            vec![whisper_model_set_descriptor(
-                WhisperModel::TINY,
-                PathBuf::from("/cache"),
-            )],
-        ));
-        let engine =
-            WhisperStt::new(WhisperModel::TINY, PathBuf::from("/models")).with_consent_gate(gate);
+        let engine = WhisperStt::new(
+            WhisperModel::TINY,
+            PathBuf::from("/models"),
+            test_gate(false),
+        );
 
         // Non-empty chunk so the input guard does not short-circuit first.
         let result =
@@ -434,16 +437,11 @@ mod tests {
     fn missing_model_after_consent_is_a_load_error_not_a_silent_fetch() {
         // Consent granted but the model file is absent: a load error, NOT a
         // silent download (the fetch is the TASK-015 step). No network here.
-        let gate = Arc::new(ModelGate::new(
-            Arc::new(InMemoryConsentStore::default()),
-            vec![whisper_model_set_descriptor(
-                WhisperModel::TINY,
-                PathBuf::from("/cache"),
-            )],
-        ));
-        gate.grant(WHISPER_MODEL_SET_ID).unwrap();
-        let engine = WhisperStt::new(WhisperModel::TINY, PathBuf::from("/definitely/not/here"))
-            .with_consent_gate(gate);
+        let engine = WhisperStt::new(
+            WhisperModel::TINY,
+            PathBuf::from("/definitely/not/here"),
+            test_gate(true),
+        );
 
         assert!(matches!(
             engine.transcribe(&chunk(vec![0.0; 1_600], 16_000), &TranscribeOptions::auto()),
@@ -457,6 +455,8 @@ mod tests {
     /// SYNTHETIC audio only. Gated behind `stt-live` so it never runs in default
     /// CI (testing.md). Proves the gate-less engine loads the context, runs
     /// `full`, and `unload` releases it (resource discipline, NFR-REL-02).
+    /// A granted consent gate is required by the constructor (the model already
+    /// exists on disk, so consent stands in for the download that produced it).
     #[cfg(feature = "stt-live")]
     #[test]
     fn live_whisper_transcribes_synthetic_audio_then_unloads() {
@@ -477,8 +477,9 @@ mod tests {
             filename,
             ..WhisperModel::TINY
         };
-        // Gate-less is legitimate here (stt-live disables the debug_assert).
-        let engine = WhisperStt::new(model, dir);
+        // The model is already on disk; a granted gate satisfies the required
+        // fail-closed consent check for the download that produced it.
+        let engine = WhisperStt::new(model, dir, test_gate(true));
         assert!(!engine.is_loaded(), "must not load at construction");
 
         // One second of a 440 Hz tone at 16 kHz (synthetic - no user audio).
