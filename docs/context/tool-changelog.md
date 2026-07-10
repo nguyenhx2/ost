@@ -4,6 +4,16 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
 
 ## 2026-07-10
 
+- Audio capture FR-01 (TASK-013, FR-01): them dependency Windows-only cho WASAPI loopback
+  sau trait `AudioSource`. Pin chinh xac, target-gated: `[target.'cfg(windows)'.dependencies]
+  wasapi = "=0.23.0"` (mo default render endpoint o che do loopback capture; tra ve buffer
+  in-memory, KHONG ghi dia - AC-01.6/BR-01). Chi la impl Windows dau tien; macOS/Linux la
+  Phase-4 swap sau cung trait. VAD nang luong + chunking + session la Rust thuan, khong them
+  dep. `tracing` (san co) dung cho log loi capture (khong bao gio chua audio). Kiem chung:
+  `cargo fmt --check` sach; `cargo clippy --all-targets -j 2 -- -D warnings` sach (wasapi
+  0.23.0 compile OK); `cargo test -j 2` 143 passed/0 failed/1 ignored (rieng module audio 19
+  passed). Refs: FR-01, TASK-013.
+
 - Tich hop pipeline FR-02 (TASK-007, FR-02): them dependency moi. `xcap = "=0.9.6"` (chup
   vung man hinh sau trait `ScreenCapturer`; default-features, KHONG feature png/save nen
   khong ghi dia). `tauri-plugin-store = "=2.4.3"` (luu co dong thuan tai model trong
