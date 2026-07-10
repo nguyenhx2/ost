@@ -32,7 +32,19 @@ Add opt-in, owner-authorized cloud OCR backends behind the `OcrEngine` trait imp
 - [ ] AC-02.6 (v1.2): every cloud backend declares per-source-language `OcrFidelity` (`Full`/`Degraded{reason}`) via the trait; backends without per-line scores show the standing unverified-recognition banner; PerLine-capable cloud backends (e.g. Google Vision, Azure Read) run the calibrated OI-07 threshold path, not just the banner.
 - [ ] Gemini free-tier per BR-09: hard-block where detectable, OR require an affirmative training-risk acknowledgment where the tier is not detectable (do not drop the acknowledgment fallback).
 - [ ] Egress hardening (parity with TASK-010): TLS enforced, request timeouts, bounded response payload, no key echoed in errors.
-- [ ] OPEN DECISION before implementation - escalate to the owner: the FR-02 region-translate budget is p95 < 2s (AC-02.2/AC-02.4, BR-04), but a cloud OCR round-trip added on top of the LLM translate round-trip likely cannot meet it. Confirm whether the 2s budget still applies to the opt-in cloud path or is explicitly relaxed by the owner. Do NOT start implementation until this is resolved.
+- [x] OPEN DECISION - RESOLVED by the owner on 2026-07-10: **park this task until after the MVP.**
+      The conflict was real. FR-02 requires region p95 < 2s (AC-02.2/AC-02.4, NFR-PERF-02,
+      BR-04). Local OCR measures p95 277ms, leaving room for the single LLM translate
+      round-trip. A cloud OCR backend inserts a SECOND, serial network round-trip before
+      translation can even begin, and nothing in the spec budget accommodates that.
+      The owner chose to keep the task parked rather than relax the budget or open the
+      egress path: the local OCR path already meets EN/JA at 1.000 accuracy and is not on
+      the critical path for any user need. No spec amendment was made. BR-09 and the
+      amended BR-01/NFR-SEC-03 remain in force and still authorize cloud OCR in principle -
+      only the implementation is deferred.
+      Unpark trigger: a real user need for a cloud backend, OR a measured spike showing the
+      cloud OCR + translate chain fits inside 2s, OR an owner-signed relaxation of AC-02.2
+      for the opt-in cloud path. Do NOT start implementation before one of those.
 - [ ] Tests + audit proving only the reduced crop egresses and nothing hits disk.
 
 ## Test scenarios / acceptance
