@@ -26,9 +26,10 @@ Wire the deferred revoke-consent control into the Settings view so users can rev
 - [ ] Settings section listing consented model sets with a revoke action wired to `modelIpc.revokeConsent`.
 - [ ] After revoke, the next download re-prompts consent (fail-closed preserved).
 - [ ] i18n vi+en (accented); Vitest with mocked IPC.
+- [ ] Primitives + tokens only; keyboard-operable with aria-label on the revoke control (frontend.md, design-system.md).
 
 ## Test scenarios / acceptance
-- [ ] Consent is revocable in Settings (security-privacy / BR-09).
+- [ ] Consent is revocable in Settings (security-privacy consent facility / BR-08 model-download consent; this is the counterpart to the fail-closed download gate, NOT cloud OCR BR-09).
 - [ ] Revoke clears the persisted consent; the next model download re-prompts.
 - [ ] No key or secret on the IPC surface.
 
@@ -40,6 +41,7 @@ Wire the deferred revoke-consent control into the Settings view so users can rev
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+| 2026-07-10 | spec-guardian | Pre-dispatch scope check. ALIGNED. Fixed BR-09->BR-08 citation (model-download consent, not cloud OCR); added a11y/primitives requirement. | Go |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>

@@ -26,7 +26,7 @@ Implement Anthropic, OpenAI and OpenRouter clients behind the existing `Translat
 - [ ] `anthropic.rs`, `openai.rs`, `openrouter.rs`: each implements `TranslationProvider` (translate + validate_key + model list) as its own module.
 - [ ] Register the three in the provider factory so Settings lists all 4 (AC-03.1) and fallback order can include them (AC-03.6).
 - [ ] Instruction/data separation in every prompt; schema-validate each provider response before use; render plain text (AC-03.8).
-- [ ] Log redaction: no key or PII in logs or error messages; safe error surfaces (AC-03.4).
+- [ ] Log redaction: no key or PII in logs or error messages; safe error surfaces (AC-03.4); key never in files/logs and the IPC surface returns only masked status (AC-03.2, AC-03.3).
 - [ ] Fold in the security-reviewer optional hardening for the non-Gemini clients (request timeouts, TLS enforced, bounded response size, no key echoed in errors).
 - [ ] wiremock integration tests per client (recorded/mocked HTTP) - NO real API calls.
 
@@ -46,6 +46,7 @@ Implement Anthropic, OpenAI and OpenRouter clients behind the existing `Translat
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+| 2026-07-10 | spec-guardian | Pre-dispatch scope check vs FR-03/BR-02. ALIGNED: TranslationProvider trait sufficient as-is, no change needed. Added AC-03.2/03.3 citations. | Go |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
