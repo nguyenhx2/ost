@@ -1,0 +1,46 @@
+---
+title: "TASK-015: Audio session pipeline wiring + audio p95 under 3s benchmark"
+status: Planned
+fr: "FR-01, FR-05"
+owner: audio-pipeline-dev
+deps: "TASK-013, TASK-014"
+priority: P0
+phase: 2
+created: 2026-07-10
+tags: [task]
+---
+
+<!-- TASK FILES ARE WRITTEN 100% IN ENGLISH (see .claude/rules/task-tracking.md). -->
+
+# TASK-015: Audio session pipeline wiring + audio p95 under 3s benchmark
+
+## Goal
+Wire capture -> VAD -> STT -> provider translate -> caption event end to end, and guard the audio caption end-to-end p95 < 3s budget with a criterion benchmark.
+
+## Inputs / context
+- Related FR: [FR-01](../../specs/05-functional-requirements.md#fr-01), [FR-05](../../specs/05-functional-requirements.md#fr-05).
+- Related files: `src-tauri/src/audio/`, `src-tauri/src/commands/`, `src-tauri/benches/`.
+- Budget: audio caption end-to-end p95 < 3s (AC-01.2 / AC-05.2 / AC-05.5).
+
+## To do
+- [ ] Session orchestration: capture->VAD->STT->providers/ translate->emit caption event; all off the UI thread.
+- [ ] Source-language pin/auto (AC-01.4); target language default vi, configurable (AC-01.5).
+- [ ] No-provider-configured path shows an actionable error to Settings, no crash (AC-01.11).
+- [ ] Stop session halts <= 1s and releases resources (AC-01.10).
+- [ ] Criterion benchmark on the caption path; regression beyond p95 < 3s fails CI (AC-05.5).
+
+## Test scenarios / acceptance
+- [ ] AC-01.1, AC-01.2 (p95 < 3s, >= 10 min session), AC-01.4, AC-01.5, AC-01.9, AC-01.10, AC-01.11, AC-05.5.
+- [ ] Providers mocked in tests; benchmark reproducible.
+
+## Orchestration notes
+- Latency budget gates the merge; report the measured p95.
+
+## Session log (AI session log)
+
+| Date | Who | What was done | Result |
+|------|-----|---------------|--------|
+| 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+
+## Result
+<Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
