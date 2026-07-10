@@ -32,6 +32,6 @@ overlay system.
 | TASK-004 | CI pipeline green on the skeleton (lint + cargo test + vitest + build) | devops | TASK-002 | P1 | 0 | Done |
 | TASK-005 | Decide the OCR engine (/brainstorm -> ADR) | brainstormer | TASK-003 | P0 | 1 | Done |
 | TASK-006 | Provider layer core: TranslationProvider trait, Gemini client, keyring storage | llm-integration-dev | TASK-002, TASK-003 | P0 | 1 | Done |
-| TASK-007 | Region capture + OCR pipeline (Rust side) | screen-translate-dev | TASK-002, TASK-005 | P0 | 1 | Active |
+| TASK-007 | Region capture + OCR pipeline (Rust side) | screen-translate-dev | TASK-002, TASK-005 | P0 | 1 | Done |
 | TASK-008 | Region-select overlay + translation preview UI | frontend-ui-dev | TASK-002 | P0 | 1 | Done |
 | TASK-009 | Settings UI: provider key entry/validation, model selection | frontend-ui-dev | TASK-006 | P1 | 1 | Done |
