@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
 use crate::capture::{CaptureRegion, ScreenCapturer};
+use crate::core::{HeavySessionCoordinator, HeavySessionKind};
 use crate::keys::{ApiKey, KeyStore};
 use crate::models::{ConsentDisclosure, ModelGate};
 use crate::ocr::{OcrEngine, OcrError, OcrFidelity, PaddleOcrEngine};
@@ -269,25 +270,54 @@ pub struct RegionPipeline {
     ocr_latin: Arc<PaddleOcrEngine>,
     ocr_korean: Arc<PaddleOcrEngine>,
     keys: Arc<KeyStore>,
+    /// The one-heavy-session-at-a-time coordinator (BR-04): starting an OCR
+    /// session drops any resident whisper STT context, and ending it drops the
+    /// ORT sessions, so at most one heavy model set is resident.
+    coordinator: Arc<HeavySessionCoordinator>,
 }
 
 impl RegionPipeline {
     /// Wires the production backends: Windows screen capture, the three PP-OCRv5
     /// rec engines (main/latin/korean) each behind the fail-closed consent
-    /// `gate`, OS-keychain key store.
-    pub fn new_default(gate: Arc<ModelGate>) -> Self {
+    /// `gate`, OS-keychain key store. Registers the OCR heavy-session unloader
+    /// with the shared `coordinator` so audio-session starts can drop the ORT
+    /// sessions (BR-04).
+    pub fn new_default(gate: Arc<ModelGate>, coordinator: Arc<HeavySessionCoordinator>) -> Self {
         #[cfg(windows)]
         let capturer: Arc<dyn ScreenCapturer> =
             Arc::new(crate::capture::WindowsScreenCapturer::new());
         #[cfg(not(windows))]
         let capturer: Arc<dyn ScreenCapturer> = Arc::new(UnsupportedCapturer);
 
+        let ocr_main = Arc::new(PaddleOcrEngine::main().with_consent_gate(Arc::clone(&gate)));
+        let ocr_latin = Arc::new(PaddleOcrEngine::latin().with_consent_gate(Arc::clone(&gate)));
+        let ocr_korean = Arc::new(PaddleOcrEngine::korean().with_consent_gate(gate));
+
+        // The OCR unload hook drops all three ORT sessions (reusing the existing
+        // PaddleOcrEngine::unload API); the coordinator runs it when audio starts
+        // or the region session ends. Capturing the engine Arcs (not the pipeline)
+        // avoids any reference cycle.
+        let (main, latin, korean) = (
+            Arc::clone(&ocr_main),
+            Arc::clone(&ocr_latin),
+            Arc::clone(&ocr_korean),
+        );
+        coordinator.register(
+            HeavySessionKind::Ocr,
+            Arc::new(move || {
+                main.unload();
+                latin.unload();
+                korean.unload();
+            }),
+        );
+
         Self {
             capturer,
-            ocr_main: Arc::new(PaddleOcrEngine::main().with_consent_gate(Arc::clone(&gate))),
-            ocr_latin: Arc::new(PaddleOcrEngine::latin().with_consent_gate(Arc::clone(&gate))),
-            ocr_korean: Arc::new(PaddleOcrEngine::korean().with_consent_gate(gate)),
+            ocr_main,
+            ocr_latin,
+            ocr_korean,
             keys: Arc::new(KeyStore::new_os_keychain()),
+            coordinator,
         }
     }
 
@@ -301,12 +331,18 @@ impl RegionPipeline {
         }
     }
 
-    /// Drops every engine's ORT session (session end -> idle footprint,
-    /// NFR-PERF-03 / NFR-REL-02). Idempotent per engine.
-    fn unload_all(&self) {
-        self.ocr_main.unload();
-        self.ocr_latin.unload();
-        self.ocr_korean.unload();
+    /// Marks the region OCR heavy session as starting: drops any resident whisper
+    /// STT context so only one heavy model set is resident (BR-04). Called when
+    /// the preview begins its capture -> OCR work.
+    fn begin_session(&self) {
+        self.coordinator.begin(HeavySessionKind::Ocr);
+    }
+
+    /// Ends the region OCR heavy session: drops every engine's ORT session via the
+    /// coordinator's registered unloader (session end -> idle footprint,
+    /// NFR-PERF-03 / NFR-REL-02) and clears the active marker. Idempotent.
+    fn end_session(&self) {
+        self.coordinator.end(HeavySessionKind::Ocr);
     }
 }
 
@@ -634,6 +670,10 @@ pub fn region_preview_ready(app: AppHandle) -> Result<(), ShellError> {
         let request_id = format!("region-ocr-{}", monotonic_correlation_id());
         let capturer = Arc::clone(&pipeline.capturer);
 
+        // One-heavy-session-at-a-time (BR-04): OCR is about to load its ORT
+        // sessions, so drop any resident whisper STT context first.
+        pipeline.begin_session();
+
         let outcome = take_and_recognize(
             state.inner(),
             capturer.as_ref(),
@@ -764,8 +804,9 @@ pub fn close_region_preview(
 ) -> Result<(), ShellError> {
     // Region session ended: drop every engine's ORT session so the resident
     // footprint falls back toward the idle baseline (NFR-PERF-03 idle < 100MB,
-    // NFR-REL-02 release-to-idle). The next region rebuilds lazily.
-    pipeline.unload_all();
+    // NFR-REL-02 release-to-idle). Routed through the coordinator so the active
+    // heavy-session marker clears too. The next region rebuilds lazily.
+    pipeline.end_session();
     close_window(&app, PREVIEW_WINDOW_LABEL)
 }
 
@@ -1393,6 +1434,45 @@ mod tests {
             second.is_none(),
             "re-calling after a terminal error must not re-run OCR"
         );
+    }
+
+    #[test]
+    fn region_pipeline_registers_its_ocr_unloader_with_the_coordinator() {
+        // BR-04 wiring guard: RegionPipeline::new_default must register the OCR
+        // heavy-session unloader, and begin/end_session must route through the
+        // coordinator. Starting an audio session (begin Stt) then drops the ORT
+        // sessions and marks STT the sole resident kind; engines stay lazily
+        // unloaded (no download in tests) so we assert the markers + is_loaded.
+        use crate::core::{HeavySessionCoordinator, HeavySessionKind};
+        use crate::models::{InMemoryConsentStore, ModelGate};
+
+        let gate = Arc::new(ModelGate::new(
+            Arc::new(InMemoryConsentStore::default()),
+            vec![crate::ocr::ocr_model_set_descriptor(
+                std::path::PathBuf::from("/cache"),
+            )],
+        ));
+        let coordinator = Arc::new(HeavySessionCoordinator::new());
+        let pipeline = RegionPipeline::new_default(Arc::clone(&gate), Arc::clone(&coordinator));
+
+        // Engines are lazy: nothing resident at construction (idle baseline).
+        assert!(!pipeline.ocr_main.is_loaded());
+        assert!(!pipeline.ocr_latin.is_loaded());
+        assert!(!pipeline.ocr_korean.is_loaded());
+
+        // Audio session starts -> OCR unloader fires (idempotent no-op here) and
+        // STT is the only resident kind.
+        coordinator.begin(HeavySessionKind::Stt);
+        assert_eq!(coordinator.active(), Some(HeavySessionKind::Stt));
+        assert!(!pipeline.ocr_main.is_loaded());
+
+        // Region session begin/end drives the OCR marker and returns to idle.
+        pipeline.begin_session();
+        assert_eq!(coordinator.active(), Some(HeavySessionKind::Ocr));
+        pipeline.end_session();
+        assert_eq!(coordinator.active(), None, "return-to-idle after stop");
+        assert!(!pipeline.ocr_latin.is_loaded());
+        assert!(!pipeline.ocr_korean.is_loaded());
     }
 
     #[test]

@@ -6,6 +6,10 @@ pub mod audio;
 // wired into the Tauri runtime via shell::region (TASK-007).
 pub mod capture;
 mod commands;
+// Cross-cutting coordination + measurement (FR-05): the one-heavy-session-at-a-
+// time discipline and the process RAM/CPU idle-budget probe. Public for the
+// idle-budget probe example/harness.
+pub mod core;
 pub mod keys;
 // Shared first-run model-download consent + download facility (TASK-007).
 pub mod models;
@@ -69,9 +73,17 @@ pub fn run() {
             ));
 
             app.manage(models::ModelConsent::new(Arc::clone(&gate)));
-            app.manage(shell::region::RegionPipeline::new_default(Arc::clone(
-                &gate,
-            )));
+
+            // One-heavy-session-at-a-time coordinator (FR-05 / BR-04): at most one
+            // heavy model set (ORT OCR OR whisper STT) is resident at a time.
+            // Shared by both pipelines; each registers its unload hook so starting
+            // one drops the other and stopping a session returns to idle.
+            let coordinator = Arc::new(core::HeavySessionCoordinator::new());
+
+            app.manage(shell::region::RegionPipeline::new_default(
+                Arc::clone(&gate),
+                Arc::clone(&coordinator),
+            ));
             // Live audio-translation session pipeline (FR-01/FR-05): capture ->
             // whisper STT -> provider translate -> audio:caption. The whisper
             // model + context load lazily; the session starts on demand.
@@ -80,6 +92,7 @@ pub fn run() {
                 gate,
                 recommended,
                 whisper_dir,
+                coordinator,
             ));
 
             #[cfg(desktop)]
