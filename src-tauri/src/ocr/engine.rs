@@ -26,6 +26,31 @@ pub enum OcrError {
     /// The input image was rejected (zero-sized or otherwise unusable).
     #[error("invalid OCR input: {0}")]
     InvalidInput(String),
+
+    /// The engine needs to download models but first-run consent has not been
+    /// granted (fail-closed, security-privacy.md). Carries the disclosure so the
+    /// pipeline can ask the user; recognition is refused until consent is given.
+    #[error("OCR model download requires consent: {}", .0.model_set_id)]
+    ConsentRequired(Box<crate::models::ConsentDisclosure>),
+}
+
+/// Per-language recognition fidelity declaration (human-in-the-loop.md).
+///
+/// The low-confidence flag ([`OcrOutput::has_low_confidence`]) only catches
+/// characters the model is *unsure* about. Some backends drop whole character
+/// classes *confidently* - the PP-OCRv5 latin rec model emits Vietnamese base
+/// letters at ~0.97 confidence while silently dropping the composed tone marks
+/// (R2 spike). Shipping that silently would violate "low-confidence output is
+/// flagged instead of a silent best-guess". [`OcrFidelity`] is the mandatory,
+/// per-language up-front declaration the UI surfaces so the user knows a whole
+/// glyph class may be missing regardless of the confidence score.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OcrFidelity {
+    /// The engine's charset fully covers this language.
+    Full,
+    /// The engine recognizes this language but a known character class is
+    /// unrepresentable; `reason` NAMES the missing charset in plain text.
+    Degraded { reason: String },
 }
 
 /// Per-line confidence, enum-tagged per ADR-004 decision #7 / AC-02.6.
@@ -97,6 +122,13 @@ pub trait OcrEngine: Send + Sync {
 
     /// Recognizes text in one region crop.
     fn recognize(&self, image: &RgbImage) -> Result<OcrOutput, OcrError>;
+
+    /// Declares this backend's recognition fidelity for `lang` (ISO 639-1),
+    /// independent of any single result's confidence (human-in-the-loop.md).
+    /// The pipeline attaches the declaration for the detected source language
+    /// to the OCR result so the UI can warn the user up front when a whole
+    /// character class (e.g. Vietnamese tone marks) is unrepresentable.
+    fn fidelity(&self, lang: &str) -> OcrFidelity;
 }
 
 /// Character Error Rate between a reference and a hypothesis string, computed

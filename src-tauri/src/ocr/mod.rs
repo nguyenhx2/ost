@@ -11,7 +11,7 @@ pub mod paddle;
 pub mod fixtures;
 
 pub use engine::{
-    character_accuracy, character_error_rate, OcrConfidence, OcrEngine, OcrError, OcrLine,
-    OcrOutput,
+    character_accuracy, character_error_rate, OcrConfidence, OcrEngine, OcrError, OcrFidelity,
+    OcrLine, OcrOutput,
 };
-pub use paddle::{ModelSet, PaddleOcrEngine};
+pub use paddle::{ocr_model_set_descriptor, ModelSet, PaddleOcrEngine, OCR_MODEL_SET_ID};
