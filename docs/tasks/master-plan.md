@@ -37,7 +37,7 @@ overlay system.
 | TASK-009 | Settings UI: provider key entry/validation, model selection | frontend-ui-dev | TASK-006 | P1 | 1 | Done |
 | TASK-010 | Additional LLM provider clients: Anthropic, OpenAI, OpenRouter | llm-integration-dev | TASK-006 | P0 | 1 | Planned |
 | TASK-011 | Opt-in cloud OCR backends (BR-09) | screen-translate-dev | TASK-007 | P1 | 1 | Planned |
-| TASK-012 | Settings revoke-consent control for model downloads | frontend-ui-dev | TASK-007, TASK-009 | P1 | 1 | Planned |
+| TASK-012 | Settings revoke-consent control for model downloads | frontend-ui-dev | TASK-007, TASK-009 | P1 | 1 | Active |
 | TASK-013 | System-audio capture: WASAPI loopback + VAD + chunking | audio-pipeline-dev | TASK-002 | P0 | 2 | Planned |
 | TASK-014 | Local STT: whisper.cpp + first-run download + hardware probe | audio-pipeline-dev | TASK-013, TASK-007 | P0 | 2 | Planned |
 | TASK-015 | Audio session pipeline wiring + audio p95 under 3s benchmark | audio-pipeline-dev | TASK-013, TASK-014 | P0 | 2 | Planned |
