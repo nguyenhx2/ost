@@ -1,6 +1,6 @@
 ---
 title: "TASK-020: Auto-update + installer/bundler (gated release)"
-status: Planned
+status: Active
 fr: "FR-05"
 owner: devops
 deps: "TASK-004"
