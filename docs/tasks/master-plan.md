@@ -43,6 +43,6 @@ overlay system.
 | TASK-015 | Audio session pipeline wiring + audio p95 under 3s benchmark | audio-pipeline-dev | TASK-013, TASK-014 | P0 | 2 | Planned |
 | TASK-016 | Caption overlay UI (bilingual subtitles) | frontend-ui-dev | TASK-015, TASK-008 | P0 | 2 | Planned |
 | TASK-017 | Global hotkeys + tray UX | frontend-ui-dev | TASK-016 | P0 | 3 | Planned |
-| TASK-018 | Translation history (BR-06) | frontend-ui-dev | TASK-009 | P1 | 3 | Active |
+| TASK-018 | Translation history (BR-06) | frontend-ui-dev | TASK-009 | P1 | 3 | Done |
 | TASK-019 | Idle-budget enforcement + session-drop discipline | audio-pipeline-dev | TASK-007, TASK-015 | P0 | 3 | Planned |
 | TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Planned |
