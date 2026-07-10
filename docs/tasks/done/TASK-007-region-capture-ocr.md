@@ -1,6 +1,6 @@
 ---
 title: "TASK-007: Region capture + OCR pipeline (Rust side)"
-status: Active
+status: Done
 fr: "FR-02"
 owner: screen-translate-dev
 deps: "TASK-002, TASK-005"
@@ -171,5 +171,57 @@ Fix (implemented): fidelity is derived from the USER-SELECTED source language (B
 | 2026-07-10 | code-reviewer | Focused re-review of fix e0c305b. Prior consent re-arm BLOCKER RESOLVED: take_and_recognize restores the region on ConsentRequired refusal (grant + re-called region_preview_ready re-runs OCR) and clears it on terminal errors (region:ocr-error, no re-arm loop); two round-trip tests would fail against the old code; managed State fetched inside the worker thread (no borrow issue); paddle.rs debug_assert hardening does not weaken production fail-closed. Subjects <=72, no new unwrap outside tests, fmt/clippy clean, 112 tests. NITs non-blocking. | PASS |
 | 2026-07-10 | screen-translate-dev | Rebased approved branch onto main (3729187, PRs #10/#13/#14 landed) - rebase-and-resolve only, no approved behavior changed. Four union conflicts resolved: (1) `ipc.md` kept main's provider-key/settings command sections AND the branch's model-consent commands/events + ConsentDisclosure; (2) `Cargo.toml` kept all deps from both sides, single `tauri-plugin-store = "=2.4.3"` (subsumes main's ^2.2.0 and the consent facility's exact pin), plus sha2/hex/xcap/oar-ocr/image, no duplicate keys; (3) `lib.rs` kept a single tauri-plugin-store plugin registration serving both settings + consent, and unioned all invoke_handler entries (region:* + settings/keys + model-consent) and both .manage/setup blocks; (4) `translations.ts` kept both settings keys and consent/region/ocr keys in en+vi, vi fully accented. design-system.md auto-merged with both Input (main table) and Dialog (branch mini-table) rows intact. Regenerated Cargo.lock via cargo (no hand-edit); ran npm install to sync node_modules with main's @tauri-apps/plugin-store dep. Re-verified full suite on rebased tree: cargo fmt --check clean; clippy --all-targets -D warnings clean (default AND --features ocr-spike); cargo test = 124 passed / 0 failed default (125 + 2 integration with ocr-spike), run serialized (--test-threads=1) per the loopback known-issue - parallel wiremock servers falsely timeout; AC-02.6 build_ocr_payload_declares_degraded_when_vi_is_selected and fail-closed consent tests (consent_required_keeps_region_and_grant_reruns_ocr, pipeline_error_routes_only_consent_refusals_to_the_consent_event, terminal_ocr_error_clears_region) all PASS. Frontend: vitest 142 passed / 0 failed (18 files); npm run lint clean; tsc --noEmit clean. Force-pushed with --force-with-lease. | Rebased onto main; four unions resolved, no approved behavior changed; full suite green |
 
+| 2026-07-10 | orchestrator | Closed out TASK-007. PR #12 merged to main (merge commit 24f0254) after rebase onto 3729187; CI lint-and-test green; code-reviewer PASS, security-reviewer PASS (egress/consent), qa-test green (Rust 124 / frontend 142). Board row + frontmatter flipped to Done; file moved to done/; worktree removed and merged branch deleted. | Done |
+
 ## Result
-<Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
+Region-translate pipeline (FR-02 Rust core + its UI half) is on `main` - PR #12, merge
+commit `24f0254` (rebased onto `3729187`).
+
+Delivered:
+- `capture/`: `ScreenCapturer` trait + `WindowsScreenCapturer` (xcap 0.9.6), pure
+  `crop_rgba_to_rgb`, pixels in-memory only with a no-disk-write guard test (AC-02.5).
+- `ocr/`: PaddleOCR PP-OCRv5 via oar-ocr 0.8.0 + ort 2.0.0-rc.12 behind `OcrEngine`; lazy
+  ORT session (never at app start), `unload()` drop on session end (NFR-PERF-03/NFR-REL-02);
+  per-line confidence as `OcrConfidence::PerLine`, `Unavailable{reason}` variant kept.
+- Mandatory fidelity declaration `OcrFidelity{Full|Degraded{reason}}` keyed off the
+  user-SELECTED source language (BR-07), not post-OCR detection; vi is `Degraded` (names the
+  U+1E00-U+1EFF charset gap) even at high confidence (AC-02.6, per the v1.2 spec amendment).
+- Per-language rec routing (vi/latin -> latin, ja/zh/en -> main, ko -> korean, auto -> main).
+- Pipeline in `shell/region.rs`: capture -> OCR -> `region:ocr-result` (with fidelity) ->
+  provider translate -> `region:translation-result`/`-error`; `region:ocr-error` on failure
+  (diagnostic string treated as untrusted DATA); empty-OCR guard suppresses the LLM call
+  (AC-02.7).
+- Shared fail-closed first-run model-consent facility `src-tauri/src/models/` (generic
+  descriptor, ModelScope disclosure of host/sizes/destination, SHA-256, persisted flags-only
+  + revocable) - `ensure_download_allowed` gates the OCR model download; whisper reuses this
+  in Phase 2 (do NOT build a second gate).
+- UI: `Dialog` primitive (design-system Landed row) + `ConsentDialog`, BR-07 source-language
+  Select, the standing Degraded-fidelity notice, `region:ocr-error` localized handling.
+- `benches/ocr_stage.rs` criterion `capture_to_ocr` group; `docs/architecture/api-contracts/
+  ipc.md` updated in-PR.
+
+Spike / measured numbers (R1+R2, this dev CPU, release):
+- OCR-stage latency p95 ~230 ms (budget <= 700 ms): PASS.
+- Accuracy EN / JA / ja-vertical / low-DPI EN+JA / ko / zh: 1.000.
+- Vietnamese: 0.741 general / 0.727 subtitle - at the PP-OCRv5 latin charset CEILING (the rec
+  dict lacks the U+1E00-U+1EFF composed tone-mark glyphs; upscaling and the server rec were
+  both refuted, server rec also blew latency to 1404 ms). Owner accepted ~0.74 for MVP
+  (option (a)); the diacritic drops carry HIGH confidence so the low-confidence flag will NOT
+  mark them - the standing Degraded notice is the surfaced signal. A vi-capable rec model is a
+  separate, later task, distinct from the opt-in cloud OCR egress task.
+- RAM: single resident ORT session ~104 MB; true-idle (session not loaded) and session-dropped
+  ~38-40 MB - NFR-PERF-03 (<100MB idle) holds ONLY with the one-session-at-a-time drop
+  discipline (a resident session is ~94 MB over baseline); that enforcement is TASK-019.
+- Per-line confidence available and distribution recorded for OI-07.
+
+Tests (post-rebase, verified in the session log): cargo test 124 passed / 0 failed (default;
+125 lib + 2 integration with `--features ocr-spike`), run serialized per the wiremock loopback
+known-issue; vitest 142 passed / 0 failed; clippy -D warnings + fmt + eslint + prettier + tsc
+all clean.
+
+Carried forward (NOT done here, registered as follow-ups):
+- Settings revoke-consent control for model downloads (needed TASK-009's SettingsView) -> TASK-012.
+- Idle-budget enforcement + ORT/whisper session-drop discipline -> TASK-019.
+- Opt-in cloud OCR backends (BR-09 egress) -> TASK-011. vi-capable rec is a separate remedy.
+Unverified seams: live Tauri event emit round-trip (mocked per e2e known-issue) and a real
+ModelScope download (feature-gated off; no real network in tests).

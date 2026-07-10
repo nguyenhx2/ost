@@ -32,6 +32,17 @@ overlay system.
 | TASK-004 | CI pipeline green on the skeleton (lint + cargo test + vitest + build) | devops | TASK-002 | P1 | 0 | Done |
 | TASK-005 | Decide the OCR engine (/brainstorm -> ADR) | brainstormer | TASK-003 | P0 | 1 | Done |
 | TASK-006 | Provider layer core: TranslationProvider trait, Gemini client, keyring storage | llm-integration-dev | TASK-002, TASK-003 | P0 | 1 | Done |
-| TASK-007 | Region capture + OCR pipeline (Rust side) | screen-translate-dev | TASK-002, TASK-005 | P0 | 1 | Active |
+| TASK-007 | Region capture + OCR pipeline (Rust side) | screen-translate-dev | TASK-002, TASK-005 | P0 | 1 | Done |
 | TASK-008 | Region-select overlay + translation preview UI | frontend-ui-dev | TASK-002 | P0 | 1 | Done |
 | TASK-009 | Settings UI: provider key entry/validation, model selection | frontend-ui-dev | TASK-006 | P1 | 1 | Done |
+| TASK-010 | Additional LLM provider clients: Anthropic, OpenAI, OpenRouter | llm-integration-dev | TASK-006 | P0 | 1 | Planned |
+| TASK-011 | Opt-in cloud OCR backends (BR-09) | screen-translate-dev | TASK-007 | P1 | 1 | Planned |
+| TASK-012 | Settings revoke-consent control for model downloads | frontend-ui-dev | TASK-007, TASK-009 | P1 | 1 | Planned |
+| TASK-013 | System-audio capture: WASAPI loopback + VAD + chunking | audio-pipeline-dev | TASK-002 | P0 | 2 | Planned |
+| TASK-014 | Local STT: whisper.cpp + first-run download + hardware probe | audio-pipeline-dev | TASK-013, TASK-007 | P0 | 2 | Planned |
+| TASK-015 | Audio session pipeline wiring + audio p95 under 3s benchmark | audio-pipeline-dev | TASK-013, TASK-014 | P0 | 2 | Planned |
+| TASK-016 | Caption overlay UI (bilingual subtitles) | frontend-ui-dev | TASK-015, TASK-008 | P0 | 2 | Planned |
+| TASK-017 | Global hotkeys + tray UX | frontend-ui-dev | TASK-016 | P0 | 3 | Planned |
+| TASK-018 | Translation history (BR-06) | frontend-ui-dev | TASK-009 | P1 | 3 | Planned |
+| TASK-019 | Idle-budget enforcement + session-drop discipline | audio-pipeline-dev | TASK-007, TASK-015 | P0 | 3 | Planned |
+| TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Planned |
