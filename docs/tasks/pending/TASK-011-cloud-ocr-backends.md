@@ -1,6 +1,6 @@
 ---
 title: "TASK-011: Opt-in cloud OCR backends (BR-09)"
-status: Planned
+status: Pending
 fr: "FR-02"
 owner: screen-translate-dev
 deps: "TASK-007"
@@ -54,6 +54,7 @@ Add opt-in, owner-authorized cloud OCR backends behind the `OcrEngine` trait imp
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | spec-guardian | Pre-dispatch scope check vs FR-02 AC-02.5/02.6(v1.2)/BR-09. GAPS folded in: p95<2s budget (owner escalation), fidelity+PerLine per AC-02.6, BR-09 free-tier acknowledgment fallback, egress hardening. | Blocked on owner budget decision before dispatch |
+| 2026-07-10 | orchestrator | PARKED to pending/. Owner decision outstanding: a cloud OCR round-trip stacked on the LLM translate call plausibly cannot meet the FR-02 region p95 < 2s budget (NFR-PERF-02/AC-02.2/BR-04; local OCR alone is ~277ms). Budget-vs-budget conflict is an owner call. No cloud OCR code, dependency, or egress path until the owner rules; local OCR already works so nothing is blocked. | Pending |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
