@@ -329,6 +329,11 @@ Phát khi CHỤP hoặc OCR thất bại (không phải lỗi thiếu đồng th
 UI không treo im lặng (human-in-the-loop.md: không thất bại im lặng). Hằng số:
 `EVENT_OCR_ERROR` (`region.rs`).
 
+Các NGƯỠNG THỜI GIAN (TASK-021) cũng ánh xạ về sự kiện này thay vì treo vô hạn: chụp màn
+hình chạy trên luồng worker đã khởi tạo COM với timeout giới hạn (~5s -> `CaptureError::Backend`),
+và lần đầu tải model PP-OCRv5 từ ModelScope có timeout giới hạn (~180s -> `OcrError::ModelLoad`).
+Cả hai đều là lỗi đầu cuối (terminal), không phải yêu cầu đồng thuận.
+
 | Trường      | Kiểu               | Ghi chú                                                                                  |
 | ----------- | ------------------ | --------------------------------------------------------------------------------------- |
 | `requestId` | `string \| null`   | Id tương quan lõi sinh (`region-ocr-<n>`) nếu có.                                        |

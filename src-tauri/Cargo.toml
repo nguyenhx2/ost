@@ -80,6 +80,11 @@ whisper-rs = "=0.14.4"
 # audio stays in in-memory f32 buffers - never written to disk (AC-01.6/BR-01).
 [target.'cfg(windows)'.dependencies]
 wasapi = "=0.23.0"
+# COM apartment init for the dedicated screen-capture worker thread (TASK-021):
+# Windows Graphics Capture requires a COM-initialized thread, and the bare thread
+# the capture ran on provided none, so the frame wait parked forever. Version
+# matches the `windows` already in the tree via xcap (0.62), so no new major.
+windows = { version = "0.62", features = ["Win32_System_Com"] }
 
 [features]
 # R1 OCR spike: synthetic fixture rendering + accuracy/latency harness. Off by

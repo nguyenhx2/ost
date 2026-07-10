@@ -1,7 +1,8 @@
 //! Region-translate UI shell (FR-02 / FR-04): selection + preview window
-//! lifecycle and the IPC commands they use. The capture/OCR/provider pipeline
-//! itself is TASK-007; debug builds emit MOCK pipeline events so the UI flow
-//! is exercisable end to end without it.
+//! lifecycle and the IPC commands they use, wired to the REAL capture -> OCR ->
+//! translate pipeline ([`RegionPipeline`], TASK-007). Capture runs on a
+//! COM-initialized, timeout-bounded worker and the consent gate is consulted
+//! BEFORE capture, so a region select can never park the app (TASK-021).
 
 use std::sync::{Arc, Mutex};
 
@@ -423,7 +424,25 @@ pub fn build_ocr_payload(
     request_id: String,
     source_language: &SourceLanguageSelection,
 ) -> Result<OcrResultPayload, PipelineError> {
+    // ORDERING (TASK-021 S2): consult the fail-closed consent/readiness gate
+    // BEFORE grabbing any pixels. On first run this raises `ConsentRequired`
+    // (-> models:consent-required) so the screen is NEVER captured before the
+    // user consents, and a capture failure can never block reaching the consent
+    // dialog (security-privacy.md fail-closed, human-in-the-loop.md).
+    engine.ensure_ready()?;
+    // BRING-UP EVIDENCE (TASK-021): prove the REAL capture actually returns and
+    // does not park forever. Kept at debug level for future release triage.
+    tracing::debug!(
+        width = region.width,
+        height = region.height,
+        "region capture: calling capturer.capture()"
+    );
     let image = capturer.capture(region.into())?;
+    tracing::debug!(
+        width = image.width(),
+        height = image.height(),
+        "region capture: capturer.capture() returned"
+    );
     let output = engine.recognize(&image)?;
     let source_text = output.concatenated("\n");
     // Best-effort hint for the UI only - does NOT drive fidelity.
@@ -651,6 +670,32 @@ where
     Some(result)
 }
 
+/// Blocks (bounded) until the fullscreen selection overlay window is gone before
+/// a capture runs (TASK-021 capture-of-self fix). `confirm_region_selection`
+/// closes the `region-select` overlay asynchronously, so a capture kicked off by
+/// the preview can otherwise grab the app's own transparent always-on-top
+/// overlay while DWM is still compositing its teardown. We poll Tauri's window
+/// registry until the label is gone, then let DWM settle. Bounded so a stuck
+/// teardown can never itself hang the capture path (human-in-the-loop.md).
+fn wait_for_selection_overlay_closed<R: Runtime>(app: &AppHandle<R>) {
+    use std::time::{Duration, Instant};
+    const MAX_WAIT: Duration = Duration::from_millis(1500);
+    const POLL: Duration = Duration::from_millis(30);
+    const DWM_SETTLE: Duration = Duration::from_millis(60);
+
+    let deadline = Instant::now() + MAX_WAIT;
+    while app.get_webview_window(SELECT_WINDOW_LABEL).is_some() {
+        if Instant::now() >= deadline {
+            tracing::warn!("selection overlay still present at capture time; capturing anyway");
+            return;
+        }
+        std::thread::sleep(POLL);
+    }
+    // The window left the registry; give DWM a brief moment to recompose the
+    // desktop without the (transparent, always-on-top) overlay before capture.
+    std::thread::sleep(DWM_SETTLE);
+}
+
 /// Preview WebView mounted and listening (SCR-03 handshake): pick up the pending
 /// region and run capture -> OCR off the UI thread, then emit `region:ocr-result`
 /// to the preview window. Capture/OCR are blocking CPU work, so they run on a
@@ -669,6 +714,12 @@ pub fn region_preview_ready(app: AppHandle) -> Result<(), ShellError> {
         let pipeline = app.state::<RegionPipeline>();
         let request_id = format!("region-ocr-{}", monotonic_correlation_id());
         let capturer = Arc::clone(&pipeline.capturer);
+
+        // CAPTURE-OF-SELF race (TASK-021): `confirm_region_selection` closes the
+        // fullscreen always-on-top selection overlay asynchronously. Make sure it
+        // is actually destroyed (and DWM has recomposed the desktop without it)
+        // BEFORE capture, so we never grab the app's own overlay mid-teardown.
+        wait_for_selection_overlay_closed(&app);
 
         // One-heavy-session-at-a-time (BR-04): OCR is about to load its ORT
         // sessions, so drop any resident whisper STT context first.
@@ -1288,17 +1339,17 @@ mod tests {
         fn id(&self) -> &'static str {
             "gated-mock-ocr"
         }
-        fn recognize(&self, _image: &image::RgbImage) -> Result<crate::ocr::OcrOutput, OcrError> {
-            // Gate first (as the real engine does before build_pipeline).
-            if let Err(err) = self
-                .gate
+        fn ensure_ready(&self) -> Result<(), OcrError> {
+            // Gate in ensure_ready, exactly as the real PaddleOcrEngine does, so
+            // the region pipeline consults consent BEFORE capture (TASK-021 S2).
+            self.gate
                 .ensure_download_allowed(crate::ocr::OCR_MODEL_SET_ID)
-            {
-                return Err(match err {
+                .map_err(|err| match err {
                     crate::models::ModelError::ConsentRequired(d) => OcrError::ConsentRequired(d),
                     other => OcrError::ModelLoad(other.to_string()),
-                });
-            }
+                })
+        }
+        fn recognize(&self, _image: &image::RgbImage) -> Result<crate::ocr::OcrOutput, OcrError> {
             Ok(crate::ocr::OcrOutput {
                 lines: vec![crate::ocr::OcrLine {
                     text: "Xin chao".into(),
@@ -1434,6 +1485,106 @@ mod tests {
             second.is_none(),
             "re-calling after a terminal error must not re-run OCR"
         );
+    }
+
+    /// A capturer that PANICS if `capture` is ever called - proves a code path
+    /// never grabs the screen (TASK-021 gate-before-capture).
+    struct PanicOnCapture;
+    impl ScreenCapturer for PanicOnCapture {
+        fn capture(
+            &self,
+            _region: CaptureRegion,
+        ) -> Result<image::RgbImage, crate::capture::CaptureError> {
+            panic!("capture() must NOT be called before the consent gate passes");
+        }
+    }
+
+    #[test]
+    fn consent_gate_is_checked_before_capture_on_first_run() {
+        // TASK-021 S2 (the cheap validation the debugger asked for): on first run
+        // `build_ocr_payload` must raise ConsentRequired from `ensure_ready`
+        // WITHOUT ever calling `capturer.capture()`. The capturer panics if
+        // touched, so a green test proves no pixel is grabbed before consent -
+        // the reordering that turns the first-run hang into a consent dialog.
+        use crate::models::{InMemoryConsentStore, ModelGate};
+
+        let gate = Arc::new(ModelGate::new(
+            Arc::new(InMemoryConsentStore::default()),
+            vec![crate::ocr::ocr_model_set_descriptor(
+                std::path::PathBuf::from("/cache"),
+            )],
+        ));
+        let engine = GatedMockOcr {
+            gate: Arc::clone(&gate),
+        };
+
+        // No consent yet: gate refuses BEFORE capture (which would panic).
+        let refused = build_ocr_payload(
+            &PanicOnCapture,
+            &engine,
+            rect(),
+            "rid-gate".into(),
+            &SourceLanguageSelection::Pinned("vi".into()),
+        );
+        assert!(
+            matches!(&refused, Err(e) if e.consent_disclosure().is_some()),
+            "first run must refuse with ConsentRequired before any capture"
+        );
+
+        // After the grant, ensure_ready passes and capture WOULD run - swap in a
+        // real (mock) capturer to confirm the rest of the payload builds.
+        gate.grant(crate::ocr::OCR_MODEL_SET_ID).unwrap();
+        let ok = build_ocr_payload(
+            &MockCapturer(image::RgbImage::new(8, 4)),
+            &engine,
+            rect(),
+            "rid-gate-2".into(),
+            &SourceLanguageSelection::Pinned("vi".into()),
+        )
+        .unwrap();
+        assert_eq!(ok.source_text, "Xin chao");
+    }
+
+    #[test]
+    fn capture_timeout_maps_to_a_terminal_ocr_error_not_a_consent_prompt() {
+        // TASK-021 BLOCKER: a capture that times out surfaces
+        // `CaptureError::Backend`, which `build_ocr_payload` maps to
+        // `PipelineError::Capture` -> region:ocr-error (never a consent prompt,
+        // never a silent hang). This mock stands in for the real timeout branch
+        // in `WindowsScreenCapturer::capture`, which needs a live display.
+        struct TimingOutCapturer;
+        impl ScreenCapturer for TimingOutCapturer {
+            fn capture(
+                &self,
+                _region: CaptureRegion,
+            ) -> Result<image::RgbImage, crate::capture::CaptureError> {
+                Err(crate::capture::CaptureError::Backend(
+                    "screen capture timed out after 5s".into(),
+                ))
+            }
+        }
+
+        let engine = MockOcr {
+            lines: vec![],
+            scores: vec![],
+        };
+        let result = build_ocr_payload(
+            &TimingOutCapturer,
+            &engine,
+            rect(),
+            "rid-timeout".into(),
+            &SourceLanguageSelection::Auto,
+        );
+        match result {
+            Err(err) => {
+                assert!(
+                    err.consent_disclosure().is_none(),
+                    "a capture timeout is a terminal ocr-error, not a consent prompt"
+                );
+                assert!(matches!(err, PipelineError::Capture(_)));
+            }
+            Ok(_) => panic!("a capture timeout must not produce an ocr-result"),
+        }
     }
 
     #[test]
