@@ -65,3 +65,18 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
+
+.region-select-language {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  /* Re-enable interaction: the hint container is pointer-events: none. */
+  pointer-events: auto;
+  cursor: default;
+}
+
+.region-select-language-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}

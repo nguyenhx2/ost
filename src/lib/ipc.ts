@@ -50,6 +50,29 @@ export interface RegionRect {
   height: number;
 }
 
+/**
+ * User-selected source language (BR-07: auto-detect PLUS manual pin). Carried
+ * on `confirm_region_selection`. `"auto"`/empty means no pin (auto-detect is a
+ * hint only, never asserts `degraded`); otherwise a lowercased ISO 639-1 code
+ * (e.g. `"vi"`, `"ja"`, `"ko"`, `"en"`, `"zh"`). See ipc.md `SourceLanguage`.
+ */
+export type SourceLanguage = string;
+
+/** No manual pin: auto-detect is a best-effort hint only (BR-07). */
+export const SOURCE_LANGUAGE_AUTO = "auto";
+
+/**
+ * OCR recognition fidelity for the SELECTED source language (tagged union,
+ * required on every `region:ocr-result`). `degraded` means the engine
+ * recognizes the language but is MISSING a character class (e.g. PaddleOCR
+ * PP-OCRv5 drops Vietnamese composed tone marks, U+1E00-U+1EFF) - the dropped
+ * glyphs are NOT caught by `lowConfidence`, so the UI must show a standing
+ * notice (AC-02.6, human-in-the-loop.md). `reason` is untrusted DATA: render
+ * it as plain text, never interpret markup.
+ */
+export type OcrFidelity =
+  { kind: "full" } | { kind: "degraded"; reason: string };
+
 /** Emitted by the pipeline when OCR finishes for a captured region. */
 export interface OcrResultPayload {
   requestId: string;
@@ -61,6 +84,23 @@ export interface OcrResultPayload {
    */
   lowConfidence: boolean;
   detectedLanguage?: string | null;
+  /**
+   * Recognition-fidelity declaration for the selected source language
+   * (required by the contract). Older/mocked payloads without it are treated
+   * as `{ kind: "full" }` by the consuming hook.
+   */
+  fidelity?: OcrFidelity;
+}
+
+/**
+ * Emitted when capture or OCR fails (NOT the missing-consent case - that fires
+ * `models:consent-required`). Moves the preview out of the "recognizing" state
+ * so the UI never hangs silently (human-in-the-loop.md). `message` is OPTIONAL
+ * untrusted DATA - the UI shows its own localized copy, never this raw text.
+ */
+export interface OcrErrorPayload {
+  requestId?: string | null;
+  message?: string | null;
 }
 
 /** Emitted by the provider layer when a translation completes. */
@@ -92,8 +132,53 @@ export interface RegionTranslationRequest {
 }
 
 export const EVENT_REGION_OCR_RESULT = "region:ocr-result";
+export const EVENT_REGION_OCR_ERROR = "region:ocr-error";
 export const EVENT_REGION_TRANSLATION_RESULT = "region:translation-result";
 export const EVENT_REGION_TRANSLATION_ERROR = "region:translation-error";
+/** Shared model-download consent gate (OCR now, whisper STT in Phase 2). */
+export const EVENT_MODELS_CONSENT_REQUIRED = "models:consent-required";
+
+/* ------------------------------------------------------------------ */
+/* Model-download consent (shared fail-closed facility)                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One downloadable artifact in a model set. `filename` is untrusted DATA
+ * (render plain-text); `approxSizeBytes` is a number the UI formats itself.
+ */
+export interface ConsentArtifact {
+  filename: string;
+  approxSizeBytes: number;
+}
+
+/**
+ * Disclosure shown BEFORE a first-run model download (fail-closed egress UX).
+ * Names the download host explicitly (ModelScope / modelscope.cn), the artifact
+ * sizes and the on-disk destination so the user decides with full knowledge
+ * (security-privacy.md). All string fields are DATA - render plain-text.
+ */
+export interface ConsentDisclosure {
+  modelSetId: string;
+  displayName: string;
+  /** e.g. "ModelScope". */
+  hostName: string;
+  /** e.g. "modelscope.cn" - the host is named, never hidden. */
+  hostDomain: string;
+  artifacts: ConsentArtifact[];
+  totalApproxSizeBytes: number;
+  /** On-disk cache destination (OAR_HOME, default ~/.oar). */
+  destination: string;
+}
+
+/** Persisted consent flag plus the disclosure to show before asking. */
+export interface ModelConsentStatus {
+  modelSetId: string;
+  granted: boolean;
+  disclosure: ConsentDisclosure;
+}
+
+/** The OCR model set id used by the PP-OCRv5 pipeline (ipc.md). */
+export const OCR_MODEL_SET_ID = "ocr-ppocrv5";
 
 /* ------------------------------------------------------------------ */
 /* Provider key management (FR-03) contract                            */
@@ -189,9 +274,19 @@ export const regionIpc = {
   /** Close the selection window without capturing anything (Esc, AC-02.1). */
   cancelSelection: (): Promise<void> => invokeIpc("cancel_region_selection"),
 
-  /** Confirm the selected region (mouse release / Enter, AC-02.1). */
-  confirmSelection: (region: RegionRect): Promise<void> =>
-    invokeIpc("confirm_region_selection", { region }),
+  /**
+   * Confirm the selected region (mouse release / Enter, AC-02.1). The optional
+   * `sourceLanguage` (BR-07 manual pin) drives fidelity + rec-model routing
+   * core-side; omitted means auto-detect (best-effort hint only).
+   */
+  confirmSelection: (
+    region: RegionRect,
+    sourceLanguage?: SourceLanguage,
+  ): Promise<void> =>
+    invokeIpc(
+      "confirm_region_selection",
+      sourceLanguage === undefined ? { region } : { region, sourceLanguage },
+    ),
 
   /** Preview window mounted and listening; pipeline may start emitting. */
   previewReady: (): Promise<void> => invokeIpc("region_preview_ready"),
@@ -210,4 +305,26 @@ export const regionIpc = {
   /** Keyboard reposition of the preview window (AC-04.3, keyboard-only path). */
   nudgePreview: (dx: number, dy: number): Promise<void> =>
     invokeIpc("nudge_region_preview", { dx, dy }),
+};
+
+/**
+ * Shared model-download consent commands (owned by `src-tauri/src/models/`).
+ * The Rust gate is fail-closed: downloads stay blocked until `grantModelConsent`
+ * succeeds, so this UI provides only the disclosure and the grant/revoke calls.
+ */
+export const modelIpc = {
+  /** Current consent flag + disclosure for a model set (UI shows before asking). */
+  consentStatus: (modelSetId: string): Promise<ModelConsentStatus> =>
+    invokeIpc("model_consent_status", { modelSetId }),
+
+  /** Grant download consent, opening the fail-closed gate. Idempotent. */
+  grantConsent: (modelSetId: string): Promise<void> =>
+    invokeIpc("grant_model_consent", { modelSetId }),
+
+  // TODO(TASK-007 post-TASK-009): revoke consent control in Settings.
+  // The wrapper below is ready; the SettingsView surface lands with TASK-009,
+  // and the revoke toggle is wired during the post-TASK-009 rebase.
+  /** Revoke consent (Settings); the next download fails closed again. */
+  revokeConsent: (modelSetId: string): Promise<void> =>
+    invokeIpc("revoke_model_consent", { modelSetId }),
 };

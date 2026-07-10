@@ -52,12 +52,11 @@ describe("useRegionSelection - mouse path (AC-02.1)", () => {
     act(() => result.current.onMouseUp());
 
     expect(regionIpcMock.confirmSelection).toHaveBeenCalledTimes(1);
-    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith({
-      x: 10,
-      y: 20,
-      width: 100,
-      height: 50,
-    });
+    // BR-07: default source language Auto rides along as the second arg.
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 10, y: 20, width: 100, height: 50 },
+      "auto",
+    );
   });
 
   it("normalizes a drag in any direction", () => {
@@ -92,12 +91,27 @@ describe("useRegionSelection - mouse path (AC-02.1)", () => {
     });
 
     act(() => result.current.onMouseUp());
-    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith({
-      x: 20,
-      y: 40,
-      width: 200,
-      height: 100,
-    });
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 20, y: 40, width: 200, height: 100 },
+      "auto",
+    );
+  });
+
+  it("carries a pinned source language into confirm (BR-07)", () => {
+    const { result } = renderHook(() => useRegionSelection());
+
+    expect(result.current.sourceLanguage).toBe("auto");
+    act(() => result.current.setSourceLanguage("vi"));
+    expect(result.current.sourceLanguage).toBe("vi");
+
+    act(() => result.current.onMouseDown({ x: 10, y: 20 }));
+    act(() => result.current.onMouseMove({ x: 110, y: 70 }));
+    act(() => result.current.onMouseUp());
+
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 10, y: 20, width: 100, height: 50 },
+      "vi",
+    );
   });
 
   it("treats a click without a drag as a no-op (no confirm)", () => {
@@ -164,12 +178,10 @@ describe("useRegionSelection - keyboard-only path (AC-02.1, WCAG)", () => {
 
     act(() => result.current.onKeyDown("Enter", false));
 
-    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith({
-      x: 80,
-      y: 16,
-      width: 32,
-      height: 33,
-    });
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 80, y: 16, width: 32, height: 33 },
+      "auto",
+    );
   });
 
   it("Enter without an anchored rect does not confirm", () => {

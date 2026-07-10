@@ -19,6 +19,7 @@ import {
   Switch,
   Tooltip,
 } from "../components/ui";
+import { ConsentDialog } from "../components/ConsentDialog";
 import { useRegionPreview } from "../hooks/useRegionPreview";
 import { t } from "../lib/i18n";
 import { PROVIDER_MODEL_OPTIONS, providerOptionLabel } from "../lib/providers";
@@ -40,7 +41,8 @@ export function RegionPreviewView() {
   const preview = useRegionPreview();
   const [opacity, setOpacity] = useState(OPACITY_DEFAULT);
 
-  const { state, copied, pinned, liveUpdate, option } = preview;
+  const { state, copied, pinned, liveUpdate, option, consentDialogOpen } =
+    preview;
 
   const providerBadgeText =
     state.provider && state.model
@@ -126,6 +128,23 @@ export function RegionPreviewView() {
                 {t("preview.lowConfidence")}
               </Badge>
             ) : null}
+            {state.fidelity.kind === "degraded" ? (
+              // AC-02.6: STANDING degraded-fidelity notice. Renders whenever
+              // fidelity is degraded, INDEPENDENT of lowConfidence, because the
+              // dropped diacritics are not caught by the confidence flag
+              // (human-in-the-loop.md). The reason is untrusted DATA (PlainText).
+              <div className="region-preview-degraded" role="status">
+                <AlertTriangle size={14} aria-hidden="true" />
+                <div className="region-preview-degraded-body">
+                  <span>{t("preview.degradedNotice")}</span>
+                  <span className="region-preview-degraded-reason">
+                    {t("preview.degradedReasonLabel")}
+                    {": "}
+                    <PlainText text={state.fidelity.reason} />
+                  </span>
+                </div>
+              </div>
+            ) : null}
             <p className="region-preview-text">
               <PlainText text={state.sourceText} />
             </p>
@@ -141,14 +160,25 @@ export function RegionPreviewView() {
         {state.status === "failed" ? (
           <p className="region-preview-error" role="alert">
             <AlertTriangle size={14} aria-hidden="true" />
-            <PlainText
-              text={
-                state.failureReason === "timeout"
-                  ? t("preview.translationTimeout")
-                  : t("preview.translationError")
-              }
-            />
+            {/* Own localized copy only - the raw diagnostic string is DATA. */}
+            {state.failureReason === "ocr"
+              ? t("preview.ocrError")
+              : state.failureReason === "timeout"
+                ? t("preview.translationTimeout")
+                : t("preview.translationError")}
           </p>
+        ) : null}
+
+        {state.status === "consentRequired" && !consentDialogOpen ? (
+          <div className="region-preview-blocked" role="status">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <div className="region-preview-blocked-body">
+              <span>{t("consent.blocked")}</span>
+              <Button onClick={preview.reopenConsent}>
+                {t("consent.reopen")}
+              </Button>
+            </div>
+          </div>
         ) : null}
 
         {state.translation !== null ? (
@@ -225,6 +255,15 @@ export function RegionPreviewView() {
           {copied !== null ? t("preview.copied") : ""}
         </span>
       </OverlayPanel>
+
+      {preview.consentDisclosure ? (
+        <ConsentDialog
+          open={consentDialogOpen}
+          disclosure={preview.consentDisclosure}
+          onGrant={preview.grantConsent}
+          onDecline={preview.declineConsent}
+        />
+      ) : null}
     </div>
   );
 }

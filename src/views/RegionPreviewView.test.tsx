@@ -8,6 +8,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
+  ConsentDisclosure,
+  OcrErrorPayload,
   OcrResultPayload,
   TranslationErrorPayload,
   TranslationResultPayload,
@@ -27,6 +29,11 @@ const mocks = vi.hoisted(() => {
       closePreview: vi.fn().mockResolvedValue(undefined),
       nudgePreview: vi.fn().mockResolvedValue(undefined),
     },
+    modelIpc: {
+      consentStatus: vi.fn().mockResolvedValue(undefined),
+      grantConsent: vi.fn().mockResolvedValue(undefined),
+      revokeConsent: vi.fn().mockResolvedValue(undefined),
+    },
     listenIpc: vi.fn((event: string, handler: (payload: unknown) => void) => {
       handlers.set(event, handler);
       return Promise.resolve(() => handlers.delete(event));
@@ -40,12 +47,15 @@ vi.mock("../lib/ipc", async (importOriginal) => {
   return {
     ...actual,
     regionIpc: mocks.regionIpc,
+    modelIpc: mocks.modelIpc,
     listenIpc: mocks.listenIpc,
     copyToClipboard: mocks.copyToClipboard,
   };
 });
 
 import {
+  EVENT_MODELS_CONSENT_REQUIRED,
+  EVENT_REGION_OCR_ERROR,
   EVENT_REGION_OCR_RESULT,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
@@ -70,6 +80,31 @@ function emitTranslationError(payload: TranslationErrorPayload) {
     mocks.handlers.get(EVENT_REGION_TRANSLATION_ERROR)?.(payload);
   });
 }
+
+function emitOcrError(payload: OcrErrorPayload) {
+  act(() => {
+    mocks.handlers.get(EVENT_REGION_OCR_ERROR)?.(payload);
+  });
+}
+
+function emitConsentRequired(payload: ConsentDisclosure) {
+  act(() => {
+    mocks.handlers.get(EVENT_MODELS_CONSENT_REQUIRED)?.(payload);
+  });
+}
+
+const DISCLOSURE: ConsentDisclosure = {
+  modelSetId: "ocr-ppocrv5",
+  displayName: "PP-OCRv5",
+  hostName: "ModelScope",
+  hostDomain: "modelscope.cn",
+  artifacts: [
+    { filename: "pp-ocrv5_mobile_det.onnx", approxSizeBytes: 4_600_000 },
+    { filename: "ppocrv5_latin_rec.onnx", approxSizeBytes: 7_700_000 },
+  ],
+  totalApproxSizeBytes: 12_300_000,
+  destination: "C:\\Users\\tester\\.oar\\models",
+};
 
 async function renderPreview() {
   const rendered = render(<RegionPreviewView />);
@@ -264,6 +299,112 @@ describe("RegionPreviewView (SCR-03)", () => {
 
     expect(mocks.regionIpc.nudgePreview).toHaveBeenCalledWith(16, 0);
     expect(mocks.regionIpc.nudgePreview).toHaveBeenCalledWith(0, 16);
+  });
+
+  it("shows the standing degraded-fidelity notice for a vi source even when lowConfidence is false (AC-02.6)", async () => {
+    await renderPreview();
+
+    // vi selected source: PP-OCRv5 latin rec dropped the composed tone marks,
+    // so the text looks like plain ASCII and confidence stays HIGH. The
+    // Degraded declaration is the ONLY signal - it MUST render regardless.
+    emitOcr({
+      requestId: "p1",
+      sourceText: "Tieng Viet rat dep",
+      lowConfidence: false,
+      fidelity: {
+        kind: "degraded",
+        reason: "Latin Extended Additional (U+1E00-U+1EFF)",
+      },
+    });
+
+    // The standing notice renders...
+    const notice = screen
+      .getByText(/some diacritics may be dropped/i)
+      .closest(".region-preview-degraded");
+    expect(notice).not.toBeNull();
+    expect(notice).toHaveAttribute("role", "status");
+    expect(notice).toHaveTextContent(/NOT flagged as low confidence/i);
+    // ...even though the low-confidence banner does NOT (lowConfidence false).
+    expect(
+      screen.queryByText("Low confidence - the result may be inaccurate"),
+    ).toBeNull();
+    // The engine reason is surfaced as plain-text DATA.
+    expect(screen.getByText(/Latin Extended Additional/)).toBeInTheDocument();
+  });
+
+  it("does not show the degraded notice for a full-fidelity result", async () => {
+    await renderPreview();
+
+    emitOcr({
+      requestId: "p1",
+      sourceText: "Guten Tag",
+      lowConfidence: false,
+      fidelity: { kind: "full" },
+    });
+
+    expect(screen.queryByText(/some diacritics may be dropped/i)).toBeNull();
+  });
+
+  it("surfaces a localized OCR error on region:ocr-error without the raw message (no silent hang)", async () => {
+    await renderPreview();
+    expect(screen.getByText("Recognizing text...")).toBeInTheDocument();
+
+    emitOcrError({ requestId: "region-ocr-1", message: "xcap panic: 0x1234" });
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/Could not recognize text/i);
+    expect(screen.queryByText(/xcap panic/)).toBeNull();
+    expect(screen.queryByText("Recognizing text...")).toBeNull();
+  });
+
+  it("opens the consent dialog on models:consent-required and grants on confirm", async () => {
+    await renderPreview();
+
+    emitConsentRequired(DISCLOSURE);
+
+    // Disclosure names the host, sizes and destination as plain-text DATA.
+    const dialog = screen.getByRole("dialog", { name: "Download OCR model" });
+    expect(dialog).toHaveTextContent("ModelScope");
+    expect(dialog).toHaveTextContent("modelscope.cn");
+    expect(dialog).toHaveTextContent("pp-ocrv5_mobile_det.onnx");
+    expect(dialog).toHaveTextContent("C:\\Users\\tester\\.oar\\models");
+
+    // Recognizing spinner is gone while OCR is blocked (fail-closed).
+    expect(screen.queryByText("Recognizing text...")).toBeNull();
+
+    mocks.regionIpc.previewReady.mockClear();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Allow download" }),
+    );
+
+    expect(mocks.modelIpc.grantConsent).toHaveBeenCalledWith("ocr-ppocrv5");
+    // After granting, the pipeline is re-armed (region_preview_ready) and the
+    // dialog closes.
+    await waitFor(() =>
+      expect(mocks.regionIpc.previewReady).toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Download OCR model" }),
+    ).toBeNull();
+  });
+
+  it("decline closes the consent dialog WITHOUT granting; OCR stays blocked", async () => {
+    await renderPreview();
+    emitConsentRequired(DISCLOSURE);
+
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+
+    expect(mocks.modelIpc.grantConsent).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("dialog", { name: "Download OCR model" }),
+    ).toBeNull();
+    // Blocked notice + a way to review the download again.
+    expect(
+      screen.getByText(/OCR is blocked until the model download is allowed/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Review model download" }),
+    ).toBeEnabled();
   });
 
   it("every icon-only control exposes an aria-label (WCAG 2.1 AA)", async () => {
