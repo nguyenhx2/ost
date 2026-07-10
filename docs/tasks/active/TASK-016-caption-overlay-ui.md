@@ -48,6 +48,7 @@ Render the live bilingual caption overlay with a provider/model badge, low-confi
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
 | 2026-07-10 | frontend-ui-dev | Started: read TASK-015 audio_session, region preview pattern, history seam; flip status to Active | Active |
+| 2026-07-10 | frontend-ui-dev | Built caption overlay (view+hook), FR-01 Settings audio controls (source/target/whisper consent/start-stop), Tauri caption-overlay window (shell/caption.rs), atomic serialized recordTranslation, audioIpc/captionIpc IPC wrappers, i18n vi+en. 205 Vitest pass, eslint+prettier clean, tsc clean. Rust not built locally (no MSVC/vcvars on host - CI builds Rust). | Active |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>

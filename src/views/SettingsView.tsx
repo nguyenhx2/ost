@@ -2,8 +2,10 @@ import { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Play,
   ShieldCheck,
   ShieldOff,
+  Square,
   Trash2,
 } from "lucide-react";
 import "./SettingsView.css";
@@ -16,6 +18,7 @@ import {
   Select,
   Switch,
 } from "../components/ui";
+import { ConsentDialog } from "../components/ConsentDialog";
 import { t } from "../lib/i18n";
 import {
   PROVIDER_META,
@@ -24,12 +27,18 @@ import {
   type ProviderMeta,
 } from "../lib/providers";
 import {
+  SOURCE_LANGUAGE_OPTIONS,
+  TARGET_LANGUAGE_OPTIONS,
+} from "../lib/languages";
+import { activeModel } from "../lib/settings";
+import {
   useProviderKeys,
   type KeyActionResult,
 } from "../hooks/useProviderKeys";
 import { useProviderSelection } from "../hooks/useProviderSelection";
 import { useModelConsent, type RevokeState } from "../hooks/useModelConsent";
 import { useHistorySettings } from "../hooks/useHistorySettings";
+import { useAudioSession } from "../hooks/useAudioSession";
 import { resultMessage } from "./settingsMessages";
 import type { ModelConsentStatus } from "../lib/ipc";
 
@@ -237,9 +246,13 @@ export function SettingsView() {
   const selection = useProviderSelection();
   const consent = useModelConsent();
   const history = useHistorySettings();
+  const audio = useAudioSession();
 
   const order = selection.settings.fallbackOrder;
   const grantedModels = consent.statuses.filter((s) => s.granted);
+
+  const activeProvider = selection.settings.defaultProvider;
+  const activeProviderModel = activeModel(selection.settings);
 
   return (
     <main className="settings">
@@ -301,6 +314,127 @@ export function SettingsView() {
             }
           />
         </div>
+      </section>
+
+      <section
+        className="settings-section"
+        aria-labelledby="settings-audio-heading"
+      >
+        <h2 id="settings-audio-heading">{t("settings.audioHeading")}</h2>
+        <p className="settings-hint">{t("settings.audioHint")}</p>
+
+        <div className="settings-field">
+          <span className="settings-field-label" id="audio-source-label">
+            {t("settings.audioSourceLanguage")}
+          </span>
+          <Select
+            label={t("settings.audioSourceLanguage")}
+            value={audio.sourceLanguage}
+            options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: t(o.labelKey),
+            }))}
+            onChange={audio.setSourceLanguage}
+          />
+        </div>
+
+        <div className="settings-field">
+          <span className="settings-field-label" id="audio-target-label">
+            {t("settings.audioTargetLanguage")}
+          </span>
+          <Select
+            label={t("settings.audioTargetLanguage")}
+            value={audio.targetLanguage}
+            options={TARGET_LANGUAGE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: t(o.labelKey),
+            }))}
+            onChange={audio.setTargetLanguage}
+          />
+        </div>
+
+        <p className="settings-hint">
+          {t("settings.audioProvider", {
+            provider: PROVIDER_META[activeProvider].displayName,
+          })}
+        </p>
+
+        <div className="settings-model-meta">
+          <span className="settings-field-label">
+            {t("settings.audioRecommendedModel")}
+          </span>
+          {audio.whisper && audio.whisper.granted ? (
+            <>
+              <span className="settings-model-host">
+                <PlainText text={audio.whisper.disclosure.displayName} />
+              </span>
+              <Badge variant="default" label={t("settings.audioModelReady")}>
+                <ShieldCheck size={12} aria-hidden="true" />
+                {t("settings.audioModelReady")}
+              </Badge>
+            </>
+          ) : (
+            <span className="settings-model-host">
+              {audio.whisper ? (
+                <PlainText text={audio.whisper.disclosure.displayName} />
+              ) : null}
+            </span>
+          )}
+        </div>
+
+        {!audio.whisperLoading && (!audio.whisper || !audio.whisper.granted) ? (
+          <div className="settings-field">
+            <p className="settings-hint" role="status" aria-live="polite">
+              {t("settings.audioModelNotReady")}
+            </p>
+            <Button onClick={audio.openConsent} disabled={!audio.whisper}>
+              {t("settings.audioReviewDownload")}
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="settings-provider-actions">
+          {audio.running ? (
+            <Button variant="primary" onClick={audio.stop}>
+              <Square size={16} aria-hidden="true" />
+              {t("settings.audioStop")}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              onClick={() => audio.start(activeProvider, activeProviderModel)}
+            >
+              <Play size={16} aria-hidden="true" />
+              {t("settings.audioStart")}
+            </Button>
+          )}
+          {audio.running ? (
+            <Badge variant="default" label={t("settings.audioRunning")}>
+              {t("settings.audioRunning")}
+            </Badge>
+          ) : null}
+        </div>
+
+        {audio.error === "start" ? (
+          <p
+            className="settings-message settings-message--danger"
+            role="alert"
+            aria-live="assertive"
+          >
+            {t("settings.audioStartError")}
+          </p>
+        ) : null}
+
+        {audio.whisper ? (
+          <ConsentDialog
+            open={audio.consentDialogOpen}
+            disclosure={audio.whisper.disclosure}
+            onGrant={audio.grantConsent}
+            onDecline={audio.declineConsent}
+            titleKey="consent.whisperTitle"
+            introKey="consent.whisperIntro"
+          />
+        ) : null}
       </section>
 
       <section

@@ -1,5 +1,6 @@
 import { Button, Dialog, PlainText } from "./ui";
 import { t } from "../lib/i18n";
+import type { I18nKey } from "../lib/i18n";
 import { formatBytes } from "../lib/format";
 import type { ConsentDisclosure } from "../lib/ipc";
 import "./ConsentDialog.css";
@@ -11,6 +12,13 @@ export interface ConsentDialogProps {
   onGrant: () => void;
   /** Decline / dismiss - closes without granting (Esc, backdrop, or button). */
   onDecline: () => void;
+  /**
+   * Title/intro i18n keys, so the same fail-closed disclosure serves both the
+   * OCR (default) and the whisper STT model sets (FR-01). The disclosure fields
+   * (host/size/files/destination) are always the accurate, per-set values.
+   */
+  titleKey?: I18nKey;
+  introKey?: I18nKey;
 }
 
 /**
@@ -24,11 +32,13 @@ export function ConsentDialog({
   disclosure,
   onGrant,
   onDecline,
+  titleKey = "consent.title",
+  introKey = "consent.intro",
 }: ConsentDialogProps) {
   return (
-    <Dialog open={open} label={t("consent.title")} onClose={onDecline}>
-      <h2 className="consent-dialog-title">{t("consent.title")}</h2>
-      <p className="consent-dialog-intro">{t("consent.intro")}</p>
+    <Dialog open={open} label={t(titleKey)} onClose={onDecline}>
+      <h2 className="consent-dialog-title">{t(titleKey)}</h2>
+      <p className="consent-dialog-intro">{t(introKey)}</p>
 
       <dl className="consent-dialog-fields">
         <div className="consent-dialog-row">

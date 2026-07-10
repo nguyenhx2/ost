@@ -83,6 +83,30 @@ function getStore(): Promise<Store> {
   return storePromise;
 }
 
+/**
+ * Serialization chain for read-modify-write history mutations (TASK-018
+ * follow-up). Every entry-list write goes through `enqueueWrite`, which chains
+ * onto this promise so a concurrent region + audio completion cannot interleave
+ * their `get -> mutate -> set -> save` steps and drop an entry. JS is
+ * single-threaded, but the `await store.get()` inside a record is a yield point;
+ * without this chain two records both read the pre-write list and the second
+ * `set` clobbers the first. The chain guarantees each critical section runs to
+ * completion before the next begins. A failed task is swallowed here so one
+ * rejection never wedges the queue for later writes.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(task, task);
+  // Keep the queue alive even if `task` rejects (never surface the swallow here;
+  // callers still receive `run`'s real outcome).
+  writeChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 function newId(): string {
   const c: unknown = globalThis.crypto;
   if (
@@ -189,16 +213,21 @@ export async function loadHistory(): Promise<HistoryEntry[]> {
 export async function recordTranslation(
   input: RecordInput,
 ): Promise<HistoryEntry | null> {
-  if (!(await isHistoryEnabled())) {
-    return null;
-  }
+  // Build the entry (and its id/timestamp) up front, but run the disabled check
+  // and the read-modify-write INSIDE the serialized critical section so two
+  // concurrent completions cannot both read the pre-write list and drop one.
   const entry = toEntry(input);
-  const store = await getStore();
-  const existing = coerceEntries(await store.get<unknown>(ENTRIES_KEY));
-  const next = [entry, ...existing].slice(0, MAX_HISTORY_ENTRIES);
-  await store.set(ENTRIES_KEY, next);
-  await store.save();
-  return entry;
+  return enqueueWrite(async () => {
+    if (!(await isHistoryEnabled())) {
+      return null;
+    }
+    const store = await getStore();
+    const existing = coerceEntries(await store.get<unknown>(ENTRIES_KEY));
+    const next = [entry, ...existing].slice(0, MAX_HISTORY_ENTRIES);
+    await store.set(ENTRIES_KEY, next);
+    await store.save();
+    return entry;
+  });
 }
 
 /** Wipe the entire local history store (AC-04.5). Idempotent. */

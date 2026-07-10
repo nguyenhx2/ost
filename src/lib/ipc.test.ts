@@ -15,7 +15,10 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
 }));
 
 import {
+  asAudioCommandError,
   asKeyCommandError,
+  audioIpc,
+  captionIpc,
   copyToClipboard,
   invokeIpc,
   keysIpc,
@@ -177,6 +180,70 @@ describe("settingsIpc", () => {
     invokeMock.mockResolvedValueOnce(undefined);
     await settingsIpc.open();
     expect(invokeMock).toHaveBeenCalledWith("open_settings", undefined);
+  });
+});
+
+describe("audioIpc (FR-01)", () => {
+  it("start sends the session request NAMES only (no key, no audio)", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    const request = {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      sourceLanguage: "ja",
+      targetLanguage: "vi",
+    };
+
+    await audioIpc.start(request);
+
+    expect(invokeMock).toHaveBeenCalledWith("start_audio_session", { request });
+    // The request never carries a key or audio field.
+    const [, args] = invokeMock.mock.calls[0] as [string, { request: unknown }];
+    const json = JSON.stringify(args).toLowerCase();
+    expect(json).not.toContain("key");
+    expect(json).not.toContain("audio");
+  });
+
+  it("stop invokes the stop command with no payload", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await audioIpc.stop();
+    expect(invokeMock).toHaveBeenCalledWith("stop_audio_session", undefined);
+  });
+});
+
+describe("captionIpc (FR-01)", () => {
+  it("openOverlay carries the session request", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    const request = { provider: "gemini", model: "m" };
+    await captionIpc.openOverlay(request);
+    expect(invokeMock).toHaveBeenCalledWith("open_caption_overlay", {
+      request,
+    });
+  });
+
+  it("nudgeOverlay forwards the clamp-side delta", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await captionIpc.nudgeOverlay(16, 0);
+    expect(invokeMock).toHaveBeenCalledWith("nudge_caption_overlay", {
+      dx: 16,
+      dy: 0,
+    });
+  });
+});
+
+describe("asAudioCommandError", () => {
+  it("passes a typed kind through", () => {
+    expect(asAudioCommandError({ kind: "noProviderKey" })).toEqual({
+      kind: "noProviderKey",
+    });
+  });
+
+  it("maps an untyped failure to a capture kind", () => {
+    expect(asAudioCommandError(new Error("boom"))).toEqual({ kind: "capture" });
+    expect(asAudioCommandError(null)).toEqual({ kind: "capture" });
   });
 });
 

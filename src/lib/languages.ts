@@ -26,3 +26,43 @@ export const SOURCE_LANGUAGE_OPTIONS: SourceLanguageOption[] = [
 ];
 
 export const DEFAULT_SOURCE_LANGUAGE: SourceLanguage = SOURCE_LANGUAGE_AUTO;
+
+/**
+ * Target-language catalog for the live audio session (AC-01.5). Unlike the
+ * source list there is no `auto` option - a translation must have a concrete
+ * target. Vietnamese is the product default (BR-07) and is listed first.
+ */
+export interface TargetLanguageOption {
+  value: string;
+  labelKey: I18nKey;
+}
+
+export const TARGET_LANGUAGE_OPTIONS: TargetLanguageOption[] = [
+  { value: "vi", labelKey: "lang.vi" },
+  { value: "en", labelKey: "lang.en" },
+  { value: "ja", labelKey: "lang.ja" },
+  { value: "ko", labelKey: "lang.ko" },
+  { value: "zh", labelKey: "lang.zh" },
+];
+
+/** Default target language (AC-01.5): Vietnamese, the product's primary locale. */
+export const DEFAULT_TARGET_LANGUAGE = "vi";
+
+/** Known language codes with a translated display label. */
+const LANGUAGE_LABEL_KEYS: Record<string, I18nKey> = {
+  auto: "lang.auto",
+  vi: "lang.vi",
+  en: "lang.en",
+  ja: "lang.ja",
+  ko: "lang.ko",
+  zh: "lang.zh",
+};
+
+/**
+ * The i18n key for a language code, or null for an unknown code. A detected
+ * source language (AC-01.3) can be any ISO code whisper returns; unknown codes
+ * are untrusted DATA the caller renders verbatim via PlainText.
+ */
+export function languageLabelKey(code: string): I18nKey | null {
+  return LANGUAGE_LABEL_KEYS[code.toLowerCase()] ?? null;
+}
