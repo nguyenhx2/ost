@@ -1,6 +1,6 @@
 ---
 title: "TASK-015: Audio session pipeline wiring + audio p95 under 3s benchmark"
-status: Planned
+status: Active
 fr: "FR-01, FR-05"
 owner: audio-pipeline-dev
 deps: "TASK-013, TASK-014"
@@ -46,6 +46,7 @@ Wire capture -> VAD -> STT -> provider translate -> caption event end to end, an
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-10 | orchestrator | Task created and registered in master-plan (Phase B decomposition) | Planned |
+| 2026-07-10 | audio-pipeline-dev | Flipped status Planned -> Active; reviewed TASK-013/014 seams, provider factory, region.rs pipeline pattern; validated whisper native toolchain builds (reused t14 cache); fetched official whisper ggml SHA-256 digests from HF LFS metadata | Active |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
