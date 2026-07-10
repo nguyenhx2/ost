@@ -321,10 +321,7 @@ export const modelIpc = {
   grantConsent: (modelSetId: string): Promise<void> =>
     invokeIpc("grant_model_consent", { modelSetId }),
 
-  // TODO(TASK-007 post-TASK-009): revoke consent control in Settings.
-  // The wrapper below is ready; the SettingsView surface lands with TASK-009,
-  // and the revoke toggle is wired during the post-TASK-009 rebase.
-  /** Revoke consent (Settings); the next download fails closed again. */
+  /** Revoke consent (Settings, TASK-012); the next download fails closed again. */
   revokeConsent: (modelSetId: string): Promise<void> =>
     invokeIpc("revoke_model_consent", { modelSetId }),
 };

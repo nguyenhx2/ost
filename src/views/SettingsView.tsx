@@ -1,7 +1,20 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
+} from "lucide-react";
 import "./SettingsView.css";
-import { Badge, Button, IconButton, Input, Select } from "../components/ui";
+import {
+  Badge,
+  Button,
+  IconButton,
+  Input,
+  PlainText,
+  Select,
+} from "../components/ui";
 import { t } from "../lib/i18n";
 import {
   PROVIDER_META,
@@ -14,7 +27,9 @@ import {
   type KeyActionResult,
 } from "../hooks/useProviderKeys";
 import { useProviderSelection } from "../hooks/useProviderSelection";
+import { useModelConsent, type RevokeState } from "../hooks/useModelConsent";
 import { resultMessage } from "./settingsMessages";
+import type { ModelConsentStatus } from "../lib/ipc";
 
 /** One provider's key entry / validate / remove row (AC-03.1). */
 function ProviderKeyRow({
@@ -143,15 +158,85 @@ function ProviderKeyRow({
 }
 
 /**
- * Settings surface (SCR-04, FR-03): provider key entry/validation/removal,
- * default provider + per-provider model, and fallback order. Built only from UI
- * primitives + tokens (design-system.md); every string is an i18n key.
+ * One consented model set with a revoke control (BR-08, TASK-012). Revoking
+ * flips the persisted flag; the fail-closed gate is Rust-side, so the NEXT
+ * download re-prompts. `displayName`/host are untrusted DATA -> PlainText.
+ */
+function ModelConsentRow({
+  status,
+  revokeState,
+  onRevoke,
+}: {
+  status: ModelConsentStatus;
+  revokeState: RevokeState;
+  onRevoke: (modelSetId: string) => void;
+}) {
+  const busy = revokeState === "busy";
+  const { disclosure } = status;
+  const messageId = `model-msg-${status.modelSetId}`;
+  const hasError = revokeState === "error";
+
+  return (
+    <li className="settings-provider">
+      <div className="settings-provider-head">
+        <span className="settings-provider-name">
+          <PlainText text={disclosure.displayName} />
+        </span>
+        <Badge variant="default" label={t("settings.modelAllowed")}>
+          <ShieldCheck size={12} aria-hidden="true" />
+          {t("settings.modelAllowed")}
+        </Badge>
+      </div>
+
+      <div className="settings-model-meta">
+        <span className="settings-field-label">
+          {t("settings.modelHostLabel")}
+        </span>
+        <span className="settings-model-host">
+          <PlainText text={disclosure.hostName} />
+          {" ("}
+          <PlainText text={disclosure.hostDomain} />
+          {")"}
+        </span>
+      </div>
+
+      <div className="settings-provider-actions">
+        <IconButton
+          label={busy ? t("settings.modelRevoking") : t("settings.modelRevoke")}
+          onClick={() => onRevoke(status.modelSetId)}
+          disabled={busy}
+        >
+          <ShieldOff size={16} aria-hidden="true" />
+        </IconButton>
+      </div>
+
+      {hasError ? (
+        <p
+          id={messageId}
+          className="settings-message settings-message--danger"
+          role="status"
+          aria-live="polite"
+        >
+          {t("settings.modelRevokeError")}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * Settings surface (SCR-04, FR-03/FR-04): provider key entry/validation/removal,
+ * default provider + per-provider model, fallback order, and model-download
+ * consent revocation (FR-02/BR-08). Built only from UI primitives + tokens
+ * (design-system.md); every string is an i18n key.
  */
 export function SettingsView() {
   const keys = useProviderKeys();
   const selection = useProviderSelection();
+  const consent = useModelConsent();
 
   const order = selection.settings.fallbackOrder;
+  const grantedModels = consent.statuses.filter((s) => s.granted);
 
   return (
     <main className="settings">
@@ -254,6 +339,30 @@ export function SettingsView() {
             </li>
           ))}
         </ol>
+      </section>
+
+      <section
+        className="settings-section"
+        aria-labelledby="settings-models-heading"
+      >
+        <h2 id="settings-models-heading">{t("settings.modelsHeading")}</h2>
+        <p className="settings-hint">{t("settings.modelsHint")}</p>
+        {grantedModels.length === 0 ? (
+          <p className="settings-hint" role="status" aria-live="polite">
+            {t("settings.modelsEmpty")}
+          </p>
+        ) : (
+          <ul className="settings-provider-list">
+            {grantedModels.map((status) => (
+              <ModelConsentRow
+                key={status.modelSetId}
+                status={status}
+                revokeState={consent.revokeState[status.modelSetId] ?? "idle"}
+                onRevoke={(id) => void consent.revoke(id)}
+              />
+            ))}
+          </ul>
+        )}
       </section>
     </main>
   );

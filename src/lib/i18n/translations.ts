@@ -108,6 +108,18 @@ const en = {
   "consent.grant": "Allow download",
   "consent.decline": "Not now",
 
+  // Settings - model downloads (revoke consent, BR-08)
+  "settings.modelsHeading": "Model downloads",
+  "settings.modelsHint":
+    "These model sets have been allowed to download. Revoking a consent takes effect immediately - the next time that model is needed, OST asks again before downloading anything.",
+  "settings.modelsEmpty":
+    "No model downloads have been allowed yet. You will be asked before the first download.",
+  "settings.modelAllowed": "Download allowed",
+  "settings.modelHostLabel": "Download host",
+  "settings.modelRevoke": "Revoke consent",
+  "settings.modelRevoking": "Revoking...",
+  "settings.modelRevokeError": "Could not revoke consent - please try again",
+
   // Shared primitives
   "ui.select.placeholder": "Choose...",
 } as const;
@@ -212,6 +224,17 @@ const vi: Record<I18nKey, string> = {
   "consent.artifactsLabel": "Các tệp sẽ tải",
   "consent.grant": "Cho phép tải",
   "consent.decline": "Để sau",
+
+  "settings.modelsHeading": "Tải mô hình",
+  "settings.modelsHint":
+    "Các bộ mô hình dưới đây đã được cho phép tải về. Thu hồi cho phép có hiệu lực ngay lập tức - lần sau khi cần mô hình đó, OST sẽ hỏi lại trước khi tải bất cứ thứ gì.",
+  "settings.modelsEmpty":
+    "Chưa có mô hình nào được cho phép tải. Bạn sẽ được hỏi trước lần tải đầu tiên.",
+  "settings.modelAllowed": "Đã cho phép tải",
+  "settings.modelHostLabel": "Máy chủ tải về",
+  "settings.modelRevoke": "Thu hồi cho phép",
+  "settings.modelRevoking": "Đang thu hồi...",
+  "settings.modelRevokeError": "Không thu hồi được cho phép - vui lòng thử lại",
 
   "ui.select.placeholder": "Chọn...",
 };

@@ -9,13 +9,18 @@ const mocks = vi.hoisted(() => ({
     checkKey: vi.fn(),
     deleteKey: vi.fn(),
   },
+  modelIpc: {
+    consentStatus: vi.fn(),
+    grantConsent: vi.fn(),
+    revokeConsent: vi.fn(),
+  },
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
 }));
 
 vi.mock("../lib/ipc", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/ipc")>();
-  return { ...actual, keysIpc: mocks.keysIpc };
+  return { ...actual, keysIpc: mocks.keysIpc, modelIpc: mocks.modelIpc };
 });
 
 vi.mock("../lib/settings", async (importOriginal) => {
@@ -28,6 +33,7 @@ vi.mock("../lib/settings", async (importOriginal) => {
 });
 
 import { DEFAULT_PROVIDER_SETTINGS } from "../lib/settings";
+import { OCR_MODEL_SET_ID, type ModelConsentStatus } from "../lib/ipc";
 import { SettingsView } from "./SettingsView";
 
 function statusList(present: Partial<Record<string, boolean>> = {}) {
@@ -39,11 +45,32 @@ function statusList(present: Partial<Record<string, boolean>> = {}) {
   ];
 }
 
+function consentStatus(granted: boolean): ModelConsentStatus {
+  return {
+    modelSetId: OCR_MODEL_SET_ID,
+    granted,
+    disclosure: {
+      modelSetId: OCR_MODEL_SET_ID,
+      displayName: "PP-OCRv5 recognition model",
+      hostName: "ModelScope",
+      hostDomain: "modelscope.cn",
+      artifacts: [{ filename: "rec.onnx", approxSizeBytes: 16_000_000 }],
+      totalApproxSizeBytes: 16_000_000,
+      destination: "~/.oar",
+    },
+  };
+}
+
 beforeEach(() => {
   mocks.keysIpc.statuses.mockReset().mockResolvedValue(statusList());
   mocks.keysIpc.saveKey.mockReset();
   mocks.keysIpc.checkKey.mockReset();
   mocks.keysIpc.deleteKey.mockReset().mockResolvedValue(undefined);
+  mocks.modelIpc.consentStatus
+    .mockReset()
+    .mockResolvedValue(consentStatus(true));
+  mocks.modelIpc.grantConsent.mockReset().mockResolvedValue(undefined);
+  mocks.modelIpc.revokeConsent.mockReset().mockResolvedValue(undefined);
   mocks.loadProviderSettings
     .mockReset()
     .mockResolvedValue({ ...DEFAULT_PROVIDER_SETTINGS });
@@ -180,5 +207,95 @@ describe("SettingsView", () => {
       .closest("section") as HTMLElement;
     // No keys configured -> every fallback entry flags "no key".
     expect(within(fallback).getAllByText("no key").length).toBe(4);
+  });
+
+  it("lists a consented model set with a revoke control (BR-08)", async () => {
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Model downloads")).toBeInTheDocument(),
+    );
+    // The granted model set is listed by its (plain-text) display name.
+    expect(screen.getByText("PP-OCRv5 recognition model")).toBeInTheDocument();
+    // The revoke control is an icon button with an accessible name.
+    expect(
+      screen.getByRole("button", { name: "Revoke consent" }),
+    ).toBeInTheDocument();
+  });
+
+  it("revoke calls revoke_model_consent for the model set id", async () => {
+    // First read grants; after revoke the gate is closed (granted:false).
+    mocks.modelIpc.consentStatus
+      .mockResolvedValueOnce(consentStatus(true))
+      .mockResolvedValue(consentStatus(false));
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("PP-OCRv5 recognition model"),
+      ).toBeInTheDocument(),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Revoke consent" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.modelIpc.revokeConsent).toHaveBeenCalledWith(
+        OCR_MODEL_SET_ID,
+      ),
+    );
+    // The IPC surface carries only the model set id - never a key/secret.
+    expect(mocks.modelIpc.revokeConsent).toHaveBeenCalledWith(
+      expect.not.stringContaining("key"),
+    );
+    // After revoke the entry drops out and the empty-state copy shows: the
+    // next download will re-prompt (fail-closed preserved).
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Revoke consent" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByText(
+        "No model downloads have been allowed yet. You will be asked before the first download.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the empty state when no model download is consented", async () => {
+    mocks.modelIpc.consentStatus.mockResolvedValue(consentStatus(false));
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Model downloads")).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: "Revoke consent" })).toBeNull();
+    expect(
+      screen.getByText(
+        "No model downloads have been allowed yet. You will be asked before the first download.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces a revoke failure and keeps the consent entry", async () => {
+    mocks.modelIpc.revokeConsent.mockRejectedValue(new Error("keychain"));
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("PP-OCRv5 recognition model"),
+      ).toBeInTheDocument(),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Revoke consent" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Could not revoke consent - please try again"),
+      ).toBeInTheDocument(),
+    );
+    // Fail-closed preserved: the entry is still listed (consent unchanged).
+    expect(
+      screen.getByRole("button", { name: "Revoke consent" }),
+    ).toBeInTheDocument();
   });
 });

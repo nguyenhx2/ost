@@ -160,3 +160,16 @@
   display: inline-flex;
   gap: var(--space-1);
 }
+
+/* ---------- Model downloads (revoke consent) ---------- */
+
+.settings-model-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-model-host {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
