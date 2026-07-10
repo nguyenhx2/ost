@@ -1,4 +1,7 @@
-mod audio;
+// Public for the audio session pipeline wiring + STT stage (TASK-014/015) and
+// the audio latency benchmark harness (tests/benches). Capture stays in-memory
+// only (AC-01.6).
+pub mod audio;
 // Public for the capture->OCR criterion benchmark (benches/); the pipeline is
 // wired into the Tauri runtime via shell::region (TASK-007).
 pub mod capture;
