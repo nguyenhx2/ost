@@ -1159,6 +1159,47 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_error_routes_only_consent_refusals_to_the_consent_event() {
+        // The Rust side of the consent-required vs ocr-error split: the emission
+        // path (region_preview_ready) fires EVENT_MODEL_CONSENT_REQUIRED iff
+        // `consent_disclosure()` yields Some, else EVENT_OCR_ERROR. This pins that
+        // classification branch (the emit itself needs a live AppHandle).
+        let disclosure = ConsentDisclosure {
+            model_set_id: "ocr-ppocrv5".into(),
+            display_name: "PP-OCRv5".into(),
+            host_name: "ModelScope".into(),
+            host_domain: "modelscope.cn".into(),
+            artifacts: vec![],
+            total_approx_size_bytes: 0,
+            destination: "/tmp/models".into(),
+        };
+
+        // A fail-closed consent refusal carries the disclosure (-> consent event).
+        let consent_err =
+            PipelineError::Ocr(OcrError::ConsentRequired(Box::new(disclosure.clone())));
+        assert_eq!(
+            consent_err
+                .consent_disclosure()
+                .map(|d| d.model_set_id.as_str()),
+            Some("ocr-ppocrv5")
+        );
+
+        // Any other OCR failure is a plain ocr-error (no disclosure).
+        assert!(PipelineError::Ocr(OcrError::Inference("boom".into()))
+            .consent_disclosure()
+            .is_none());
+        assert!(PipelineError::Ocr(OcrError::ModelLoad("no session".into()))
+            .consent_disclosure()
+            .is_none());
+        // A capture failure is likewise an ocr-error, never a consent prompt.
+        assert!(
+            PipelineError::Capture(crate::capture::CaptureError::Backend("backend".into()))
+                .consent_disclosure()
+                .is_none()
+        );
+    }
+
+    #[test]
     fn clamp_nudge_limits_the_per_keypress_delta() {
         assert_eq!(clamp_nudge(16), 16);
         assert_eq!(clamp_nudge(10_000), MAX_NUDGE_PX);
