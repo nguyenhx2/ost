@@ -46,4 +46,4 @@ overlay system.
 | TASK-018 | Translation history (BR-06) | frontend-ui-dev | TASK-009 | P1 | 3 | Done |
 | TASK-019 | Idle-budget enforcement + session-drop discipline | audio-pipeline-dev | TASK-007, TASK-015 | P0 | 3 | Done |
 | TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Done |
-| TASK-021 | Fix region-capture WGC hang + first-run ordering + download timeout | screen-translate-dev | TASK-007 | P0 | 1 | Active |
+| TASK-021 | Fix region-capture WGC hang + first-run ordering + download timeout | screen-translate-dev | TASK-007 | P0 | 1 | Done |
