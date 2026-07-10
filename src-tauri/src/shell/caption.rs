@@ -100,6 +100,15 @@ pub fn open_caption_overlay(
     open_caption_window(&app, &request)
 }
 
+/// Close the caption overlay window if open (idempotent). Non-command helper so
+/// the tray/hotkey paths can close the overlay without going through IPC; the
+/// shared window-event handler emits `audio:stopped` on the resulting destroy.
+pub fn close_caption_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(CAPTION_WINDOW_LABEL) {
+        let _ = window.close();
+    }
+}
+
 /// Tauri command: close the caption overlay window. Idempotent.
 #[tauri::command]
 pub fn close_caption_overlay(app: AppHandle) -> Result<(), CaptionWindowError> {

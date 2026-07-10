@@ -113,3 +113,12 @@ Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng 
   gate: nếu OCR-stage p95 > 700ms thì quyết định phải xem lại. Refs: FR-02, TASK-005,
   TASK-007, ADR-004.
 
+- Phím tắt toàn cục + tray + cửa sổ Lịch sử (TASK-017, FR-04): KHÔNG thêm dependency mới -
+  `tauri-plugin-global-shortcut = "2.3.2"` (đã pin từ TASK-008) nay được dùng cho TOÀN BỘ bộ
+  phím tắt cấu hình được (toggle audio / chọn vùng / hiện-ẩn overlay) thay vì chỉ region-select.
+  Đăng ký động lúc chạy qua `app.global_shortcut().register/unregister_all` (không pre-register
+  trong builder); cấu hình lưu bằng `tauri-plugin-store` (`settings.json`, khoá `hotkeys`, chỉ
+  chuỗi accelerator). Bộ mặc định OI-04: `Ctrl+Alt+A`/`Ctrl+Alt+R`/`Ctrl+Alt+O`. Xung đột đăng
+  ký được xử lý mềm (rollback + lỗi có kiểu, không crash). Kiểm chứng: `cargo fmt --check` sạch;
+  `cargo clippy --all-targets -j 2 -- -D warnings` sạch; `npm run test`/`lint`/`tsc` xanh.
+  Refs: FR-04, TASK-017, OI-04.

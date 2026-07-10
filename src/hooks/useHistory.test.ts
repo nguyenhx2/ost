@@ -6,11 +6,14 @@ const mocks = vi.hoisted(() => ({
   loadHistory: vi.fn(),
   clearHistory: vi.fn().mockResolvedValue(undefined),
   copyToClipboard: vi.fn().mockResolvedValue(undefined),
+  subscribeHistoryChanges: vi.fn(),
+  storeChangeHandler: { current: null as null | (() => void) },
 }));
 
 vi.mock("../lib/history", () => ({
   loadHistory: mocks.loadHistory,
   clearHistory: mocks.clearHistory,
+  subscribeHistoryChanges: mocks.subscribeHistoryChanges,
 }));
 
 vi.mock("../lib/ipc", () => ({
@@ -39,6 +42,15 @@ beforeEach(() => {
   mocks.loadHistory.mockResolvedValue([entry()]);
   mocks.clearHistory.mockClear();
   mocks.copyToClipboard.mockClear();
+  mocks.storeChangeHandler.current = null;
+  mocks.subscribeHistoryChanges.mockReset();
+  // Capture the store-change callback so a test can fire a cross-window change.
+  mocks.subscribeHistoryChanges.mockImplementation((cb: () => void) => {
+    mocks.storeChangeHandler.current = cb;
+    return Promise.resolve(() => {
+      mocks.storeChangeHandler.current = null;
+    });
+  });
 });
 
 describe("useHistory", () => {
@@ -59,6 +71,24 @@ describe("useHistory", () => {
 
     expect(mocks.clearHistory).toHaveBeenCalledTimes(1);
     expect(result.current.entries).toEqual([]);
+  });
+
+  it("live-updates when the store changes in another window (refresh)", async () => {
+    const { result } = renderHook(() => useHistory());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.entries).toHaveLength(1);
+
+    // A second window records a translation: the store-change callback fires and
+    // the hook re-reads the now-longer list (TASK-018 live-update follow-up).
+    mocks.loadHistory.mockResolvedValueOnce([
+      entry({ id: "e1" }),
+      entry({ id: "e2" }),
+    ]);
+    await act(async () => {
+      mocks.storeChangeHandler.current?.();
+    });
+
+    await waitFor(() => expect(result.current.entries).toHaveLength(2));
   });
 
   it("copyEntry copies the translated text and flags the entry", async () => {

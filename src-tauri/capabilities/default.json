@@ -7,7 +7,8 @@
     "region-select",
     "region-preview",
     "settings",
-    "caption-overlay"
+    "caption-overlay",
+    "history"
   ],
   "permissions": [
     "core:default",

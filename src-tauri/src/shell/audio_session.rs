@@ -50,6 +50,11 @@ pub const EVENT_AUDIO_CAPTION: &str = "audio:caption";
 /// "translating" state instead of hanging (human-in-the-loop.md: no silent
 /// failure). The session keeps running for subsequent chunks.
 pub const EVENT_AUDIO_ERROR: &str = "audio:error";
+/// Emitted (app-global) when the caption overlay window is destroyed, so a
+/// separate Settings window that started the session keeps its running-state in
+/// sync (TASK-016 follow-up). No payload - closing is the only signal. Kept in
+/// sync with `src/lib/ipc.ts` `EVENT_AUDIO_STOPPED` and ipc.md.
+pub const EVENT_AUDIO_STOPPED: &str = "audio:stopped";
 
 /// Default caption target language (AC-01.5): Vietnamese, the product's primary
 /// locale. Configurable per session via [`AudioSessionRequest::target_language`].

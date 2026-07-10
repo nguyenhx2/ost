@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   audioIpc,
   captionIpc,
+  EVENT_AUDIO_STOPPED,
+  listenIpc,
   modelIpc,
   WHISPER_MODEL_SET_ID,
   type ModelConsentStatus,
@@ -80,6 +82,31 @@ export function useAudioSession(): UseAudioSessionResult {
     })();
     return () => {
       active = false;
+    };
+  }, []);
+
+  // Keep `running` in sync when the caption overlay is closed directly (its own
+  // close button, the OS chrome, or the tray/hotkey stop) - the core emits
+  // `audio:stopped` on overlay destroy (TASK-016 follow-up). Without this, the
+  // Settings control would stay stuck showing a running session that has ended.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    void (async () => {
+      const un = await listenIpc<unknown>(EVENT_AUDIO_STOPPED, () => {
+        setRunning(false);
+      });
+      if (disposed) {
+        un();
+        return;
+      }
+      unlisten = un;
+    })();
+    return () => {
+      disposed = true;
+      if (unlisten) {
+        unlisten();
+      }
     };
   }, []);
 

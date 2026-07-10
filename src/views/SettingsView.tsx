@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  History,
+  Keyboard,
   Play,
   ShieldCheck,
   ShieldOff,
@@ -39,8 +41,97 @@ import { useProviderSelection } from "../hooks/useProviderSelection";
 import { useModelConsent, type RevokeState } from "../hooks/useModelConsent";
 import { useHistorySettings } from "../hooks/useHistorySettings";
 import { useAudioSession } from "../hooks/useAudioSession";
+import { useHotkeys } from "../hooks/useHotkeys";
 import { resultMessage } from "./settingsMessages";
-import type { ModelConsentStatus } from "../lib/ipc";
+import {
+  historyIpc,
+  HOTKEY_ACTIONS,
+  type HotkeyAction,
+  type HotkeyErrorKind,
+  type ModelConsentStatus,
+} from "../lib/ipc";
+import type { I18nKey } from "../lib/i18n";
+
+/** Per-action row label (AC-04.1); every string is an i18n key. */
+const HOTKEY_LABEL_KEYS: Record<HotkeyAction, I18nKey> = {
+  toggleAudio: "settings.hotkeyToggleAudio",
+  regionSelect: "settings.hotkeyRegionSelect",
+  toggleOverlay: "settings.hotkeyToggleOverlay",
+};
+
+/** Typed reconfigure error -> localized message key. */
+const HOTKEY_ERROR_KEYS: Record<HotkeyErrorKind, I18nKey> = {
+  invalidBinding: "settings.hotkeyErrorInvalidBinding",
+  duplicate: "settings.hotkeyErrorDuplicate",
+  conflict: "settings.hotkeyErrorConflict",
+  store: "settings.hotkeyErrorStore",
+};
+
+/**
+ * Global-hotkey configuration (AC-04.1): one row per action showing the current
+ * binding and a Change control that records the next chord. Rust owns
+ * registration/persistence; a rejected binding surfaces a localized error and
+ * keeps the previous set. Built from primitives + tokens only.
+ */
+function HotkeysSection() {
+  const hotkeys = useHotkeys();
+
+  return (
+    <section
+      className="settings-section"
+      aria-labelledby="settings-hotkeys-heading"
+    >
+      <h2 id="settings-hotkeys-heading">{t("settings.hotkeysHeading")}</h2>
+      <p className="settings-hint">{t("settings.hotkeysHint")}</p>
+
+      {hotkeys.config ? (
+        <ul className="settings-hotkey-list">
+          {HOTKEY_ACTIONS.map((action) => {
+            const recording = hotkeys.recording === action;
+            const binding = hotkeys.config ? hotkeys.config[action] : "";
+            return (
+              <li key={action} className="settings-hotkey">
+                <span className="settings-hotkey-label">
+                  {t(HOTKEY_LABEL_KEYS[action])}
+                </span>
+                <Badge label={t("settings.hotkeyCurrent")}>{binding}</Badge>
+                {recording ? (
+                  <>
+                    <span
+                      className="settings-hotkey-recording"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {t("settings.hotkeyRecording")}
+                    </span>
+                    <Button onClick={hotkeys.cancelRecording}>
+                      {t("settings.hotkeyCancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => hotkeys.startRecording(action)}>
+                    <Keyboard size={16} aria-hidden="true" />
+                    {t("settings.hotkeyChange")}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      {hotkeys.error ? (
+        <p
+          className="settings-message settings-message--danger"
+          role="alert"
+          aria-live="assertive"
+        >
+          {t(HOTKEY_ERROR_KEYS[hotkeys.error.kind])}
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
 /** One provider's key entry / validate / remove row (AC-03.1). */
 function ProviderKeyRow({
@@ -514,6 +605,12 @@ export function SettingsView() {
           label={t("settings.historyToggle")}
           disabled={history.loading}
         />
+        <div className="settings-provider-actions">
+          <Button onClick={() => void historyIpc.open()}>
+            <History size={16} aria-hidden="true" />
+            {t("settings.historyOpen")}
+          </Button>
+        </div>
         {history.error ? (
           <p
             className="settings-message settings-message--danger"
@@ -524,6 +621,8 @@ export function SettingsView() {
           </p>
         ) : null}
       </section>
+
+      <HotkeysSection />
     </main>
   );
 }

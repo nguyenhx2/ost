@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { copyToClipboard } from "../lib/ipc";
-import { clearHistory, loadHistory, type HistoryEntry } from "../lib/history";
+import {
+  clearHistory,
+  loadHistory,
+  subscribeHistoryChanges,
+  type HistoryEntry,
+} from "../lib/history";
 
 export interface UseHistoryResult {
   entries: HistoryEntry[];
@@ -51,6 +56,33 @@ export function useHistory(): UseHistoryResult {
       active = false;
     };
   }, []);
+
+  // Live-update an already-open History window (TASK-018 follow-up): refresh when
+  // another window records/clears a translation (store change) and when this
+  // window regains focus (belt-and-suspenders for any missed store event).
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    void (async () => {
+      const un = await subscribeHistoryChanges(() => {
+        void refresh();
+      });
+      if (disposed) {
+        un();
+        return;
+      }
+      unlisten = un;
+    })();
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      disposed = true;
+      if (unlisten) {
+        unlisten();
+      }
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     if (copiedId === null) {

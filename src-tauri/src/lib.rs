@@ -42,6 +42,8 @@ pub fn run() {
     let builder = builder.plugin(shell::hotkeys::plugin());
 
     builder
+        // Close-to-tray + audio:stopped sync for the caption overlay (FR-04).
+        .on_window_event(shell::on_window_event)
         .manage(shell::region::RegionState::default())
         // Provider key store (FR-03): the single path to the OS keychain.
         .manage(keys::KeyStore::new_os_keychain())
@@ -115,6 +117,9 @@ pub fn run() {
             shell::caption::close_caption_overlay,
             shell::caption::nudge_caption_overlay,
             shell::settings::open_settings,
+            shell::history::open_history,
+            shell::hotkeys::get_hotkey_config,
+            shell::hotkeys::set_hotkey_config,
             commands::keys::provider_key_statuses,
             commands::keys::save_provider_key,
             commands::keys::check_provider_key,

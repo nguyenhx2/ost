@@ -16,10 +16,13 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
 
 import {
   asAudioCommandError,
+  asHotkeyCommandError,
   asKeyCommandError,
   audioIpc,
   captionIpc,
   copyToClipboard,
+  historyIpc,
+  hotkeysIpc,
   invokeIpc,
   keysIpc,
   listenIpc,
@@ -180,6 +183,60 @@ describe("settingsIpc", () => {
     invokeMock.mockResolvedValueOnce(undefined);
     await settingsIpc.open();
     expect(invokeMock).toHaveBeenCalledWith("open_settings", undefined);
+  });
+});
+
+describe("historyIpc", () => {
+  it("open invokes the open_history command", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await historyIpc.open();
+    expect(invokeMock).toHaveBeenCalledWith("open_history", undefined);
+  });
+});
+
+describe("hotkeysIpc (FR-04, AC-04.1)", () => {
+  const config = {
+    toggleAudio: "Ctrl+Alt+A",
+    regionSelect: "Ctrl+Alt+R",
+    toggleOverlay: "Ctrl+Alt+O",
+  };
+
+  it("get invokes get_hotkey_config", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(config);
+    const result = await hotkeysIpc.get();
+    expect(invokeMock).toHaveBeenCalledWith("get_hotkey_config", undefined);
+    expect(result).toEqual(config);
+  });
+
+  it("set sends the config and returns the applied one", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(config);
+    await hotkeysIpc.set(config);
+    expect(invokeMock).toHaveBeenCalledWith("set_hotkey_config", { config });
+  });
+});
+
+describe("asHotkeyCommandError", () => {
+  it("passes a typed kind + action through", () => {
+    expect(
+      asHotkeyCommandError({ kind: "conflict", action: "regionSelect" }),
+    ).toEqual({ kind: "conflict", action: "regionSelect" });
+  });
+
+  it("defaults action to null when absent", () => {
+    expect(asHotkeyCommandError({ kind: "store" })).toEqual({
+      kind: "store",
+      action: null,
+    });
+  });
+
+  it("maps an untyped failure to the store kind", () => {
+    expect(asHotkeyCommandError(new Error("boom"))).toEqual({
+      kind: "store",
+      action: null,
+    });
   });
 });
 

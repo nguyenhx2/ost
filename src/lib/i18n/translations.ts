@@ -179,6 +179,26 @@ const en = {
   "settings.historyToggle": "Record translation history",
   "settings.historyError":
     "Could not change the history setting - please try again",
+  "settings.historyOpen": "Open history window",
+
+  // Settings - global hotkeys (FR-04, AC-04.1)
+  "settings.hotkeysHeading": "Global hotkeys",
+  "settings.hotkeysHint":
+    "These shortcuts work even when another app is focused. Choose Change, then press a key combination that includes Ctrl, Alt, or the Windows key. Press Escape to cancel.",
+  "settings.hotkeyToggleAudio": "Start or stop the audio session",
+  "settings.hotkeyRegionSelect": "Select a screen region",
+  "settings.hotkeyToggleOverlay": "Show or hide the active overlay",
+  "settings.hotkeyChange": "Change",
+  "settings.hotkeyRecording": "Press a key combination (Escape to cancel)",
+  "settings.hotkeyCancel": "Cancel",
+  "settings.hotkeyCurrent": "Current shortcut",
+  "settings.hotkeyErrorInvalidBinding":
+    "That combination is not valid - include Ctrl, Alt, or the Windows key with a letter or key",
+  "settings.hotkeyErrorDuplicate":
+    "That combination is already used by another OST hotkey - choose a different one",
+  "settings.hotkeyErrorConflict":
+    "That combination is already in use by another app - choose a different one",
+  "settings.hotkeyErrorStore": "Could not save the hotkey - please try again",
 
   // Settings - live audio translation (FR-01, AC-01.4/01.5/01.8)
   "settings.audioHeading": "Live audio translation",
@@ -369,6 +389,25 @@ const vi: Record<I18nKey, string> = {
   "settings.historyToggle": "Ghi lịch sử dịch",
   "settings.historyError":
     "Không thay đổi được cài đặt lịch sử - vui lòng thử lại",
+  "settings.historyOpen": "Mở cửa sổ lịch sử",
+
+  "settings.hotkeysHeading": "Phím tắt toàn cục",
+  "settings.hotkeysHint":
+    "Các phím tắt này hoạt động ngay cả khi ứng dụng khác đang được focus. Chọn Đổi, rồi nhấn tổ hợp phím có kèm Ctrl, Alt hoặc phím Windows. Nhấn Escape để huỷ.",
+  "settings.hotkeyToggleAudio": "Bắt đầu hoặc dừng phiên âm thanh",
+  "settings.hotkeyRegionSelect": "Chọn vùng màn hình",
+  "settings.hotkeyToggleOverlay": "Hiện hoặc ẩn overlay đang hoạt động",
+  "settings.hotkeyChange": "Đổi",
+  "settings.hotkeyRecording": "Nhấn tổ hợp phím (Escape để huỷ)",
+  "settings.hotkeyCancel": "Huỷ",
+  "settings.hotkeyCurrent": "Phím tắt hiện tại",
+  "settings.hotkeyErrorInvalidBinding":
+    "Tổ hợp không hợp lệ - hãy kèm Ctrl, Alt hoặc phím Windows cùng một chữ cái hoặc phím",
+  "settings.hotkeyErrorDuplicate":
+    "Tổ hợp này đã dùng cho một phím tắt OST khác - hãy chọn tổ hợp khác",
+  "settings.hotkeyErrorConflict":
+    "Tổ hợp này đang được ứng dụng khác sử dụng - hãy chọn tổ hợp khác",
+  "settings.hotkeyErrorStore": "Không lưu được phím tắt - vui lòng thử lại",
 
   "settings.audioHeading": "Dịch âm thanh trực tiếp",
   "settings.audioHint":

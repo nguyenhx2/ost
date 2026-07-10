@@ -130,7 +130,20 @@ export function CaptionOverlayView() {
           </div>
         ) : null}
 
-        {caption === null && state.startError === null ? (
+        {/* Consent declined: captions stay blocked until the whisper download is
+            allowed. Offer a way back to the disclosure (human-in-the-loop.md). */}
+        {overlay.consentDisclosure && !consentDialogOpen ? (
+          <div className="caption-overlay-blocked" role="alert">
+            <span>{t("caption.modelBlocked")}</span>
+            <Button onClick={overlay.reopenConsent}>
+              {t("consent.reopen")}
+            </Button>
+          </div>
+        ) : null}
+
+        {caption === null &&
+        state.startError === null &&
+        !(overlay.consentDisclosure && !consentDialogOpen) ? (
           <p className="caption-overlay-status" role="status">
             {t("caption.waiting")}
           </p>
