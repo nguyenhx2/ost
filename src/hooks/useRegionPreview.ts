@@ -20,6 +20,14 @@ import {
   DEFAULT_PROVIDER_OPTION,
   type ProviderModelOption,
 } from "../lib/providers";
+import { recordTranslation } from "../lib/history";
+
+/**
+ * Default target language for recorded history (BR-07 target default `vi`,
+ * HISTORY_ENTRY.target_language). No target picker exists in the preview yet;
+ * when one lands it threads through to `recordTranslation` here.
+ */
+const DEFAULT_TARGET_LANGUAGE = "vi";
 
 export type PreviewStatus =
   /** Waiting for the first OCR event after region confirm. */
@@ -144,6 +152,8 @@ export function useRegionPreview(): UseRegionPreviewResult {
 
   const optionRef = useRef(option);
   const sourceTextRef = useRef("");
+  /** Detected source language from the last OCR event (BR-07 hint), or "". */
+  const sourceLanguageRef = useRef("");
   const translationRef = useRef<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const seqRef = useRef(0);
@@ -208,6 +218,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
         return;
       }
       sourceTextRef.current = sourceText;
+      sourceLanguageRef.current = payload.detectedLanguage ?? "";
       translationRef.current = null;
       setState((prev) => ({
         status: "translating",
@@ -268,6 +279,22 @@ export function useRegionPreview(): UseRegionPreviewResult {
         model: payload.model,
         failureReason: null,
       }));
+      // Recording seam (BR-06/AC-04.4): every COMPLETED translation is logged
+      // text-only. The history lib skips this when recording is disabled and
+      // strips anything outside the HISTORY_ENTRY field set. Fire-and-forget -
+      // a history-store failure must never break the translation UX. The future
+      // audio-caption path (TASK-015/016) records through this same helper.
+      void recordTranslation({
+        sessionType: "region",
+        sourceText: sourceTextRef.current,
+        translatedText: payload.translatedText,
+        sourceLanguage: sourceLanguageRef.current,
+        targetLanguage: DEFAULT_TARGET_LANGUAGE,
+        providerId: payload.provider,
+        modelId: payload.model,
+      }).catch(() => {
+        // Swallowed by design: recording is best-effort, never user-facing.
+      });
     };
 
     const onTranslationError = (payload: TranslationErrorPayload) => {

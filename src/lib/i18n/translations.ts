@@ -120,6 +120,35 @@ const en = {
   "settings.modelRevoking": "Revoking...",
   "settings.modelRevokeError": "Could not revoke consent - please try again",
 
+  // SCR: Translation history (FR-04, BR-06)
+  "history.title": "Translation history",
+  "history.subtitle":
+    "Completed translations are saved locally as text only - never keys, audio, or screenshots.",
+  "history.empty":
+    "No translations yet. Completed translations will appear here.",
+  "history.count": "{count} entries",
+  "history.sourceLabel": "Source text",
+  "history.translationLabel": "Translation",
+  "history.sessionAudio": "Audio",
+  "history.sessionRegion": "Region",
+  "history.langArrow": "to",
+  "history.copyTranslation": "Copy translation",
+  "history.copied": "Copied to clipboard",
+  "history.clearAll": "Clear all history",
+  "history.clearAllTitle": "Clear all history?",
+  "history.clearAllBody":
+    "This permanently deletes every saved translation from this device. This cannot be undone.",
+  "history.clearAllConfirm": "Delete everything",
+  "history.cancel": "Cancel",
+
+  // Settings - translation history (AC-04.6)
+  "settings.historyHeading": "Translation history",
+  "settings.historyHint":
+    "When on, every completed translation is saved locally as text only (no keys, audio, or screenshots). Turning it off stops recording immediately; turning it back on resumes.",
+  "settings.historyToggle": "Record translation history",
+  "settings.historyError":
+    "Could not change the history setting - please try again",
+
   // Shared primitives
   "ui.select.placeholder": "Choose...",
 } as const;
@@ -235,6 +264,33 @@ const vi: Record<I18nKey, string> = {
   "settings.modelRevoke": "Thu hồi cho phép",
   "settings.modelRevoking": "Đang thu hồi...",
   "settings.modelRevokeError": "Không thu hồi được cho phép - vui lòng thử lại",
+
+  "history.title": "Lịch sử dịch",
+  "history.subtitle":
+    "Các lượt dịch hoàn tất được lưu cục bộ chỉ dưới dạng văn bản - không bao giờ chứa key, âm thanh hay ảnh chụp.",
+  "history.empty":
+    "Chưa có lượt dịch nào. Các lượt dịch hoàn tất sẽ xuất hiện ở đây.",
+  "history.count": "{count} mục",
+  "history.sourceLabel": "Văn bản nguồn",
+  "history.translationLabel": "Bản dịch",
+  "history.sessionAudio": "Âm thanh",
+  "history.sessionRegion": "Vùng màn hình",
+  "history.langArrow": "sang",
+  "history.copyTranslation": "Chép bản dịch",
+  "history.copied": "Đã chép vào clipboard",
+  "history.clearAll": "Xoá toàn bộ lịch sử",
+  "history.clearAllTitle": "Xoá toàn bộ lịch sử?",
+  "history.clearAllBody":
+    "Thao tác này xoá vĩnh viễn mọi lượt dịch đã lưu trên thiết bị này và không thể hoàn tác.",
+  "history.clearAllConfirm": "Xoá tất cả",
+  "history.cancel": "Huỷ",
+
+  "settings.historyHeading": "Lịch sử dịch",
+  "settings.historyHint":
+    "Khi bật, mỗi lượt dịch hoàn tất được lưu cục bộ chỉ dưới dạng văn bản (không có key, âm thanh hay ảnh chụp). Tắt sẽ dừng ghi ngay lập tức; bật lại thì ghi tiếp.",
+  "settings.historyToggle": "Ghi lịch sử dịch",
+  "settings.historyError":
+    "Không thay đổi được cài đặt lịch sử - vui lòng thử lại",
 
   "ui.select.placeholder": "Chọn...",
 };

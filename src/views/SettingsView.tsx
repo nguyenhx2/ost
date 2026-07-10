@@ -14,6 +14,7 @@ import {
   Input,
   PlainText,
   Select,
+  Switch,
 } from "../components/ui";
 import { t } from "../lib/i18n";
 import {
@@ -28,6 +29,7 @@ import {
 } from "../hooks/useProviderKeys";
 import { useProviderSelection } from "../hooks/useProviderSelection";
 import { useModelConsent, type RevokeState } from "../hooks/useModelConsent";
+import { useHistorySettings } from "../hooks/useHistorySettings";
 import { resultMessage } from "./settingsMessages";
 import type { ModelConsentStatus } from "../lib/ipc";
 
@@ -234,6 +236,7 @@ export function SettingsView() {
   const keys = useProviderKeys();
   const selection = useProviderSelection();
   const consent = useModelConsent();
+  const history = useHistorySettings();
 
   const order = selection.settings.fallbackOrder;
   const grantedModels = consent.statuses.filter((s) => s.granted);
@@ -363,6 +366,29 @@ export function SettingsView() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section
+        className="settings-section"
+        aria-labelledby="settings-history-heading"
+      >
+        <h2 id="settings-history-heading">{t("settings.historyHeading")}</h2>
+        <p className="settings-hint">{t("settings.historyHint")}</p>
+        <Switch
+          checked={history.enabled}
+          onChange={(next) => void history.setEnabled(next)}
+          label={t("settings.historyToggle")}
+          disabled={history.loading}
+        />
+        {history.error ? (
+          <p
+            className="settings-message settings-message--danger"
+            role="status"
+            aria-live="polite"
+          >
+            {t("settings.historyError")}
+          </p>
+        ) : null}
       </section>
     </main>
   );

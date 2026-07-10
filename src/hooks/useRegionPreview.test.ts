@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
       return Promise.resolve(() => handlers.delete(event));
     }),
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
+    recordTranslation: vi.fn().mockResolvedValue(null),
   };
 });
 
@@ -37,6 +38,10 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     copyToClipboard: mocks.copyToClipboard,
   };
 });
+
+vi.mock("../lib/history", () => ({
+  recordTranslation: mocks.recordTranslation,
+}));
 
 import {
   EVENT_REGION_OCR_RESULT,
@@ -128,6 +133,53 @@ describe("useRegionPreview - two-phase rendering (AC-02.3)", () => {
 
     expect(result.current.state.translation).toBeNull();
     expect(result.current.state.status).toBe("translating");
+  });
+});
+
+describe("useRegionPreview - history recording seam (BR-06/AC-04.4)", () => {
+  it("records the completed translation with text-only HISTORY_ENTRY fields", async () => {
+    await renderPreview();
+
+    emitOcr({
+      requestId: "p1",
+      sourceText: "Hello world",
+      lowConfidence: false,
+      detectedLanguage: "en",
+    });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    emitTranslation({
+      requestId: request.requestId,
+      translatedText: "Xin chào thế giới",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+    });
+
+    expect(mocks.recordTranslation).toHaveBeenCalledTimes(1);
+    const recorded = mocks.recordTranslation.mock.calls[0][0];
+    expect(recorded).toEqual({
+      sessionType: "region",
+      sourceText: "Hello world",
+      translatedText: "Xin chào thế giới",
+      sourceLanguage: "en",
+      targetLanguage: "vi",
+      providerId: "gemini",
+      modelId: "gemini-2.5-flash",
+    });
+    // No key/audio/screenshot fields cross the recording seam.
+    const json = JSON.stringify(recorded).toLowerCase();
+    expect(json).not.toContain("key");
+    expect(json).not.toContain("audio");
+    expect(json).not.toContain("screenshot");
+  });
+
+  it("does NOT record when the translation fails (nothing completed)", async () => {
+    await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    emitTranslationError({ requestId: request.requestId });
+
+    expect(mocks.recordTranslation).not.toHaveBeenCalled();
   });
 });
 
