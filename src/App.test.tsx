@@ -263,8 +263,10 @@ describe("App (home screen, FR-04 TASK-028)", () => {
       expect(screen.getByText("Settings")).toBeInTheDocument(),
     );
 
-    await userEvent.click(screen.getAllByRole("button", { name: "Open" })[0]);
-    await userEvent.click(screen.getAllByRole("button", { name: "Open" })[1]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "View Settings" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Open History" }));
     expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
     expect(mocks.historyIpc.open).toHaveBeenCalledTimes(1);
   });

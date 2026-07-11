@@ -28,9 +28,9 @@ const en = {
   "home.actionAudioStart": "Start",
   "home.actionAudioStop": "Stop",
   "home.actionSettings": "Settings",
-  "home.actionSettingsCta": "Open",
+  "home.actionSettingsCta": "View Settings",
   "home.actionHistory": "History",
-  "home.actionHistoryCta": "Open",
+  "home.actionHistoryCta": "Open History",
   "home.audioStartError":
     "Could not start the audio session - please try again",
 
@@ -326,9 +326,9 @@ const vi: Record<I18nKey, string> = {
   "home.actionAudioStart": "Bắt đầu",
   "home.actionAudioStop": "Dừng",
   "home.actionSettings": "Cài đặt",
-  "home.actionSettingsCta": "Mở",
+  "home.actionSettingsCta": "Xem Cài đặt",
   "home.actionHistory": "Lịch sử",
-  "home.actionHistoryCta": "Mở",
+  "home.actionHistoryCta": "Mở Lịch sử",
   "home.audioStartError":
     "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
 
