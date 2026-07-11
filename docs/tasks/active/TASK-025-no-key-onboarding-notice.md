@@ -32,7 +32,7 @@ When no provider has a key configured (zero keys), every translation surface sho
 - [ ] At least one key present + real failure -> the generic "translation failed" message renders (not the no-key notice).
 - [ ] Both states covered by tests (Vitest).
 - [ ] Design-system hard gate; tokens + primitives only.
-- [ ] npm run lint and npm run test pass (local-verification gate).
+- [ ] npm run lint and npm run test pass locally; CI lint-and-test green on the PR.
 
 ## Orchestration notes
 - security-reviewer required: touches the key-status read path (must confirm no key value ever crosses into the WebView beyond masked presence).
