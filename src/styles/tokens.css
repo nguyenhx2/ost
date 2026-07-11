@@ -64,6 +64,17 @@
   --focus-ring-width: 2px;
   --focus-ring-color: var(--color-accent);
   --focus-ring-offset: 2px;
+
+  /*
+   * Overlay panel sizing (SCR-01/03): a floor so the panel stays usable at the
+   * window's own minimum size, WITHOUT a matching ceiling - the panel must
+   * keep tracking the window on resize (owner complaint: stretching the
+   * window did not stretch the dialog). Never pair this with a max-width.
+   */
+  --overlay-min-width: 20rem;
+
+  /* Thin scrollbar sizing (owner complaint: default scrollbars are fat). */
+  --scrollbar-size: var(--space-2);
 }
 
 [data-theme="light"] {

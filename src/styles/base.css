@@ -43,3 +43,33 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Thin, token-styled scrollbars everywhere (owner complaint: the default
+ * scrollbars are thick and out of place). Firefox reads the `scrollbar-*`
+ * properties; the WebView2/Chromium engine OST actually ships on reads the
+ * `::-webkit-scrollbar` pseudo-elements. Sizing/color come from tokens.css
+ * only - no hardcoded px/hex here.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-muted);
+}

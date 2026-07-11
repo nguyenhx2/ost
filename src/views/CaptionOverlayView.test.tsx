@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { AudioCaptionPayload, ConsentDisclosure } from "../lib/ipc";
 
 const mocks = vi.hoisted(() => {
@@ -239,5 +240,40 @@ describe("CaptionOverlayView", () => {
     expect(
       screen.getByRole("button", { name: "Stop and close" }),
     ).toBeInTheDocument();
+  });
+
+  it("close button visibly closes the overlay and stops the session (owner complaint: no way to close it)", async () => {
+    await renderOverlay();
+    emitCaption(caption());
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stop and close" }),
+    );
+
+    await waitFor(() => expect(mocks.audioIpc.stop).toHaveBeenCalledTimes(1));
+    expect(mocks.captionIpc.closeOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a single scrollable body between the fixed header and the docked controls (owner complaint: long content must scroll, not squeeze)", async () => {
+    const { container } = await renderOverlay();
+    emitCaption(caption());
+
+    const panel = container.querySelector(".ost-overlay-panel");
+    const body = container.querySelector(".caption-overlay-body");
+    const controls = container.querySelector(".caption-overlay-controls");
+    expect(panel).not.toBeNull();
+    expect(body).not.toBeNull();
+    expect(controls).not.toBeNull();
+    const children = Array.from(panel?.children ?? []);
+    expect(children.indexOf(body!)).toBeGreaterThan(
+      children.findIndex((el) => el.tagName === "HEADER"),
+    );
+    expect(children.indexOf(controls!)).toBeGreaterThan(
+      children.indexOf(body!),
+    );
+    // The transcript/translation live inside the scrollable body, not
+    // directly in the panel (so it scrolls instead of shrinking the panel).
+    expect(body?.textContent).toContain("こんにちは");
+    expect(body?.textContent).toContain("Xin chào");
   });
 });

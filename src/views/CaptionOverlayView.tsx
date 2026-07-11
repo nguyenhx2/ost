@@ -6,7 +6,7 @@ import {
   Move,
   Pin,
   PinOff,
-  Square,
+  X,
 } from "lucide-react";
 import {
   Badge,
@@ -109,100 +109,110 @@ export function CaptionOverlayView() {
           </Tooltip>
           <Tooltip text={t("caption.close")}>
             <IconButton label={t("caption.close")} onClick={overlay.close}>
-              <Square size={16} aria-hidden="true" />
+              <X size={16} aria-hidden="true" />
             </IconButton>
           </Tooltip>
         </header>
 
-        {state.startError && state.startError.kind === "noProviderKey" ? (
-          <div className="caption-overlay-blocked" role="alert">
-            <span>{t("caption.noProviderKey")}</span>
-            <Button onClick={overlay.openSettings}>
-              {t("caption.openSettings")}
-            </Button>
-          </div>
-        ) : null}
+        {/*
+         * The ONE contained scroll region on this surface (owner complaint:
+         * long content must scroll, never get squeezed illegible). Header
+         * above and controls below are docked (flex-shrink: 0 in CSS) so
+         * only this body competes for space - see CaptionOverlayView.css.
+         */}
+        <div className="caption-overlay-body">
+          {state.startError && state.startError.kind === "noProviderKey" ? (
+            <div className="caption-overlay-blocked" role="alert">
+              <span>{t("caption.noProviderKey")}</span>
+              <Button onClick={overlay.openSettings}>
+                {t("caption.openSettings")}
+              </Button>
+            </div>
+          ) : null}
 
-        {state.startError && state.startError.kind !== "noProviderKey" ? (
-          <div className="caption-overlay-blocked" role="alert">
-            <span>{t("caption.startError")}</span>
-            <Button onClick={overlay.retry}>{t("caption.retry")}</Button>
-          </div>
-        ) : null}
+          {state.startError && state.startError.kind !== "noProviderKey" ? (
+            <div className="caption-overlay-blocked" role="alert">
+              <span>{t("caption.startError")}</span>
+              <Button onClick={overlay.retry}>{t("caption.retry")}</Button>
+            </div>
+          ) : null}
 
-        {/* Consent declined: captions stay blocked until the whisper download is
-            allowed. Offer a way back to the disclosure (human-in-the-loop.md). */}
-        {overlay.consentDisclosure && !consentDialogOpen ? (
-          <div className="caption-overlay-blocked" role="alert">
-            <span>{t("caption.modelBlocked")}</span>
-            <Button onClick={overlay.reopenConsent}>
-              {t("consent.reopen")}
-            </Button>
-          </div>
-        ) : null}
+          {/* Consent declined: captions stay blocked until the whisper download is
+              allowed. Offer a way back to the disclosure (human-in-the-loop.md). */}
+          {overlay.consentDisclosure && !consentDialogOpen ? (
+            <div className="caption-overlay-blocked" role="alert">
+              <span>{t("caption.modelBlocked")}</span>
+              <Button onClick={overlay.reopenConsent}>
+                {t("consent.reopen")}
+              </Button>
+            </div>
+          ) : null}
 
-        {caption === null &&
-        state.startError === null &&
-        !(overlay.consentDisclosure && !consentDialogOpen) ? (
-          <p className="caption-overlay-status" role="status">
-            {t("caption.waiting")}
-          </p>
-        ) : null}
+          {caption === null &&
+          state.startError === null &&
+          !(overlay.consentDisclosure && !consentDialogOpen) ? (
+            <p className="caption-overlay-status" role="status">
+              {t("caption.waiting")}
+            </p>
+          ) : null}
 
-        {caption !== null ? (
-          <div className="caption-overlay-meta">
-            <span className="caption-overlay-language">
-              {caption.sourceLanguageAutoDetected
-                ? t("caption.detectedLanguage")
-                : t("caption.pinnedLanguage")}
-              {": "}
-              <span className="caption-overlay-language-value">
-                {languageKey ? (
-                  t(languageKey)
-                ) : (
-                  <PlainText text={languageCode} />
-                )}
+          {caption !== null ? (
+            <div className="caption-overlay-meta">
+              <span className="caption-overlay-language">
+                {caption.sourceLanguageAutoDetected
+                  ? t("caption.detectedLanguage")
+                  : t("caption.pinnedLanguage")}
+                {": "}
+                <span className="caption-overlay-language-value">
+                  {languageKey ? (
+                    t(languageKey)
+                  ) : (
+                    <PlainText text={languageCode} />
+                  )}
+                </span>
               </span>
-            </span>
-            {caption.lowConfidence ? (
-              <Badge variant="warning">
-                <AlertTriangle size={12} aria-hidden="true" />
-                {t("caption.lowConfidence")}
-              </Badge>
-            ) : null}
-          </div>
-        ) : null}
+              {caption.lowConfidence ? (
+                <Badge variant="warning">
+                  <AlertTriangle size={12} aria-hidden="true" />
+                  {t("caption.lowConfidence")}
+                </Badge>
+              ) : null}
+            </div>
+          ) : null}
 
-        {caption !== null ? (
-          <section className="caption-overlay-section">
-            <span className="caption-overlay-section-label">
-              {t("caption.sourceLabel")}
-            </span>
-            <p className="caption-overlay-text">
-              <PlainText text={caption.sourceText} />
+          {caption !== null ? (
+            <section className="caption-overlay-section">
+              <span className="caption-overlay-section-label">
+                {t("caption.sourceLabel")}
+              </span>
+              <p className="caption-overlay-text">
+                <PlainText text={caption.sourceText} />
+              </p>
+            </section>
+          ) : null}
+
+          {caption !== null ? (
+            <section className="caption-overlay-section">
+              <span className="caption-overlay-section-label">
+                {t("caption.translationLabel")}
+              </span>
+              <p className="caption-overlay-text caption-overlay-translation">
+                <PlainText text={caption.translatedText} />
+              </p>
+            </section>
+          ) : null}
+
+          {state.chunkError ? (
+            <p className="caption-overlay-error" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              {/* Own localized copy only - the raw diagnostic string is DATA. */}
+              {t("caption.error")}
             </p>
-          </section>
-        ) : null}
+          ) : null}
+        </div>
 
-        {caption !== null ? (
-          <section className="caption-overlay-section">
-            <span className="caption-overlay-section-label">
-              {t("caption.translationLabel")}
-            </span>
-            <p className="caption-overlay-text caption-overlay-translation">
-              <PlainText text={caption.translatedText} />
-            </p>
-          </section>
-        ) : null}
-
-        {state.chunkError ? (
-          <p className="caption-overlay-error" role="alert">
-            <AlertTriangle size={14} aria-hidden="true" />
-            {/* Own localized copy only - the raw diagnostic string is DATA. */}
-            {t("caption.error")}
-          </p>
-        ) : null}
-
+        {/* Docked control bar (owner complaint: controls must not eat the
+            panel) - fixed at the bottom, outside the scrolling body above. */}
         <div className="caption-overlay-controls">
           <Tooltip text={t("caption.copy")}>
             <IconButton
