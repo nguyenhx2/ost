@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mocks = vi.hoisted(() => ({
@@ -27,6 +27,15 @@ const mocks = vi.hoisted(() => ({
     get: vi.fn(),
     set: vi.fn(),
   },
+  sttIpc: {
+    listModels: vi.fn(),
+    requestSwitch: vi.fn(),
+    confirmSwitch: vi.fn(),
+  },
+  providersIpc: {
+    pickerMetadata: vi.fn(),
+    checkLocalConnection: vi.fn(),
+  },
   listenIpc: vi.fn(),
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
@@ -43,6 +52,8 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     audioIpc: mocks.audioIpc,
     captionIpc: mocks.captionIpc,
     hotkeysIpc: mocks.hotkeysIpc,
+    sttIpc: mocks.sttIpc,
+    providersIpc: mocks.providersIpc,
     listenIpc: mocks.listenIpc,
   };
 });
@@ -93,6 +104,76 @@ function consentStatus(granted: boolean): ModelConsentStatus {
       destination: "~/.oar",
     },
   };
+}
+
+function sttModel(overrides: Partial<import("../lib/ipc").SttModelInfo> = {}) {
+  return {
+    id: "base",
+    label: "Base",
+    approxDownloadBytes: 142_000_000,
+    approxRamBytes: 388_000_000,
+    downloaded: true,
+    allowedByProbe: true,
+    requiresCuda: false,
+    current: true,
+    ...overrides,
+  };
+}
+
+function defaultSttModels() {
+  return [
+    sttModel({ id: "tiny", label: "Tiny", downloaded: true, current: false }),
+    sttModel(),
+    sttModel({
+      id: "small",
+      label: "Small",
+      downloaded: false,
+      current: false,
+      approxDownloadBytes: 466_000_000,
+      approxRamBytes: 2_000_000_000,
+    }),
+    sttModel({
+      id: "large-v3-turbo",
+      label: "Large v3 turbo",
+      downloaded: false,
+      current: false,
+      allowedByProbe: false,
+      approxDownloadBytes: 1_600_000_000,
+      approxRamBytes: 4_000_000_000,
+    }),
+    sttModel({
+      id: "large-v3",
+      label: "Large v3",
+      downloaded: false,
+      current: false,
+      allowedByProbe: false,
+      requiresCuda: true,
+      approxDownloadBytes: 3_900_000_000,
+      approxRamBytes: 4_200_000_000,
+    }),
+  ];
+}
+
+function providerPickerMetadata() {
+  return [
+    { provider_id: "gemini", display_name: "Gemini", requires_base_url: false },
+    {
+      provider_id: "anthropic",
+      display_name: "Anthropic (Claude)",
+      requires_base_url: false,
+    },
+    { provider_id: "openai", display_name: "OpenAI", requires_base_url: false },
+    {
+      provider_id: "openrouter",
+      display_name: "OpenRouter",
+      requires_base_url: false,
+    },
+    {
+      provider_id: "local_openai",
+      display_name: "Custom (local, OpenAI-compatible)",
+      requires_base_url: true,
+    },
+  ];
 }
 
 function whisperStatus(granted: boolean): ModelConsentStatus {
@@ -155,7 +236,15 @@ beforeEach(() => {
     toggleOverlay: "Ctrl+Alt+O",
   });
   mocks.hotkeysIpc.set.mockReset().mockResolvedValue(undefined);
-  // useAudioSession subscribes to `audio:stopped`; return a noop unlisten.
+  mocks.sttIpc.listModels.mockReset().mockResolvedValue(defaultSttModels());
+  mocks.sttIpc.requestSwitch.mockReset();
+  mocks.sttIpc.confirmSwitch.mockReset();
+  mocks.providersIpc.pickerMetadata
+    .mockReset()
+    .mockResolvedValue(providerPickerMetadata());
+  mocks.providersIpc.checkLocalConnection.mockReset();
+  // useAudioSession subscribes to `audio:stopped`; the STT picker subscribes
+  // to `stt:model-download-progress` - both share this noop unlisten mock.
   mocks.listenIpc.mockReset().mockResolvedValue(() => {});
 });
 
@@ -499,5 +588,301 @@ describe("SettingsView", () => {
     expect(
       screen.getByText("Speech model download allowed"),
     ).toBeInTheDocument();
+  });
+
+  it("lists the STT engine picker with hardware-gated disabled entries (TASK-026)", async () => {
+    render(<SettingsView />);
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+
+    await userEvent.click(sttTrigger);
+    const listbox = screen.getByRole("listbox", {
+      name: "Speech-to-text engine",
+    });
+
+    // The current model is marked; a hardware-gated tier is disabled.
+    expect(
+      within(listbox).getByRole("option", { name: /Base \(recommended\)/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    const gated = within(listbox).getByRole("option", {
+      name: /Large v3 turbo/,
+    });
+    expect(gated).toHaveAttribute("aria-disabled", "true");
+
+    // Cloud STT entries are listed, always disabled, pending ADR-005.
+    const cloud = within(listbox).getByRole("option", {
+      name: /Google Cloud STT/,
+    });
+    expect(cloud).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("switching to an undownloaded STT tier requires consent before any download (BR-08)", async () => {
+    mocks.sttIpc.requestSwitch.mockResolvedValue({
+      status: "consentRequired",
+      disclosure: {
+        modelSetId: "whisper-ggml",
+        displayName: "Whisper small",
+        hostName: "Hugging Face",
+        hostDomain: "huggingface.co",
+        artifacts: [
+          { filename: "ggml-small.bin", approxSizeBytes: 466_000_000 },
+        ],
+        totalApproxSizeBytes: 466_000_000,
+        destination: "~/.cache/whisper",
+      },
+    });
+    render(<SettingsView />);
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+
+    await userEvent.click(sttTrigger);
+    await userEvent.click(screen.getByRole("option", { name: /^Small/ }));
+
+    // Consent dialog opens; the download has NOT started yet.
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download this speech-to-text tier",
+    });
+    expect(mocks.sttIpc.confirmSwitch).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Allow download" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.sttIpc.confirmSwitch).toHaveBeenCalledWith("small"),
+    );
+  });
+
+  it("declining the STT consent dialog never downloads", async () => {
+    mocks.sttIpc.requestSwitch.mockResolvedValue({
+      status: "consentRequired",
+      disclosure: {
+        modelSetId: "whisper-ggml",
+        displayName: "Whisper small",
+        hostName: "Hugging Face",
+        hostDomain: "huggingface.co",
+        artifacts: [
+          { filename: "ggml-small.bin", approxSizeBytes: 466_000_000 },
+        ],
+        totalApproxSizeBytes: 466_000_000,
+        destination: "~/.cache/whisper",
+      },
+    });
+    render(<SettingsView />);
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+
+    await userEvent.click(sttTrigger);
+    await userEvent.click(screen.getByRole("option", { name: /^Small/ }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download this speech-to-text tier",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Not now" }),
+    );
+
+    expect(mocks.sttIpc.confirmSwitch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("renders STT model-download progress from stt:model-download-progress", async () => {
+    let progressHandler: ((payload: unknown) => void) | null = null;
+    mocks.listenIpc.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === "stt:model-download-progress") {
+          progressHandler = handler;
+        }
+        return Promise.resolve(() => {});
+      },
+    );
+    mocks.sttIpc.requestSwitch.mockResolvedValue({
+      status: "consentRequired",
+      disclosure: {
+        modelSetId: "whisper-ggml",
+        displayName: "Whisper small",
+        hostName: "Hugging Face",
+        hostDomain: "huggingface.co",
+        artifacts: [
+          { filename: "ggml-small.bin", approxSizeBytes: 466_000_000 },
+        ],
+        totalApproxSizeBytes: 466_000_000,
+        destination: "~/.cache/whisper",
+      },
+    });
+    // Never resolves within this test - only the progress event matters here.
+    mocks.sttIpc.confirmSwitch.mockImplementation(
+      () => new Promise<void>(() => {}),
+    );
+
+    render(<SettingsView />);
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+    await userEvent.click(sttTrigger);
+    await userEvent.click(screen.getByRole("option", { name: /^Small/ }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download this speech-to-text tier",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Allow download" }),
+    );
+
+    await waitFor(() => expect(progressHandler).not.toBeNull());
+    act(() => {
+      progressHandler?.({
+        modelId: "small",
+        downloadedBytes: 233_000_000,
+        totalBytes: 466_000_000,
+      });
+    });
+
+    expect(
+      await screen.findByRole("progressbar", {
+        name: "Model download progress",
+      }),
+    ).toHaveAttribute("aria-valuenow", "50");
+  });
+
+  it("shows a clear message when switching the STT engine mid-session (sessionActive)", async () => {
+    mocks.sttIpc.requestSwitch.mockRejectedValue({ kind: "sessionActive" });
+    render(<SettingsView />);
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+
+    await userEvent.click(sttTrigger);
+    await userEvent.click(screen.getByRole("option", { name: /^Small/ }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Cannot change the speech-to-text engine while an audio session is running - stop the session first",
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("shows the local OpenAI-compatible provider entry and its base_url field (FR-03.CUSTOM-1)", async () => {
+    render(<SettingsView />);
+    // Wait for the picker metadata (incl. the local provider) to load before
+    // opening the Select, so the option is present when the list opens.
+    await waitFor(() =>
+      expect(mocks.providersIpc.pickerMetadata).toHaveBeenCalled(),
+    );
+
+    const trigger = await screen.findByRole("button", {
+      name: "Default provider",
+    });
+    await userEvent.click(trigger);
+    const option = await screen.findByRole("option", {
+      name: "Custom (local, OpenAI-compatible)",
+    });
+    await userEvent.click(option);
+
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Local server address (base_url)"),
+      ).toBeInTheDocument(),
+    );
+    expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultProvider: "local_openai" }),
+    );
+  });
+
+  it("persists the local provider base_url and model id", async () => {
+    mocks.loadProviderSettings.mockResolvedValue({
+      ...DEFAULT_PROVIDER_SETTINGS,
+      defaultProvider: "local_openai",
+    });
+    render(<SettingsView />);
+    const baseUrlField = await screen.findByLabelText(
+      "Local server address (base_url)",
+    );
+    await userEvent.type(baseUrlField, "http://127.0.0.1:1234");
+
+    await waitFor(() =>
+      expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          localOpenAi: expect.objectContaining({
+            baseUrl: "http://127.0.0.1:1234",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("check-connection reports a reachable local server", async () => {
+    mocks.loadProviderSettings.mockResolvedValue({
+      ...DEFAULT_PROVIDER_SETTINGS,
+      defaultProvider: "local_openai",
+      localOpenAi: { baseUrl: "http://127.0.0.1:1234", modelId: "llama-3" },
+    });
+    mocks.providersIpc.checkLocalConnection.mockResolvedValue(undefined);
+    render(<SettingsView />);
+    await screen.findByLabelText("Local server address (base_url)");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Check connection" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Connected - the local server answered"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("check-connection distinguishes 'local server not running' from a generic error", async () => {
+    mocks.loadProviderSettings.mockResolvedValue({
+      ...DEFAULT_PROVIDER_SETTINGS,
+      defaultProvider: "local_openai",
+      localOpenAi: { baseUrl: "http://127.0.0.1:1234", modelId: "llama-3" },
+    });
+    mocks.providersIpc.checkLocalConnection.mockRejectedValue({
+      kind: "localServerUnreachable",
+    });
+    render(<SettingsView />);
+    await screen.findByLabelText("Local server address (base_url)");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Check connection" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "The local server is not running - start it and try again",
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("check-connection reports an invalid (non-loopback) base_url distinctly", async () => {
+    mocks.loadProviderSettings.mockResolvedValue({
+      ...DEFAULT_PROVIDER_SETTINGS,
+      defaultProvider: "local_openai",
+      localOpenAi: { baseUrl: "https://example.com", modelId: "llama-3" },
+    });
+    mocks.providersIpc.checkLocalConnection.mockRejectedValue({
+      kind: "invalidBaseUrl",
+    });
+    render(<SettingsView />);
+    await screen.findByLabelText("Local server address (base_url)");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Check connection" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Only a loopback address (127.0.0.1 / localhost) is accepted",
+        ),
+      ).toBeInTheDocument(),
+    );
   });
 });

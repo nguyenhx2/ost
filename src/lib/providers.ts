@@ -122,3 +122,24 @@ export const PROVIDER_META_LIST: ProviderMeta[] = PROVIDER_IDS.map(
 export function isProviderId(value: string): value is ProviderId {
   return (PROVIDER_IDS as readonly string[]).includes(value);
 }
+
+/* ------------------------------------------------------------------ */
+/* Local translation provider (FR-03.CUSTOM-1..5, TASK-026 part C)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The local, OpenAI-compatible translation provider (LM Studio and similar).
+ * It is the fifth entry of the translation-provider PICKER only (never the
+ * keychain-backed `ProviderId` above, and never the STT engine picker - see
+ * PRD-FR-01-stt-backend-options section 3 "Ranh giới hai bộ chọn").
+ */
+export const LOCAL_OPENAI_PROVIDER_ID = "local_openai" as const;
+
+/** The active/default translation provider can be a keyed provider or the
+ * local one - widening ONLY the default-provider selection, not the
+ * keychain-backed `ProviderId` used by key entry/validation/fallback. */
+export type ActiveProviderId = ProviderId | typeof LOCAL_OPENAI_PROVIDER_ID;
+
+export function isActiveProviderId(value: string): value is ActiveProviderId {
+  return isProviderId(value) || value === LOCAL_OPENAI_PROVIDER_ID;
+}

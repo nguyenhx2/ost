@@ -75,4 +75,64 @@ describe("Select (custom - design-system.md bans native <select>)", () => {
       screen.getByRole("option", { name: "gemini / gemini-2.5-flash" }),
     ).toHaveAttribute("aria-selected", "true");
   });
+
+  it("shows a disabled option with its reason via Tooltip and never selects it", async () => {
+    const onChange = vi.fn();
+    const options: SelectOption[] = [
+      { value: "base", label: "Base" },
+      {
+        value: "large-v3",
+        label: "Large v3",
+        disabled: true,
+        disabledReason: "Requires a compatible CUDA GPU",
+      },
+    ];
+    render(
+      <Select
+        label="STT engine"
+        options={options}
+        value="base"
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "STT engine" }));
+
+    const disabledOption = screen.getByRole("option", { name: "Large v3" });
+    expect(disabledOption).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByText("Requires a compatible CUDA GPU"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(disabledOption);
+    expect(onChange).not.toHaveBeenCalled();
+    // Clicking a disabled option does not close the listbox either.
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+  });
+
+  it("keyboard navigation skips disabled options", async () => {
+    const onChange = vi.fn();
+    const options: SelectOption[] = [
+      { value: "tiny", label: "Tiny" },
+      {
+        value: "small",
+        label: "Small",
+        disabled: true,
+        disabledReason: "no RAM",
+      },
+      { value: "base", label: "Base" },
+    ];
+    render(
+      <Select
+        label="STT engine"
+        options={options}
+        value="tiny"
+        onChange={onChange}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "STT engine" });
+    trigger.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(onChange).toHaveBeenCalledWith("base");
+  });
 });

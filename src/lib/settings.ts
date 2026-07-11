@@ -1,8 +1,11 @@
 import { load, type Store } from "@tauri-apps/plugin-store";
 import {
+  isActiveProviderId,
   isProviderId,
+  LOCAL_OPENAI_PROVIDER_ID,
   PROVIDER_IDS,
   PROVIDER_META,
+  type ActiveProviderId,
   type ProviderId,
 } from "./providers";
 
@@ -19,13 +22,32 @@ import {
 const STORE_FILE = "settings.json";
 const SELECTION_KEY = "providerSelection";
 
+/**
+ * Local OpenAI-compatible translation provider settings (FR-03.CUSTOM-1..5).
+ * `baseUrl` is loopback-only (enforced core-side); `modelId` is a free-text
+ * opaque id (no catalog for a local server). Neither is a secret (BR-02) -
+ * both live here, never in the OS keychain.
+ */
+export interface LocalOpenAiSettings {
+  baseUrl: string;
+  modelId: string;
+}
+
+export const DEFAULT_LOCAL_OPENAI_SETTINGS: LocalOpenAiSettings = {
+  baseUrl: "",
+  modelId: "",
+};
+
 export interface ProviderSettings {
-  /** Active provider used for translation (AC-03.5). */
-  defaultProvider: ProviderId;
-  /** Chosen model per provider (opaque model id) - AC-03.1 "choose model". */
+  /** Active provider used for translation (AC-03.5); may be the local
+   * OpenAI-compatible provider (FR-03.CUSTOM-1). */
+  defaultProvider: ActiveProviderId;
+  /** Chosen model per KEYED provider (opaque model id) - AC-03.1 "choose model". */
   models: Record<ProviderId, string>;
-  /** Provider try-order on failure (AC-03.6); always the full set, deduped. */
+  /** Provider try-order on failure (AC-03.6); always the full KEYED set, deduped. */
   fallbackOrder: ProviderId[];
+  /** Local/base-url provider config (FR-03.CUSTOM-1..5); never a secret. */
+  localOpenAi: LocalOpenAiSettings;
 }
 
 function firstModel(provider: ProviderId): string {
@@ -46,6 +68,7 @@ export const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
   defaultProvider: "gemini",
   models: defaultModels(),
   fallbackOrder: [...PROVIDER_IDS],
+  localOpenAi: { ...DEFAULT_LOCAL_OPENAI_SETTINGS },
 };
 
 let storePromise: Promise<Store> | null = null;
@@ -95,6 +118,23 @@ function coerceModels(raw: unknown): Record<ProviderId, string> {
   return models;
 }
 
+function coerceLocalOpenAi(raw: unknown): LocalOpenAiSettings {
+  if (typeof raw !== "object" || raw === null) {
+    return { ...DEFAULT_LOCAL_OPENAI_SETTINGS };
+  }
+  const record = raw as Record<string, unknown>;
+  return {
+    baseUrl:
+      typeof record.baseUrl === "string"
+        ? record.baseUrl
+        : DEFAULT_LOCAL_OPENAI_SETTINGS.baseUrl,
+    modelId:
+      typeof record.modelId === "string"
+        ? record.modelId
+        : DEFAULT_LOCAL_OPENAI_SETTINGS.modelId,
+  };
+}
+
 function coerceSettings(raw: unknown): ProviderSettings {
   if (typeof raw !== "object" || raw === null) {
     return DEFAULT_PROVIDER_SETTINGS;
@@ -103,7 +143,7 @@ function coerceSettings(raw: unknown): ProviderSettings {
 
   const defaultProvider =
     typeof record.defaultProvider === "string" &&
-    isProviderId(record.defaultProvider)
+    isActiveProviderId(record.defaultProvider)
       ? record.defaultProvider
       : DEFAULT_PROVIDER_SETTINGS.defaultProvider;
 
@@ -114,11 +154,20 @@ function coerceSettings(raw: unknown): ProviderSettings {
     : [];
   const fallbackOrder = normalizeFallbackOrder(rawOrder);
 
-  return { defaultProvider, models, fallbackOrder };
+  const localOpenAi = coerceLocalOpenAi(record.localOpenAi);
+
+  return { defaultProvider, models, fallbackOrder, localOpenAi };
 }
 
-/** The active model = the chosen model for the active provider (AC-03.5). */
+/**
+ * The active model = the chosen model for the active provider (AC-03.5). The
+ * local OpenAI-compatible provider has no fixed catalog - its model id is the
+ * free-text field in `localOpenAi` instead of the keyed `models` record.
+ */
 export function activeModel(settings: ProviderSettings): string {
+  if (settings.defaultProvider === LOCAL_OPENAI_PROVIDER_ID) {
+    return settings.localOpenAi.modelId;
+  }
   return settings.models[settings.defaultProvider];
 }
 
@@ -137,6 +186,7 @@ export async function saveProviderSettings(
     defaultProvider: settings.defaultProvider,
     models: { ...settings.models },
     fallbackOrder: normalizeFallbackOrder(settings.fallbackOrder),
+    localOpenAi: { ...settings.localOpenAi },
   };
   const store = await getStore();
   await store.set(SELECTION_KEY, normalized);

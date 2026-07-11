@@ -97,6 +97,42 @@ describe("useProviderSelection", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("switching to the local provider persists it as the default (FR-03.CUSTOM-1)", async () => {
+    const { result } = renderHook(() => useProviderSelection());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setDefaultProvider("local_openai");
+    });
+
+    expect(result.current.settings.defaultProvider).toBe("local_openai");
+    expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultProvider: "local_openai" }),
+    );
+  });
+
+  it("persists the local provider's base_url and model id", async () => {
+    const { result } = renderHook(() => useProviderSelection());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setLocalOpenAiBaseUrl("http://127.0.0.1:1234");
+    });
+    await act(async () => {
+      await result.current.setLocalOpenAiModelId("llama-3");
+    });
+
+    expect(result.current.settings.localOpenAi).toEqual({
+      baseUrl: "http://127.0.0.1:1234",
+      modelId: "llama-3",
+    });
+    expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localOpenAi: { baseUrl: "http://127.0.0.1:1234", modelId: "llama-3" },
+      }),
+    );
+  });
+
   it("ignores an out-of-range move", async () => {
     const { result } = renderHook(() => useProviderSelection());
     await waitFor(() => expect(result.current.loading).toBe(false));

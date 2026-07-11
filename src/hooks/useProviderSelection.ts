@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { type ProviderId } from "../lib/providers";
+import { type ActiveProviderId, type ProviderId } from "../lib/providers";
 import {
   DEFAULT_PROVIDER_SETTINGS,
   loadProviderSettings,
@@ -21,12 +21,16 @@ export interface UseProviderSelectionResult {
   loading: boolean;
   /** Last persistence failure, or null when the store is in sync. */
   error: SelectionError | null;
-  /** Switch the active provider (AC-03.5). */
-  setDefaultProvider: (provider: ProviderId) => Promise<void>;
+  /** Switch the active provider (AC-03.5); may be the local provider. */
+  setDefaultProvider: (provider: ActiveProviderId) => Promise<void>;
   /** Choose the model for a provider (AC-03.1 / AC-03.5). */
   setProviderModel: (provider: ProviderId, model: string) => Promise<void>;
   /** Reorder the fallback list (AC-03.6). */
   moveFallback: (index: number, direction: MoveDirection) => Promise<void>;
+  /** Persist the local OpenAI-compatible provider's base_url (FR-03.CUSTOM-2). */
+  setLocalOpenAiBaseUrl: (baseUrl: string) => Promise<void>;
+  /** Persist the local OpenAI-compatible provider's free-text model id. */
+  setLocalOpenAiModelId: (modelId: string) => Promise<void>;
 }
 
 /**
@@ -74,7 +78,7 @@ export function useProviderSelection(): UseProviderSelectionResult {
   }, []);
 
   const setDefaultProvider = useCallback(
-    async (provider: ProviderId) => {
+    async (provider: ActiveProviderId) => {
       await persist({ ...settings, defaultProvider: provider });
     },
     [persist, settings],
@@ -109,6 +113,26 @@ export function useProviderSelection(): UseProviderSelectionResult {
     [persist, settings],
   );
 
+  const setLocalOpenAiBaseUrl = useCallback(
+    async (baseUrl: string) => {
+      await persist({
+        ...settings,
+        localOpenAi: { ...settings.localOpenAi, baseUrl },
+      });
+    },
+    [persist, settings],
+  );
+
+  const setLocalOpenAiModelId = useCallback(
+    async (modelId: string) => {
+      await persist({
+        ...settings,
+        localOpenAi: { ...settings.localOpenAi, modelId },
+      });
+    },
+    [persist, settings],
+  );
+
   return {
     settings,
     loading,
@@ -116,5 +140,7 @@ export function useProviderSelection(): UseProviderSelectionResult {
     setDefaultProvider,
     setProviderModel,
     moveFallback,
+    setLocalOpenAiBaseUrl,
+    setLocalOpenAiModelId,
   };
 }

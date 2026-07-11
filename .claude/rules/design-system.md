@@ -36,6 +36,7 @@ Landed primitives:
 | `Tooltip` | `src/components/ui/Tooltip.tsx` | Hover/focus tooltip linked via `aria-describedby` (raw `title=` banned) |
 | `OverlayPanel` | `src/components/ui/OverlayPanel.tsx` | Translation overlay surface with user-adjustable scrim opacity |
 | `PlainText` | `src/components/ui/PlainText.tsx` | Sanitizing plain-text renderer for untrusted OCR/transcript/translation output |
+| `ProgressBar` | `src/components/ui/ProgressBar.tsx` | Determinate progress bar (STT model-download progress, TASK-026) |
 
 ## Banned outright
 
