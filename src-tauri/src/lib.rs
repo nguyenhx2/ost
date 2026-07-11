@@ -71,11 +71,25 @@ pub fn run() {
             // model (BR-08 / AC-01.8) in the same fail-closed gate - one facility,
             // no second consent gate. The download only starts after the user
             // grants consent over IPC (security-privacy.md).
-            let recommended =
-                stt::WhisperModel::for_size(stt::recommend_model(&stt::probe_hardware()));
+            let hardware_profile = stt::probe_hardware();
+            let recommended = stt::WhisperModel::for_size(stt::recommend_model(&hardware_profile));
             let whisper_dir = stt::resolve_whisper_model_dir();
             let whisper_descriptor =
                 stt::whisper_model_set_descriptor(recommended, whisper_dir.clone());
+
+            // Settings-time model switcher (TASK-026): honor a persisted
+            // selection from a PRIOR Settings switch when it still names a
+            // catalog tier the CURRENT hardware profile allows; otherwise fall
+            // back to the hardware-recommended default (today's behavior).
+            let settings_store = app.store("settings.json")?;
+            let stored_stt_model = settings_store
+                .get("sttModel")
+                .and_then(|v| v.as_str().map(str::to_string));
+            let selected_model = stt::resolve_selected_model(
+                stored_stt_model.as_deref(),
+                recommended,
+                &hardware_profile,
+            );
             let gate = Arc::new(models::ModelGate::new(
                 consent,
                 vec![ocr_descriptor, whisper_descriptor],
@@ -99,7 +113,7 @@ pub fn run() {
             app.manage(shell::audio_session::AudioSessionPipeline::new_default(
                 Arc::new(keys::KeyStore::new_os_keychain()),
                 gate,
-                recommended,
+                selected_model,
                 whisper_dir,
                 coordinator,
             ));
@@ -120,6 +134,9 @@ pub fn run() {
             shell::region::nudge_region_preview,
             shell::audio_session::start_audio_session,
             shell::audio_session::stop_audio_session,
+            shell::audio_session::list_stt_models,
+            shell::audio_session::request_stt_model_switch,
+            shell::audio_session::confirm_stt_model_switch,
             shell::caption::open_caption_overlay,
             shell::caption::close_caption_overlay,
             shell::caption::nudge_caption_overlay,

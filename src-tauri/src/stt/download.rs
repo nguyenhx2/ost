@@ -114,6 +114,25 @@ pub async fn ensure_model_available(
     model_dir: &Path,
     gate: &ModelGate,
 ) -> Result<PathBuf, DownloadError> {
+    ensure_model_available_with_progress(model, model_dir, gate, |_downloaded, _total| {}).await
+}
+
+/// Same fail-closed contract as [`ensure_model_available`], additionally
+/// invoking `on_progress(downloaded_bytes, total_bytes)` after each chunk of
+/// the HTTPS fetch (Settings-time model switching, TASK-026: the download
+/// dialog shows live progress instead of a silent multi-hundred-MB wait).
+/// `total_bytes` falls back to the model's approximate published size when the
+/// server omits `Content-Length`. [`ensure_model_available`] is a thin
+/// no-progress wrapper so the original call sites are unaffected.
+pub async fn ensure_model_available_with_progress<F>(
+    model: WhisperModel,
+    model_dir: &Path,
+    gate: &ModelGate,
+    mut on_progress: F,
+) -> Result<PathBuf, DownloadError>
+where
+    F: FnMut(u64, u64),
+{
     // 1. Fail-closed consent gate FIRST - no byte is fetched without consent.
     gate.ensure_download_allowed(WHISPER_MODEL_SET_ID)
         .map_err(map_consent_error)?;
@@ -131,17 +150,26 @@ pub async fn ensure_model_available(
         });
     }
 
-    // 4. Fetch over HTTPS.
+    // 4. Fetch over HTTPS, streaming chunks so progress can be reported.
     let url = model_url(&model);
-    let response = reqwest::get(&url)
+    let mut response = reqwest::get(&url)
         .await
         .map_err(|e| DownloadError::Network(e.to_string()))?
         .error_for_status()
         .map_err(|e| DownloadError::Network(e.to_string()))?;
-    let bytes = response
-        .bytes()
+    let total = response
+        .content_length()
+        .unwrap_or(model.approx_download_bytes);
+
+    let mut bytes = Vec::with_capacity(total.min(u32::MAX as u64) as usize);
+    while let Some(chunk) = response
+        .chunk()
         .await
-        .map_err(|e| DownloadError::Network(e.to_string()))?;
+        .map_err(|e| DownloadError::Network(e.to_string()))?
+    {
+        bytes.extend_from_slice(&chunk);
+        on_progress(bytes.len() as u64, total);
+    }
 
     // Verify BEFORE writing - a mismatch (or missing pin) writes nothing.
     verify_model_bytes(&model, &bytes)?;
@@ -229,6 +257,8 @@ mod tests {
             WhisperModel::BASE,
             WhisperModel::SMALL,
             WhisperModel::MEDIUM,
+            WhisperModel::LARGE_V3_TURBO,
+            WhisperModel::LARGE_V3,
         ] {
             let digest = model.sha256.expect("pinned");
             // Bytes that DO hash to the pin would pass; unrelated bytes fail.
@@ -274,5 +304,37 @@ mod tests {
             !dir.exists(),
             "a refused download must not touch the cache dir"
         );
+    }
+
+    #[tokio::test]
+    async fn progress_variant_also_fails_closed_and_reports_no_progress() {
+        use crate::models::{InMemoryConsentStore, ModelGate};
+        use crate::stt::model::whisper_model_set_descriptor;
+        use std::path::PathBuf;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let dir =
+            std::env::temp_dir().join(format!("ost-dl-progress-noconsent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let gate = ModelGate::new(
+            Arc::new(InMemoryConsentStore::default()),
+            vec![whisper_model_set_descriptor(
+                WhisperModel::TINY,
+                PathBuf::from("/cache"),
+            )],
+        );
+        let calls = AtomicUsize::new(0);
+        let result =
+            ensure_model_available_with_progress(WhisperModel::TINY, &dir, &gate, |_, _| {
+                calls.fetch_add(1, Ordering::SeqCst);
+            })
+            .await;
+        assert!(matches!(result, Err(DownloadError::ConsentRequired(_))));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "no progress callback without a fetch"
+        );
+        assert!(!dir.exists());
     }
 }

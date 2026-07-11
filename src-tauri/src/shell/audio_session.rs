@@ -26,6 +26,7 @@ use std::time::Instant;
 use async_trait::async_trait;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri_plugin_store::StoreExt;
 use tokio::sync::mpsc;
 
 use crate::audio::{AudioChunk, CaptureSession};
@@ -36,8 +37,9 @@ use crate::providers::{
     build_provider, ProviderId, TranslationProvider, TranslationRequest, TranslationResult,
 };
 use crate::stt::{
-    ensure_model_available, DownloadError, SpeechToText, SttError, TranscribeOptions, Transcript,
-    WhisperModel, WhisperStt,
+    catalog, decide_switch, ensure_model_available, ensure_model_available_with_progress,
+    probe_hardware, DownloadError, SpeechToText, SttError, SwitchDecision, SwitchError,
+    TranscribeOptions, Transcript, WhisperModel, WhisperStt, WHISPER_MODEL_SET_ID,
 };
 
 use super::region::EVENT_MODEL_CONSENT_REQUIRED;
@@ -55,6 +57,17 @@ pub const EVENT_AUDIO_ERROR: &str = "audio:error";
 /// sync (TASK-016 follow-up). No payload - closing is the only signal. Kept in
 /// sync with `src/lib/ipc.ts` `EVENT_AUDIO_STOPPED` and ipc.md.
 pub const EVENT_AUDIO_STOPPED: &str = "audio:stopped";
+/// Emitted while a Settings-time STT model switch is downloading (TASK-026);
+/// the Settings UI renders a progress bar instead of a silent multi-hundred-MB
+/// wait. Kept in sync with `src/lib/ipc.ts` and ipc.md.
+pub const EVENT_STT_MODEL_DOWNLOAD_PROGRESS: &str = "stt:model-download-progress";
+
+/// The settings-store file + key the selected STT model id is persisted under.
+/// Shares `settings.json` with the hotkey config and provider selection
+/// (`shell::hotkeys`); this key holds a catalog id NAME only, never a secret
+/// (BR-02).
+const SETTINGS_STORE_FILE: &str = "settings.json";
+const STT_MODEL_STORE_KEY: &str = "sttModel";
 
 /// Default caption target language (AC-01.5): Vietnamese, the product's primary
 /// locale. Configurable per session via [`AudioSessionRequest::target_language`].
@@ -418,7 +431,11 @@ struct ActiveSession {
 pub struct AudioSessionPipeline {
     keys: Arc<KeyStore>,
     gate: Arc<ModelGate>,
-    model: WhisperModel,
+    /// The CURRENTLY SELECTED whisper model. A `Mutex` so Settings-time
+    /// switching (TASK-026) can update it: the engine is built fresh from this
+    /// value on every [`start_audio_session`], so a switch takes effect on the
+    /// NEXT session with no separate "reload" path and no app restart.
+    model: Mutex<WhisperModel>,
     model_dir: PathBuf,
     active: Mutex<Option<ActiveSession>>,
     /// The one-heavy-session-at-a-time coordinator (BR-04): starting an audio
@@ -429,8 +446,10 @@ pub struct AudioSessionPipeline {
 
 impl AudioSessionPipeline {
     /// Wires the production backends: OS-keychain key store, the shared
-    /// fail-closed consent `gate`, the hardware-recommended whisper model, and
-    /// the shared heavy-session `coordinator` (BR-04).
+    /// fail-closed consent `gate`, the initially-selected whisper model
+    /// (hardware-recommended default, or the persisted Settings selection when
+    /// still valid - `stt::catalog::resolve_selected_model`), and the shared
+    /// heavy-session `coordinator` (BR-04).
     pub fn new_default(
         keys: Arc<KeyStore>,
         gate: Arc<ModelGate>,
@@ -441,11 +460,26 @@ impl AudioSessionPipeline {
         Self {
             keys,
             gate,
-            model,
+            model: Mutex::new(model),
             model_dir,
             active: Mutex::new(None),
             coordinator,
         }
+    }
+
+    /// The currently selected model. Falls back to [`WhisperModel::BASE`] on a
+    /// poisoned lock (a prior panic while holding it) rather than propagating
+    /// the panic - defensive, mirrors the `active` lock's `unwrap_or` style
+    /// elsewhere in this file; the critical section here never panics.
+    fn current_model(&self) -> WhisperModel {
+        self.model.lock().map(|g| *g).unwrap_or(WhisperModel::BASE)
+    }
+
+    /// `true` while an audio session is running - switching the model is
+    /// refused during this window (TASK-026: never swap the engine under an
+    /// active transcription loop).
+    fn is_session_active(&self) -> bool {
+        self.active.lock().map(|g| g.is_some()).unwrap_or(false)
     }
 
     /// Stops the active session (if any): halts capture within <= 1s (AC-01.10),
@@ -512,7 +546,7 @@ pub async fn start_audio_session(
     request: AudioSessionRequest,
 ) -> Result<(), AudioError> {
     // Reject a second start while one is running (single active session).
-    if pipeline.active.lock().map(|g| g.is_some()).unwrap_or(false) {
+    if pipeline.is_session_active() {
         return Err(AudioError::AlreadyRunning);
     }
 
@@ -525,14 +559,19 @@ pub async fn start_audio_session(
     let translator: Arc<dyn CaptionTranslator> =
         Arc::new(resolve_translator(&pipeline.keys, provider).await?);
 
+    // The CURRENTLY SELECTED model (Settings-time switching, TASK-026): read
+    // once so the whole session uses one consistent choice even if a switch
+    // request races in (which is itself refused while a session is active).
+    let model = pipeline.current_model();
+
     // Fail-closed, SHA-256-verified model availability (consent gate first).
-    ensure_model_available(pipeline.model, &pipeline.model_dir, &pipeline.gate)
+    ensure_model_available(model, &pipeline.model_dir, &pipeline.gate)
         .await
         .map_err(|e| map_download_error(&app, e))?;
 
     // Build the whisper engine (required consent gate) and the capture source.
     let stt: Arc<dyn SpeechToText> = Arc::new(WhisperStt::new(
-        pipeline.model,
+        model,
         pipeline.model_dir.clone(),
         Arc::clone(&pipeline.gate),
     ));
@@ -581,6 +620,248 @@ pub async fn stop_audio_session(
     pipeline: State<'_, AudioSessionPipeline>,
 ) -> Result<(), AudioError> {
     pipeline.stop();
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Settings-time STT model switcher (FR-01, TASK-026,
+// PRD-FR-01-stt-backend-options): extends the BR-08 first-run
+// hardware-recommended default with a Settings picker across
+// tiny/base/small/large-v3-turbo (+ large-v3 when CUDA-gated allowed). The
+// download itself reuses the shared fail-closed consent gate and the
+// `stt::download` fetch/verify path; only the disclosure shown is
+// per-target-model (the exact file size of the tier the user picked), never
+// the whole catalog.
+// ---------------------------------------------------------------------------
+
+/// One row of [`list_stt_models`] (Settings picker). Serializes to camelCase
+/// for the WebView; never carries a secret.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SttModelInfo {
+    /// Stable catalog id (`stt::catalog::CatalogEntry::id`).
+    pub id: String,
+    /// UI label (English fallback string; i18n owns the rendered copy).
+    pub label: String,
+    /// Approximate download size in bytes (shown before consent).
+    pub approx_download_bytes: u64,
+    /// Approximate resident RAM in bytes (BR-04 guardrail context).
+    pub approx_ram_bytes: u64,
+    /// Whether the model file is already present on disk (no download needed
+    /// to switch to it).
+    pub downloaded: bool,
+    /// Whether the CURRENT hardware profile allows this tier (RAM floor / CUDA
+    /// gate - FR-01.STT-2/STT-4). The UI hides/disables entries where `false`.
+    pub allowed_by_probe: bool,
+    /// `true` only for `large-v3` (FR-01.STT-2): the UI shows a "requires a
+    /// CUDA GPU" note.
+    pub requires_cuda: bool,
+    /// `true` for the model the pipeline currently uses for new sessions.
+    pub current: bool,
+}
+
+/// Errors from a Settings-time STT model switch request. Serializes to
+/// `{ kind }` (never a secret); the UI maps `kind` to an i18n message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SttModelSwitchError {
+    /// The requested id does not name a catalog entry.
+    #[error("unknown STT model id")]
+    UnknownModel,
+    /// The current hardware profile does not allow this tier.
+    #[error("model not allowed on this hardware")]
+    NotAllowed,
+    /// A live audio session is running; switching is refused mid-session.
+    #[error("cannot switch the STT model while a session is active")]
+    SessionActive,
+    /// The model download failed (network/integrity/io) - see `stt::download`.
+    #[error("STT model download failed")]
+    Download,
+    /// The selection could not be persisted to the settings store.
+    #[error("could not persist the STT model selection")]
+    Store,
+}
+
+impl SttModelSwitchError {
+    fn kind(&self) -> &'static str {
+        match self {
+            SttModelSwitchError::UnknownModel => "unknownModel",
+            SttModelSwitchError::NotAllowed => "notAllowed",
+            SttModelSwitchError::SessionActive => "sessionActive",
+            SttModelSwitchError::Download => "download",
+            SttModelSwitchError::Store => "store",
+        }
+    }
+}
+
+impl Serialize for SttModelSwitchError {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("SttModelSwitchError", 1)?;
+        s.serialize_field("kind", self.kind())?;
+        s.end()
+    }
+}
+
+impl From<SwitchError> for SttModelSwitchError {
+    fn from(err: SwitchError) -> Self {
+        match err {
+            SwitchError::UnknownModel => SttModelSwitchError::UnknownModel,
+            SwitchError::NotAllowed => SttModelSwitchError::NotAllowed,
+            SwitchError::SessionActive => SttModelSwitchError::SessionActive,
+        }
+    }
+}
+
+/// The outcome of [`request_stt_model_switch`], tagged by `status` for the
+/// WebView.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum SttModelSwitchOutcome {
+    /// The requested model was already selected - nothing changed.
+    AlreadyCurrent,
+    /// The model was already on disk: the switch is applied immediately, no
+    /// download/consent needed.
+    Switched,
+    /// The model is not on disk: `disclosure` names the exact download size;
+    /// the caller shows a confirmation dialog, then calls
+    /// [`confirm_stt_model_switch`].
+    ConsentRequired { disclosure: ConsentDisclosure },
+}
+
+/// Payload of [`EVENT_STT_MODEL_DOWNLOAD_PROGRESS`], emitted repeatedly while
+/// [`confirm_stt_model_switch`] downloads. All fields are non-secret sizes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SttModelDownloadProgressPayload {
+    pub model_id: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+}
+
+/// Builds the [`SttModelInfo`] rows for every catalog tier against the CURRENT
+/// hardware probe. Read-only; never triggers a download.
+#[tauri::command]
+pub fn list_stt_models(pipeline: State<'_, AudioSessionPipeline>) -> Vec<SttModelInfo> {
+    let profile = probe_hardware();
+    let current = pipeline.current_model();
+    catalog::CATALOG
+        .iter()
+        .map(|entry| SttModelInfo {
+            id: entry.id.to_string(),
+            label: entry.label.to_string(),
+            approx_download_bytes: entry.model.approx_download_bytes,
+            approx_ram_bytes: entry.model.approx_ram_bytes,
+            downloaded: entry.model.path_in(&pipeline.model_dir).exists(),
+            allowed_by_probe: catalog::is_allowed(entry, &profile),
+            requires_cuda: entry.requires_cuda,
+            current: entry.model.size == current.size,
+        })
+        .collect()
+}
+
+/// Validates a switch request against the catalog + current hardware profile
+/// + active-session state, applying it immediately when no download is
+/// needed. Returns [`SttModelSwitchOutcome::ConsentRequired`] (with the exact
+/// per-model download size) when a fetch is required - the caller must then
+/// call [`confirm_stt_model_switch`] after the user confirms.
+#[tauri::command]
+pub fn request_stt_model_switch(
+    app: AppHandle,
+    pipeline: State<'_, AudioSessionPipeline>,
+    model_id: String,
+) -> Result<SttModelSwitchOutcome, SttModelSwitchError> {
+    let entry = catalog::entry_for_id(&model_id).ok_or(SttModelSwitchError::UnknownModel)?;
+    let profile = probe_hardware();
+    if !catalog::is_allowed(entry, &profile) {
+        return Err(SttModelSwitchError::NotAllowed);
+    }
+
+    let already_selected = entry.model.size == pipeline.current_model().size;
+    let file_present = entry.model.path_in(&pipeline.model_dir).exists();
+    let decision = decide_switch(already_selected, file_present, pipeline.is_session_active())?;
+
+    match decision {
+        SwitchDecision::AlreadyCurrent => Ok(SttModelSwitchOutcome::AlreadyCurrent),
+        SwitchDecision::Switched => {
+            apply_model_switch(&app, &pipeline, &model_id, entry.model)?;
+            Ok(SttModelSwitchOutcome::Switched)
+        }
+        SwitchDecision::ConsentRequired => {
+            let disclosure =
+                crate::stt::whisper_model_set_descriptor(entry.model, pipeline.model_dir.clone())
+                    .disclosure();
+            Ok(SttModelSwitchOutcome::ConsentRequired { disclosure })
+        }
+    }
+}
+
+/// Downloads the target model (after the user confirmed the
+/// [`SttModelSwitchOutcome::ConsentRequired`] disclosure), reporting progress
+/// via [`EVENT_STT_MODEL_DOWNLOAD_PROGRESS`], then applies the switch. Grants
+/// the shared whisper-download consent flag (idempotent) - this extends the
+/// SAME BR-08 fail-closed gate the first-run download uses, rather than a
+/// second one, per PRD-FR-01-stt-backend-options section 4 FR-01.STT-3.
+#[tauri::command]
+pub async fn confirm_stt_model_switch(
+    app: AppHandle,
+    pipeline: State<'_, AudioSessionPipeline>,
+    model_id: String,
+) -> Result<(), SttModelSwitchError> {
+    let entry = catalog::entry_for_id(&model_id).ok_or(SttModelSwitchError::UnknownModel)?;
+    let profile = probe_hardware();
+    if !catalog::is_allowed(entry, &profile) {
+        return Err(SttModelSwitchError::NotAllowed);
+    }
+    if pipeline.is_session_active() {
+        return Err(SttModelSwitchError::SessionActive);
+    }
+
+    pipeline
+        .gate
+        .grant(WHISPER_MODEL_SET_ID)
+        .map_err(|_| SttModelSwitchError::Download)?;
+
+    let model = entry.model;
+    let dir = pipeline.model_dir.clone();
+    let progress_app = app.clone();
+    let progress_id = model_id.clone();
+    ensure_model_available_with_progress(model, &dir, &pipeline.gate, move |downloaded, total| {
+        let _ = progress_app.emit(
+            EVENT_STT_MODEL_DOWNLOAD_PROGRESS,
+            SttModelDownloadProgressPayload {
+                model_id: progress_id.clone(),
+                downloaded_bytes: downloaded,
+                total_bytes: total,
+            },
+        );
+    })
+    .await
+    .map_err(|_| SttModelSwitchError::Download)?;
+
+    apply_model_switch(&app, &pipeline, &model_id, model)
+}
+
+/// Persists `model_id` to the settings store and swaps the pipeline's current
+/// model. Called once the target model is confirmed present on disk (either
+/// it already was, or [`confirm_stt_model_switch`] just fetched it).
+fn apply_model_switch(
+    app: &AppHandle,
+    pipeline: &AudioSessionPipeline,
+    model_id: &str,
+    model: WhisperModel,
+) -> Result<(), SttModelSwitchError> {
+    let store = app
+        .store(SETTINGS_STORE_FILE)
+        .map_err(|_| SttModelSwitchError::Store)?;
+    store.set(
+        STT_MODEL_STORE_KEY,
+        serde_json::Value::String(model_id.to_string()),
+    );
+    store.save().map_err(|_| SttModelSwitchError::Store)?;
+
+    if let Ok(mut guard) = pipeline.model.lock() {
+        *guard = model;
+    }
     Ok(())
 }
 
