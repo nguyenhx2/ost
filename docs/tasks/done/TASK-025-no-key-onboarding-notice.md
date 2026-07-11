@@ -1,6 +1,6 @@
 ---
 title: "TASK-025: No-API-key onboarding notice on translation surfaces"
-status: Active
+status: Done
 fr: FR-04
 owner: frontend-ui-dev
 deps: TASK-009
@@ -43,6 +43,7 @@ When no provider has a key configured (zero keys), every translation surface sho
 |------|-----|---------------|--------|
 | 2026-07-11 | orchestrator | Registered task; dispatch after TASK-024 merges (shared translation-surface files) | pending |
 | 2026-07-11 | frontend-ui-dev | Added `hasAnyProviderKey` predicate (src/lib/providerKeys.ts) + `useHasAnyProviderKey` hook; wired zero-key detection into region preview (client-side gate before the translate request, new `noKey` failure reason, distinct notice + Open Settings) and caption overlay (client-side pre-check in `useCaptionOverlay.startSession`, falling back to the existing backend `noProviderKey` AudioErrorKind mapping); added `preview.noProviderKey`/`preview.openSettings` i18n keys (vi+en); added/updated Vitest coverage for both surfaces (hook + view level) plus new lib/hook unit tests. `npm run lint`: pass. `npm run test`: 246/246 pass (was 229; +17 new). | done |
+| 2026-07-11 | orchestrator | PR #49 merged (6edadd0); both reviews APPROVE; CI green; task closed | Done |
 
 ## Result
-<Fill when moving to Done; link the PR/commit.>
+Shipped in PR #49 (merge commit 6edadd0, branch feat/no-key-onboarding-notice, commit 7318e8c). Zero-key state now shows a distinct actionable notice with a one-click Open Settings affordance on region preview and caption overlay (i18n vi+en); the generic translation-failed message is reserved for real failures. Detection via masked key_present statuses only, proactive client-side short-circuit plus backend noProviderKey fallback on the audio path. Code review APPROVE; security review APPROVE (masked-status-only confirmed); CI green; 246/246 Vitest. Follow-up noted for a later ticket: key status is captured per mount/session (notice clears on next OCR event or session start, not instantly if the window stays open while a key is added), and a typed error kind for TranslationErrorPayload would enable backend fallback on the region path.
