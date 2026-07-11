@@ -27,12 +27,20 @@ const CLOSE_TO_TRAY_LABELS: [&str; 3] = [
     history::HISTORY_WINDOW_LABEL,
 ];
 
-/// Central window-event handler (registered once in `lib.rs`). Two jobs:
+/// Central window-event handler (registered once in `lib.rs`). Three jobs:
 /// 1. Close-to-tray for the primary surfaces (hide instead of destroy) so the
 ///    app never exits on a window close - only the tray "Thoát" quits (AC-04.2).
 /// 2. When the caption overlay is destroyed, stop the audio session and emit
 ///    `audio:stopped` so a separate Settings window keeps its running-state in
 ///    sync (TASK-016 follow-up).
+/// 3. When the region-SELECT overlay is destroyed AND a region is pending (a
+///    confirm armed one), open the region-PREVIEW window. This deferral is the
+///    fix for the reentrant window-lifecycle deadlock (TASK-023): opening the
+///    preview here - at the top of a fresh event-loop iteration, after
+///    `NtUserDestroyWindow` has fully returned and the select window's
+///    `WebviewWrapper` is dropped - means the preview WebView2 create's message
+///    pump has no pending destroy to reenter. A cancel arms nothing, so its
+///    `Destroyed` opens no preview.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
@@ -47,6 +55,16 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 pipeline.stop();
             }
             let _ = app.emit(audio_session::EVENT_AUDIO_STOPPED, ());
+        }
+        WindowEvent::Destroyed if window.label() == region::SELECT_WINDOW_LABEL => {
+            let app = window.app_handle();
+            let open_preview = app
+                .try_state::<region::RegionState>()
+                .map(|state| region::should_open_preview_after_select_close(&state))
+                .unwrap_or(false);
+            if open_preview {
+                let _ = region::open_preview_window(app);
+            }
         }
         _ => {}
     }

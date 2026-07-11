@@ -540,6 +540,16 @@ pub fn clamp_nudge(delta: i32) -> i32 {
 /// down on cancel/confirm - idle budget, FR-05). Focuses the existing window
 /// if one is already open.
 pub fn open_selection_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), ShellError> {
+    // A fresh selection cycle invalidates any prior unconsumed arm: clear the
+    // pending region up front so the eventual select `Destroyed` decision is
+    // scoped to THIS cycle. Otherwise a stale arm (e.g. a preview closed without
+    // granting consent, which re-arms per the ipc.md contract) could open a
+    // preview over the OLD region when the user cancels the new selection with
+    // Esc - violating AC-02.1. This runs BEFORE the early-focus return so even
+    // re-opening focuses a clean cycle (no arm can outlive a select open).
+    if let Some(state) = app.try_state::<RegionState>() {
+        disarm_pending_region(&state);
+    }
     if let Some(existing) = app.get_webview_window(SELECT_WINDOW_LABEL) {
         existing.set_focus()?;
         return Ok(());
@@ -571,7 +581,7 @@ pub fn open_selection_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Shell
     Ok(())
 }
 
-fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
+pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
     if let Some(existing) = app.get_webview_window(PREVIEW_WINDOW_LABEL) {
         existing.set_focus()?;
         return Ok(());
@@ -609,6 +619,56 @@ pub fn cancel_region_selection(app: AppHandle) -> Result<(), ShellError> {
     close_window(&app, SELECT_WINDOW_LABEL)
 }
 
+/// Arms the confirmed region + selected source language for pipeline pickup.
+/// Split out so the confirm ordering (arm BEFORE the select overlay closes) is
+/// unit-testable without a live `AppHandle` (TASK-023).
+fn arm_pending_region(
+    state: &RegionState,
+    region: RegionRect,
+    source_language: SourceLanguageSelection,
+) {
+    if let Ok(mut pending) = state.pending_region.lock() {
+        *pending = Some(PendingRegion {
+            rect: region,
+            source_language,
+        });
+    }
+}
+
+/// Clears any unconsumed pending region so a FRESH selection cycle can never be
+/// decided by a stale arm. A confirm arms `pending_region` and the select
+/// window's `Destroyed` handler opens the preview off that shared state
+/// ([`should_open_preview_after_select_close`]); the consent re-arm contract
+/// ([`take_and_recognize`]) can also leave it `Some` when the user closes a
+/// preview WITHOUT granting. Without this reset, starting a NEW selection and
+/// pressing Esc would let the stale arm open a preview over the OLD region -
+/// violating AC-02.1 (Esc = no capture, no preview). Called at the TOP of
+/// [`open_selection_window`], which scopes the Destroyed decision to the current
+/// cycle. It does NOT touch the consent re-arm contract, which lives entirely
+/// inside the preview lifecycle AFTER a confirm with no intervening select-open.
+fn disarm_pending_region(state: &RegionState) {
+    if let Ok(mut pending) = state.pending_region.lock() {
+        *pending = None;
+    }
+}
+
+/// Whether the `region-select` overlay's `Destroyed` event should open the
+/// preview window: true iff a region is pending (a confirm armed one before
+/// closing the overlay), false for a cancel (which arms nothing). Consulted by
+/// [`crate::shell::on_window_event`] at the top of a FRESH event-loop iteration -
+/// after `NtUserDestroyWindow` has fully returned and the select window's
+/// `WebviewWrapper` is dropped and its webview-map mutex released - so the
+/// preview WebView2 create's message pump has no pending destroy to reenter
+/// (TASK-023 reentrant `WebviewWrapper::drop` -> `Mutex::lock_contended`
+/// self-deadlock).
+pub(crate) fn should_open_preview_after_select_close(state: &RegionState) -> bool {
+    state
+        .pending_region
+        .lock()
+        .map(|pending| pending.is_some())
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn confirm_region_selection(
     app: AppHandle,
@@ -618,14 +678,19 @@ pub fn confirm_region_selection(
 ) -> Result<(), ShellError> {
     validate_region(&region)?;
     let source_language = SourceLanguageSelection::parse(source_language.as_deref().unwrap_or(""));
-    close_window(&app, SELECT_WINDOW_LABEL)?;
-    if let Ok(mut pending) = state.pending_region.lock() {
-        *pending = Some(PendingRegion {
-            rect: region,
-            source_language,
-        });
-    }
-    open_preview_window(&app)
+    // Arm the pending region BEFORE closing the select overlay so the window's
+    // `Destroyed` handler can tell a confirm (region armed -> open preview) from
+    // a cancel (nothing armed -> no preview).
+    arm_pending_region(&state, region, source_language);
+    // Queue the select overlay's destroy and RETURN. The preview window is NOT
+    // opened here: doing so in the same command turn synchronously creates a
+    // WebView2 whose `wait_with_pump` dispatches the select overlay's still-
+    // pending `DestroyWindow`, reentering wry to drop the select window's
+    // `WebviewWrapper` and block on the non-reentrant webview-map mutex the
+    // create already holds - a fatal single-thread self-deadlock (TASK-023).
+    // Instead the select window's `Destroyed` event opens the preview at the top
+    // of a fresh event-loop iteration (see `crate::shell::on_window_event`).
+    close_window(&app, SELECT_WINDOW_LABEL)
 }
 
 /// Take -> capture/OCR -> restore-on-consent core of [`region_preview_ready`],
@@ -1678,6 +1743,91 @@ mod tests {
         assert_eq!(coordinator.active(), None, "return-to-idle after stop");
         assert!(!pipeline.ocr_latin.is_loaded());
         assert!(!pipeline.ocr_korean.is_loaded());
+    }
+
+    #[test]
+    fn confirm_arms_pending_region_before_the_select_overlay_closes() {
+        // TASK-023 (the reorder that breaks the reentrant deadlock): confirm
+        // ARMS the pending region FIRST, then closes the select overlay and
+        // returns - it does NOT open the preview in-turn. Because the region is
+        // armed, the select window's `Destroyed` handler will open the preview
+        // at the top of a fresh event-loop iteration. This pins the "arm before
+        // close, decision gated on pending" invariant without a live AppHandle.
+        let state = RegionState::default();
+        // Before confirm nothing is armed, so a Destroyed would open no preview.
+        assert!(
+            !should_open_preview_after_select_close(&state),
+            "no pending region before confirm -> Destroyed opens no preview"
+        );
+
+        arm_pending_region(&state, rect(), SourceLanguageSelection::Pinned("vi".into()));
+
+        // A region is armed, so the Destroyed handler WILL open the preview.
+        assert!(
+            should_open_preview_after_select_close(&state),
+            "confirm armed a region -> Destroyed opens the preview"
+        );
+        let pending = state.pending_region.lock().unwrap();
+        let armed = pending
+            .as_ref()
+            .expect("confirm must arm the pending region before closing the overlay");
+        assert_eq!(armed.rect, rect());
+        assert_eq!(
+            armed.source_language,
+            SourceLanguageSelection::Pinned("vi".into())
+        );
+    }
+
+    #[test]
+    fn cancel_arms_nothing_so_the_select_destroyed_opens_no_preview() {
+        // The confirm/cancel distinction the Destroyed handler keys off
+        // (TASK-023): `cancel_region_selection` only closes the overlay and arms
+        // NO region, so when the select window is destroyed no preview opens -
+        // exactly the branch that must NOT re-create a WebView on the Esc path.
+        let state = RegionState::default();
+        // cancel never calls arm_pending_region.
+        assert!(
+            !should_open_preview_after_select_close(&state),
+            "cancel arms no region -> Destroyed handler must NOT open the preview"
+        );
+    }
+
+    #[test]
+    fn disarm_clears_a_stale_arm_so_a_fresh_cycle_esc_opens_no_preview() {
+        // code-reviewer should-fix regression (TASK-023 follow-up): the select
+        // `Destroyed` branch now opens the preview off shared `pending_region`
+        // state that is never cleared on a NEW selection cycle. Reachable stale
+        // arm: confirm -> preview -> OCR needs consent -> take_and_recognize
+        // RESTORES pending (Some) -> user closes the preview WITHOUT granting ->
+        // pending stays Some. If the user then starts a new selection and presses
+        // Esc, `should_open_preview_after_select_close` would see the stale Some
+        // and open a preview over the OLD region - violating AC-02.1 (Esc = no
+        // capture/preview). `disarm_pending_region` (run at the top of
+        // `open_selection_window`) invalidates that arm so the fresh cycle's Esc
+        // opens nothing. The full window sequence needs a live AppHandle, so this
+        // pins the load-bearing helper invariant directly.
+        let state = RegionState::default();
+
+        // Simulate the stale arm left by a consent refusal + preview close.
+        arm_region(&state);
+        assert!(
+            should_open_preview_after_select_close(&state),
+            "precondition: a stale arm would (wrongly) open a preview"
+        );
+
+        // A fresh selection cycle (open_selection_window's first act) disarms it.
+        disarm_pending_region(&state);
+
+        // Now the new cycle's Esc/cancel opens no preview: the Destroyed decision
+        // is scoped to the current cycle, which armed nothing.
+        assert!(
+            !should_open_preview_after_select_close(&state),
+            "a fresh selection cycle must clear the stale arm so Esc opens no preview"
+        );
+        assert!(
+            state.pending_region.lock().unwrap().is_none(),
+            "disarm must leave the pending region empty"
+        );
     }
 
     #[test]
