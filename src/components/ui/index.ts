@@ -12,6 +12,7 @@ export { IconButton, type IconButtonProps } from "./IconButton";
 export { Input, type InputProps } from "./Input";
 export { OverlayPanel, type OverlayPanelProps } from "./OverlayPanel";
 export { PlainText, type PlainTextProps } from "./PlainText";
+export { ProgressBar, type ProgressBarProps } from "./ProgressBar";
 export { Select, type SelectOption, type SelectProps } from "./Select";
 export { Slider, type SliderProps } from "./Slider";
 export { Switch, type SwitchProps } from "./Switch";

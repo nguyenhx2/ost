@@ -221,6 +221,58 @@ const en = {
   "settings.audioStartError":
     "Could not start the audio session - please try again",
 
+  // Settings - STT engine picker (FR-01, TASK-026 part C)
+  "settings.sttHeading": "Speech-to-text engine",
+  "settings.sttHint":
+    "Choose the local speech-recognition model used for live audio translation. Speech-to-text always runs on your machine - audio never leaves it.",
+  "settings.sttEngineLabel": "Speech-to-text engine",
+  "settings.sttCurrent": "current",
+  "settings.sttSizeLabel": "Download size / RAM",
+  "settings.sttDownloaded": "Downloaded",
+  "settings.sttDownloadProgress": "Model download progress",
+  "settings.sttModelTiny": "Tiny",
+  "settings.sttModelBase": "Base (recommended)",
+  "settings.sttModelSmall": "Small",
+  "settings.sttModelLargeTurbo": "Large v3 turbo",
+  "settings.sttModelLargeV3": "Large v3",
+  "settings.sttCloudGoogle": "Google Cloud STT (cloud)",
+  "settings.sttCloudAzure": "Azure AI Speech (cloud)",
+  "settings.sttCloudOpenAi": "OpenAI speech-to-text (cloud)",
+  "settings.sttReasonCuda": "Requires a compatible CUDA GPU",
+  "settings.sttReasonRam": "Not enough RAM on this machine for this tier",
+  "settings.sttReasonPendingAdr":
+    "Pending ADR-005 owner approval - cloud speech-to-text is not available yet",
+  "settings.sttErrorUnknownModel": "Unknown speech-to-text model",
+  "settings.sttErrorNotAllowed":
+    "This tier is not allowed on the current hardware",
+  "settings.sttErrorSessionActive":
+    "Cannot change the speech-to-text engine while an audio session is running - stop the session first",
+  "settings.sttErrorDownload": "The model download failed - please try again",
+  "settings.sttErrorStore":
+    "Could not save the speech-to-text engine choice - please try again",
+
+  // Settings - local OpenAI-compatible translation provider (FR-03.CUSTOM-1..5)
+  "settings.localBaseUrlLabel": "Local server address (base_url)",
+  "settings.localBaseUrlPlaceholder": "http://127.0.0.1:1234",
+  "settings.localModelLabel": "Model id",
+  "settings.localModelPlaceholder": "e.g. the model name loaded in LM Studio",
+  "settings.localCheckConnection": "Check connection",
+  "settings.localChecking": "Checking...",
+  "settings.localCheckOk": "Connected - the local server answered",
+  "settings.localErrorInvalidBaseUrl":
+    "Only a loopback address (127.0.0.1 / localhost) is accepted",
+  "settings.localErrorUnreachable":
+    "The local server is not running - start it and try again",
+  "settings.localErrorNetwork":
+    "Network error - could not reach the local server",
+  "settings.localErrorTimeout": "The local server request timed out",
+  "settings.localErrorProvider": "Unexpected response from the local server",
+
+  // Consent dialog (Settings-time STT model switch, TASK-026 part C)
+  "consent.sttSwitchTitle": "Download this speech-to-text tier",
+  "consent.sttSwitchIntro":
+    "OST needs to download this speech-to-text model before switching to it. The file below is fetched over HTTPS from the host named here. No captured audio or keys are sent - audio never leaves your machine; only the model file is downloaded.",
+
   // Shared primitives
   "ui.select.placeholder": "Choose...",
 } as const;
@@ -431,6 +483,55 @@ const vi: Record<I18nKey, string> = {
   "settings.audioRunning": "Phiên âm thanh đang chạy",
   "settings.audioStartError":
     "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
+
+  "settings.sttHeading": "Chuyển giọng nói thành văn bản",
+  "settings.sttHint":
+    "Chọn mô hình nhận dạng giọng nói cục bộ dùng để dịch âm thanh trực tiếp. Chuyển giọng nói thành văn bản luôn chạy trên máy của bạn - âm thanh không bao giờ rời khỏi máy.",
+  "settings.sttEngineLabel": "Engine chuyển giọng nói thành văn bản",
+  "settings.sttCurrent": "đang dùng",
+  "settings.sttSizeLabel": "Dung lượng tải / RAM",
+  "settings.sttDownloaded": "Đã tải",
+  "settings.sttDownloadProgress": "Tiến độ tải mô hình",
+  "settings.sttModelTiny": "Tiny",
+  "settings.sttModelBase": "Base (khuyến nghị)",
+  "settings.sttModelSmall": "Small",
+  "settings.sttModelLargeTurbo": "Large v3 turbo",
+  "settings.sttModelLargeV3": "Large v3",
+  "settings.sttCloudGoogle": "Google Cloud STT (đám mây)",
+  "settings.sttCloudAzure": "Azure AI Speech (đám mây)",
+  "settings.sttCloudOpenAi": "OpenAI speech-to-text (đám mây)",
+  "settings.sttReasonCuda": "Yêu cầu GPU CUDA tương thích",
+  "settings.sttReasonRam": "Máy không đủ RAM cho tầng model này",
+  "settings.sttReasonPendingAdr":
+    "Đang chờ chủ dự án duyệt ADR-005 - STT đám mây chưa khả dụng",
+  "settings.sttErrorUnknownModel": "Model chuyển giọng nói không xác định",
+  "settings.sttErrorNotAllowed":
+    "Tầng model này không được phép trên phần cứng hiện tại",
+  "settings.sttErrorSessionActive":
+    "Không thể đổi engine chuyển giọng nói khi phiên âm thanh đang chạy - hãy dừng phiên trước",
+  "settings.sttErrorDownload": "Tải mô hình thất bại - vui lòng thử lại",
+  "settings.sttErrorStore":
+    "Không lưu được lựa chọn engine chuyển giọng nói - vui lòng thử lại",
+
+  "settings.localBaseUrlLabel": "Địa chỉ máy chủ local (base_url)",
+  "settings.localBaseUrlPlaceholder": "http://127.0.0.1:1234",
+  "settings.localModelLabel": "Id model",
+  "settings.localModelPlaceholder": "ví dụ: tên model đã nạp trong LM Studio",
+  "settings.localCheckConnection": "Kiểm tra kết nối",
+  "settings.localChecking": "Đang kiểm tra...",
+  "settings.localCheckOk": "Đã kết nối - máy chủ local đã phản hồi",
+  "settings.localErrorInvalidBaseUrl":
+    "Chỉ chấp nhận địa chỉ loopback (127.0.0.1 / localhost)",
+  "settings.localErrorUnreachable":
+    "Máy chủ local chưa chạy - hãy khởi động rồi thử lại",
+  "settings.localErrorNetwork":
+    "Lỗi mạng - không kết nối được tới máy chủ local",
+  "settings.localErrorTimeout": "Yêu cầu tới máy chủ local quá thời gian chờ",
+  "settings.localErrorProvider": "Phản hồi bất thường từ máy chủ local",
+
+  "consent.sttSwitchTitle": "Tải tầng model chuyển giọng nói này",
+  "consent.sttSwitchIntro":
+    "OST cần tải mô hình chuyển giọng nói thành văn bản này trước khi chuyển sang dùng nó. Tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có âm thanh đã chụp hay khoá nào được gửi đi - âm thanh không bao giờ rời khỏi máy của bạn; chỉ tải tệp mô hình.",
 
   "ui.select.placeholder": "Chọn...",
 };

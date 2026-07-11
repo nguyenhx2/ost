@@ -509,6 +509,146 @@ export const modelIpc = {
     invokeIpc("revoke_model_consent", { modelSetId }),
 };
 
+/* ------------------------------------------------------------------ */
+/* STT engine picker (FR-01, TASK-026 part C)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One row of `list_stt_models` (ipc.md): a local whisper tier evaluated
+ * against the CURRENT hardware probe. Cloud STT entries (Google/Azure/
+ * OpenAI) are NOT part of this list - they are static, always-disabled rows
+ * the UI renders itself (ADR-005 pending owner sign-off).
+ */
+export interface SttModelInfo {
+  id: string;
+  /** English fallback label from the core; the Settings UI prefers its own
+   * i18n mapping by `id` and falls back to this string for unknown ids. */
+  label: string;
+  approxDownloadBytes: number;
+  approxRamBytes: number;
+  /** Already present on disk - selecting it switches with no download. */
+  downloaded: boolean;
+  /** `false` = hidden/disabled with a reason (RAM floor or missing CUDA). */
+  allowedByProbe: boolean;
+  /** `true` only for `large-v3` (FR-01.STT-2): show a "requires CUDA GPU" note. */
+  requiresCuda: boolean;
+  /** `true` for the model the pipeline currently uses for new sessions. */
+  current: boolean;
+}
+
+/** Tagged union outcome of `request_stt_model_switch` (ipc.md). */
+export type SttModelSwitchOutcome =
+  | { status: "alreadyCurrent" }
+  | { status: "switched" }
+  | { status: "consentRequired"; disclosure: ConsentDisclosure };
+
+export type SttModelSwitchErrorKind =
+  "unknownModel" | "notAllowed" | "sessionActive" | "download" | "store";
+
+export interface SttModelSwitchCommandError {
+  kind: SttModelSwitchErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed STT-switch command error. */
+export function asSttModelSwitchCommandError(
+  err: unknown,
+): SttModelSwitchCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: SttModelSwitchErrorKind }).kind };
+  }
+  return { kind: "download" };
+}
+
+/** Emitted repeatedly while `confirm_stt_model_switch` downloads (ipc.md). */
+export interface SttModelDownloadProgressPayload {
+  modelId: string;
+  downloadedBytes: number;
+  totalBytes: number;
+}
+
+export const EVENT_STT_MODEL_DOWNLOAD_PROGRESS = "stt:model-download-progress";
+
+/** Typed STT model-picker commands (owned by `src-tauri/src/shell/audio_session.rs`). */
+export const sttIpc = {
+  /** Every catalog tier evaluated against the current hardware probe. */
+  listModels: (): Promise<SttModelInfo[]> => invokeIpc("list_stt_models"),
+
+  /**
+   * Request a switch. Applies immediately (`switched`/`alreadyCurrent`) when
+   * no download is needed; `consentRequired` names the exact download size
+   * for the caller to confirm via `confirmSwitch` - never downloads on its
+   * own (human-in-the-loop.md).
+   */
+  requestSwitch: (modelId: string): Promise<SttModelSwitchOutcome> =>
+    invokeIpc("request_stt_model_switch", { modelId }),
+
+  /** Confirm a `consentRequired` switch: downloads (progress events), then applies. */
+  confirmSwitch: (modelId: string): Promise<void> =>
+    invokeIpc("confirm_stt_model_switch", { modelId }),
+};
+
+/* ------------------------------------------------------------------ */
+/* Translation provider picker metadata incl. local (FR-03, TASK-026)   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Static per-provider picker metadata (providers.md). Mirrors the Rust
+ * `ProviderMetadata` serialization VERBATIM - snake_case field names, no
+ * `rename_all` - the one place the WebView learns which provider needs a
+ * `base_url` field instead of an API key.
+ */
+export interface ProviderPickerMetadata {
+  provider_id: string;
+  display_name: string;
+  requires_base_url: boolean;
+}
+
+export type LocalProviderErrorKind =
+  | "invalidBaseUrl"
+  | "localServerUnreachable"
+  | "network"
+  | "timeout"
+  | "provider";
+
+export interface LocalProviderCommandError {
+  kind: LocalProviderErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed local-provider command error. */
+export function asLocalProviderCommandError(
+  err: unknown,
+): LocalProviderCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: LocalProviderErrorKind }).kind };
+  }
+  return { kind: "provider" };
+}
+
+/** Typed commands owned by `src-tauri/src/commands/providers.rs`. */
+export const providersIpc = {
+  /** Picker metadata for every translation provider (incl. `local_openai`). */
+  pickerMetadata: (): Promise<ProviderPickerMetadata[]> =>
+    invokeIpc("provider_picker_metadata"),
+
+  /**
+   * Validate a candidate `base_url` (loopback-only) and probe connectivity
+   * BEFORE the frontend persists it. Distinguishes `localServerUnreachable`
+   * ("server not running") from a plain `network`/`invalidBaseUrl` failure.
+   */
+  checkLocalConnection: (baseUrl: string): Promise<void> =>
+    invokeIpc("check_local_provider_connection", { baseUrl }),
+};
+
 /**
  * Live audio-translation session commands (owned by
  * `src-tauri/src/shell/audio_session.rs`). Audio never crosses IPC - only the

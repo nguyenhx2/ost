@@ -17,14 +17,19 @@ import {
   IconButton,
   Input,
   PlainText,
+  ProgressBar,
   Select,
   Switch,
+  type SelectOption,
 } from "../components/ui";
 import { ConsentDialog } from "../components/ConsentDialog";
 import { t } from "../lib/i18n";
 import {
+  isProviderId,
+  LOCAL_OPENAI_PROVIDER_ID,
   PROVIDER_META,
   PROVIDER_META_LIST,
+  type ActiveProviderId,
   type ProviderId,
   type ProviderMeta,
 } from "../lib/providers";
@@ -38,18 +43,24 @@ import {
   type KeyActionResult,
 } from "../hooks/useProviderKeys";
 import { useProviderSelection } from "../hooks/useProviderSelection";
+import { useProviderPickerMetadata } from "../hooks/useProviderPickerMetadata";
+import { useLocalProviderConnection } from "../hooks/useLocalProviderConnection";
 import { useModelConsent, type RevokeState } from "../hooks/useModelConsent";
 import { useHistorySettings } from "../hooks/useHistorySettings";
 import { useAudioSession } from "../hooks/useAudioSession";
 import { useHotkeys } from "../hooks/useHotkeys";
+import { useSttModels } from "../hooks/useSttModels";
 import { resultMessage } from "./settingsMessages";
 import {
   historyIpc,
   HOTKEY_ACTIONS,
   type HotkeyAction,
   type HotkeyErrorKind,
+  type LocalProviderErrorKind,
   type ModelConsentStatus,
+  type SttModelSwitchErrorKind,
 } from "../lib/ipc";
+import { formatBytes } from "../lib/format";
 import type { I18nKey } from "../lib/i18n";
 
 /** Per-action row label (AC-04.1); every string is an i18n key. */
@@ -66,6 +77,165 @@ const HOTKEY_ERROR_KEYS: Record<HotkeyErrorKind, I18nKey> = {
   conflict: "settings.hotkeyErrorConflict",
   store: "settings.hotkeyErrorStore",
 };
+
+/**
+ * STT engine picker (FR-01, TASK-026 part C). This is a SEPARATE picker from
+ * the FR-03 translation-provider one below - never shared state, never a
+ * shared list (PRD-FR-01-stt-backend-options section 3 "Ranh giới hai bộ
+ * chọn"). i18n owns the tier display names (the core's `label` is an English
+ * fallback only, used for unknown/future ids).
+ */
+const STT_MODEL_LABEL_KEYS: Partial<Record<string, I18nKey>> = {
+  tiny: "settings.sttModelTiny",
+  base: "settings.sttModelBase",
+  small: "settings.sttModelSmall",
+  "large-v3-turbo": "settings.sttModelLargeTurbo",
+  "large-v3": "settings.sttModelLargeV3",
+};
+
+/**
+ * Cloud STT entries (FR-01.STT-6): always disabled with a "pending ADR-005"
+ * note. NOT returned by `list_stt_models` (local tiers only) - these are
+ * static rows the UI renders itself so users see the roadmap without any
+ * functional path (no dead code pretending they work).
+ */
+const CLOUD_STT_ENTRIES: readonly { id: string; labelKey: I18nKey }[] = [
+  { id: "cloud-google-stt", labelKey: "settings.sttCloudGoogle" },
+  { id: "cloud-azure-speech", labelKey: "settings.sttCloudAzure" },
+  { id: "cloud-openai-stt", labelKey: "settings.sttCloudOpenAi" },
+];
+
+const STT_SWITCH_ERROR_KEYS: Record<SttModelSwitchErrorKind, I18nKey> = {
+  unknownModel: "settings.sttErrorUnknownModel",
+  notAllowed: "settings.sttErrorNotAllowed",
+  sessionActive: "settings.sttErrorSessionActive",
+  download: "settings.sttErrorDownload",
+  store: "settings.sttErrorStore",
+};
+
+const LOCAL_PROVIDER_ERROR_KEYS: Record<LocalProviderErrorKind, I18nKey> = {
+  invalidBaseUrl: "settings.localErrorInvalidBaseUrl",
+  localServerUnreachable: "settings.localErrorUnreachable",
+  network: "settings.localErrorNetwork",
+  timeout: "settings.localErrorTimeout",
+  provider: "settings.localErrorProvider",
+};
+
+/**
+ * Speech-to-text engine section (FR-01, TASK-026 part C, AC-01.8). Lists the
+ * local whisper tiers (hardware-gated, with a Tooltip reason on disabled
+ * entries) plus the static cloud-STT rows (always disabled, pending ADR-005).
+ * Switching reuses the shared BR-08 consent-download dialog, extended with a
+ * live progress bar; a mid-session switch is rejected with a clear message.
+ */
+function SttEngineSection() {
+  const stt = useSttModels();
+  const current = stt.models.find((m) => m.current) ?? null;
+
+  const options: SelectOption[] = [
+    ...stt.models.map((m) => ({
+      value: m.id,
+      label:
+        (STT_MODEL_LABEL_KEYS[m.id]
+          ? t(STT_MODEL_LABEL_KEYS[m.id]!)
+          : m.label) + (m.current ? ` (${t("settings.sttCurrent")})` : ""),
+      disabled: !m.allowedByProbe,
+      disabledReason: !m.allowedByProbe
+        ? t(m.requiresCuda ? "settings.sttReasonCuda" : "settings.sttReasonRam")
+        : undefined,
+    })),
+    ...CLOUD_STT_ENTRIES.map((entry) => ({
+      value: entry.id,
+      label: t(entry.labelKey),
+      disabled: true,
+      disabledReason: t("settings.sttReasonPendingAdr"),
+    })),
+  ];
+
+  return (
+    <section
+      className="settings-section"
+      aria-labelledby="settings-stt-heading"
+    >
+      <h2 id="settings-stt-heading">{t("settings.sttHeading")}</h2>
+      <p className="settings-hint">{t("settings.sttHint")}</p>
+
+      {!stt.loading ? (
+        <div className="settings-field">
+          <span className="settings-field-label" id="stt-engine-label">
+            {t("settings.sttEngineLabel")}
+          </span>
+          <Select
+            label={t("settings.sttEngineLabel")}
+            value={current?.id ?? ""}
+            options={options}
+            onChange={(value) => stt.selectModel(value)}
+          />
+        </div>
+      ) : null}
+
+      {current ? (
+        <div className="settings-model-meta">
+          <span className="settings-field-label">
+            {t("settings.sttSizeLabel")}
+          </span>
+          <span className="settings-model-host">
+            {`${formatBytes(current.approxDownloadBytes)} / ${formatBytes(
+              current.approxRamBytes,
+            )}`}
+          </span>
+          {current.downloaded ? (
+            <Badge variant="default" label={t("settings.sttDownloaded")}>
+              <ShieldCheck size={12} aria-hidden="true" />
+              {t("settings.sttDownloaded")}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+
+      {stt.phase === "downloading" ? (
+        <div className="settings-field">
+          <ProgressBar
+            label={t("settings.sttDownloadProgress")}
+            value={
+              stt.progress && stt.progress.totalBytes > 0
+                ? (stt.progress.downloadedBytes / stt.progress.totalBytes) * 100
+                : 0
+            }
+          />
+          {stt.progress ? (
+            <p className="settings-hint" role="status" aria-live="polite">
+              {`${formatBytes(stt.progress.downloadedBytes)} / ${formatBytes(
+                stt.progress.totalBytes,
+              )}`}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {stt.error ? (
+        <p
+          className="settings-message settings-message--danger"
+          role="alert"
+          aria-live="assertive"
+        >
+          {t(STT_SWITCH_ERROR_KEYS[stt.error])}
+        </p>
+      ) : null}
+
+      {stt.pendingConsent ? (
+        <ConsentDialog
+          open
+          disclosure={stt.pendingConsent.disclosure}
+          onGrant={stt.confirmDownload}
+          onDecline={stt.cancelConsent}
+          titleKey="consent.sttSwitchTitle"
+          introKey="consent.sttSwitchIntro"
+        />
+      ) : null}
+    </section>
+  );
+}
 
 /**
  * Global-hotkey configuration (AC-04.1): one row per action showing the current
@@ -338,12 +508,34 @@ export function SettingsView() {
   const consent = useModelConsent();
   const history = useHistorySettings();
   const audio = useAudioSession();
+  const picker = useProviderPickerMetadata();
+  const localConn = useLocalProviderConnection();
 
   const order = selection.settings.fallbackOrder;
   const grantedModels = consent.statuses.filter((s) => s.granted);
 
   const activeProvider = selection.settings.defaultProvider;
   const activeProviderModel = activeModel(selection.settings);
+  const isLocalProviderActive = activeProvider === LOCAL_OPENAI_PROVIDER_ID;
+
+  /** Provider transparency (human-in-the-loop.md): the active-provider display
+   * name resolves through the picker metadata first (it covers the local
+   * provider too), falling back to the static keyed-provider catalog while
+   * the metadata call is still loading. */
+  const activeProviderDisplayName =
+    picker.metadata.find((m) => m.provider_id === activeProvider)
+      ?.display_name ??
+    (isProviderId(activeProvider)
+      ? PROVIDER_META[activeProvider].displayName
+      : activeProvider);
+
+  const activeProviderOptions: SelectOption[] =
+    picker.metadata.length > 0
+      ? picker.metadata.map((m) => ({
+          value: m.provider_id,
+          label: m.display_name,
+        }))
+      : PROVIDER_META_LIST.map((m) => ({ value: m.id, label: m.displayName }));
 
   return (
     <main className="settings">
@@ -396,16 +588,66 @@ export function SettingsView() {
           <Select
             label={t("settings.defaultProvider")}
             value={selection.settings.defaultProvider}
-            options={PROVIDER_META_LIST.map((m) => ({
-              value: m.id,
-              label: m.displayName,
-            }))}
-            onChange={(value) =>
-              void selection.setDefaultProvider(value as ProviderId)
-            }
+            options={activeProviderOptions}
+            onChange={(value) => {
+              localConn.reset();
+              void selection.setDefaultProvider(value as ActiveProviderId);
+            }}
           />
         </div>
+
+        {isLocalProviderActive ? (
+          <div className="settings-field settings-local-provider">
+            <Input
+              label={t("settings.localBaseUrlLabel")}
+              value={selection.settings.localOpenAi.baseUrl}
+              placeholder={t("settings.localBaseUrlPlaceholder")}
+              onChange={(v) => void selection.setLocalOpenAiBaseUrl(v)}
+            />
+            <Input
+              label={t("settings.localModelLabel")}
+              value={selection.settings.localOpenAi.modelId}
+              placeholder={t("settings.localModelPlaceholder")}
+              onChange={(v) => void selection.setLocalOpenAiModelId(v)}
+            />
+            <div className="settings-provider-actions">
+              <Button
+                onClick={() =>
+                  void localConn.check(selection.settings.localOpenAi.baseUrl)
+                }
+                disabled={
+                  localConn.state.status === "checking" ||
+                  selection.settings.localOpenAi.baseUrl.trim() === ""
+                }
+              >
+                {localConn.state.status === "checking"
+                  ? t("settings.localChecking")
+                  : t("settings.localCheckConnection")}
+              </Button>
+            </div>
+            {localConn.state.status === "ok" ? (
+              <p
+                className="settings-message settings-message--ok"
+                role="status"
+                aria-live="polite"
+              >
+                {t("settings.localCheckOk")}
+              </p>
+            ) : null}
+            {localConn.state.status === "error" ? (
+              <p
+                className="settings-message settings-message--danger"
+                role="alert"
+                aria-live="assertive"
+              >
+                {t(LOCAL_PROVIDER_ERROR_KEYS[localConn.state.kind])}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
+
+      <SttEngineSection />
 
       <section
         className="settings-section"
@@ -446,7 +688,7 @@ export function SettingsView() {
 
         <p className="settings-hint">
           {t("settings.audioProvider", {
-            provider: PROVIDER_META[activeProvider].displayName,
+            provider: activeProviderDisplayName,
           })}
         </p>
 

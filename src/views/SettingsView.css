@@ -203,6 +203,16 @@
   color: var(--color-accent);
 }
 
+/* ---------- Local OpenAI-compatible provider (FR-03.CUSTOM-1..5) -------- */
+
+.settings-local-provider {
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
 /* ---------- Model downloads (revoke consent) ---------- */
 
 .settings-model-meta {
