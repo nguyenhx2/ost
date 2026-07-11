@@ -122,6 +122,15 @@ fn provider_client(
 }
 
 /// Parse a provider id string coming from the WebView.
+///
+/// `local_openai` parses successfully here (it IS a known `ProviderId`) and
+/// is deliberately let through: `save_provider_key`/`check_provider_key` stay
+/// safe-by-construction downstream because `provider_client` ->
+/// `build_provider` errors with `Config` for `local_openai` (no `base_url`)
+/// before any keychain call is ever reached - see
+/// `providers::factory::build_provider`. Do NOT "fix" this into a pre-filter
+/// here; `delete_provider_key` has its own explicit gate below because it has
+/// no such client-construction step in its path to the keychain.
 fn parse_provider(provider: &str) -> Result<ProviderId, KeyCommandError> {
     provider
         .parse::<ProviderId>()
@@ -193,6 +202,21 @@ async fn check_key_impl(
     }
 }
 
+/// Core delete logic, factored out of the Tauri wrapper for unit testing with
+/// an injected [`KeyStore`] backend (mirrors `save_key_impl`/`check_key_impl`).
+///
+/// `local_openai` is rejected BEFORE `store.delete_key` is ever called: this
+/// provider requires no key and nothing is ever written to the OS keychain
+/// for it (see `providers::local_openai`) - unlike save/check, this command
+/// has no client-construction step upstream to fail closed on its own, so the
+/// gate lives here explicitly.
+async fn delete_key_impl(store: &KeyStore, provider: ProviderId) -> Result<(), KeyCommandError> {
+    if provider == ProviderId::LocalOpenAi {
+        return Err(KeyCommandError::Config);
+    }
+    store.delete_key(provider).await.map_err(Into::into)
+}
+
 /* ------------------------------------------------------------------ */
 /* Tauri command wrappers (thin: parse input, call impl, map errors)   */
 /* ------------------------------------------------------------------ */
@@ -237,7 +261,7 @@ pub async fn delete_provider_key(
     provider: String,
 ) -> Result<(), KeyCommandError> {
     let provider = parse_provider(&provider)?;
-    store.delete_key(provider).await.map_err(Into::into)
+    delete_key_impl(&store, provider).await
 }
 
 #[cfg(test)]
@@ -259,6 +283,7 @@ mod tests {
     #[derive(Default)]
     struct MockBackend {
         entries: Mutex<HashMap<(String, String), String>>,
+        delete_calls: Mutex<u32>,
     }
 
     impl KeyBackend for MockBackend {
@@ -287,6 +312,7 @@ mod tests {
                 .cloned())
         }
         fn delete_secret(&self, service: &str, account: &str) -> Result<(), KeyStoreError> {
+            *self.delete_calls.lock().unwrap() += 1;
             self.entries
                 .lock()
                 .unwrap()
@@ -367,6 +393,13 @@ mod tests {
 
     fn mock_store() -> KeyStore {
         KeyStore::with_backend(Arc::new(MockBackend::default()))
+    }
+
+    /// Like [`mock_store`] but also returns the backend `Arc` so a test can
+    /// inspect call counts (e.g. proving a delete was never reached).
+    fn mock_store_with_backend() -> (KeyStore, Arc<MockBackend>) {
+        let backend = Arc::new(MockBackend::default());
+        (KeyStore::with_backend(backend.clone()), backend)
     }
 
     #[tokio::test]
@@ -476,6 +509,32 @@ mod tests {
     fn error_serializes_only_the_kind_tag() {
         let json = serde_json::to_value(KeyCommandError::Quota).unwrap();
         assert_eq!(json, serde_json::json!({ "kind": "quota" }));
+    }
+
+    #[tokio::test]
+    async fn delete_local_openai_is_rejected_before_touching_the_keychain() {
+        // BLOCKER fix: `local_openai` never has a keychain entry (it needs no
+        // key), so `delete_provider_key` must reject it before reaching the
+        // store - a real OS-keychain delete call for this provider would be a
+        // gate bypass.
+        let (store, backend) = mock_store_with_backend();
+        let err = delete_key_impl(&store, ProviderId::LocalOpenAi)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, KeyCommandError::Config));
+        assert_eq!(
+            *backend.delete_calls.lock().unwrap(),
+            0,
+            "delete_secret must never be called for local_openai"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_known_provider_reaches_the_keychain() {
+        // Contrast case: a real provider's delete still goes through.
+        let (store, backend) = mock_store_with_backend();
+        delete_key_impl(&store, ProviderId::Gemini).await.unwrap();
+        assert_eq!(*backend.delete_calls.lock().unwrap(), 1);
     }
 
     #[test]

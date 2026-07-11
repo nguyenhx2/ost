@@ -233,6 +233,21 @@ CUSTOM-1..5, TASK-026 phần B)
 - Không có base URL production mặc định (không giống 4 client kia) - người dùng PHẢI nhập
   `base_url` trong Settings; lưu trữ giá trị này (KHÔNG phải secret) là trách nhiệm của
   settings store (tauri-plugin-store), NGOÀI phạm vi layer này.
+- Loopback-only ở tầng HTTP client: `LocalOpenAiClient::with_config` dựng `reqwest::Client`
+  với `redirect::Policy::none()` - server local không có lý do hợp lệ nào để redirect, và
+  chính sách mặc định của reqwest (theo tối đa 10 redirect tới BẤT KỲ host nào) sẽ phá vỡ
+  bất biến loopback-only nếu một server cục bộ (hoặc kẻ tấn công đứng giữa) trả về `3xx` trỏ
+  ra ngoài máy. Một `3xx` không được theo sẽ rơi vào nhánh lỗi chung (`ProviderError::Api`
+  với `status` gốc) ở cả `translate`/`translate_stream`/`list_models`/`validate_key`.
+- `commands::keys::delete_provider_key("local_openai")` bị TỪ CHỐI trước khi chạm tới
+  `KeyStore` (trả `KeyCommandError::Config`, kind `"config"` - không thêm kind mới): vì
+  provider này không bao giờ có entry trong OS keychain (xem mục `ProviderId` ở trên),
+  `store.delete_key` phải không bao giờ được gọi cho nó. `save_provider_key`/
+  `check_provider_key` đã an toàn "by construction" (nhánh `provider_client` ->
+  `build_provider` báo lỗi `Config` trước khi có client, nên không bao giờ tới bước lưu/đọc
+  keychain) nên KHÔNG cần cổng tiền kiểm tra riêng; `delete_provider_key` KHÔNG có bước dựng
+  client nào trên đường đi tới keychain nên có cổng tường minh riêng trong
+  `commands/keys.rs`.
 
 ### Command surface tối thiểu (`src-tauri/src/commands/providers.rs`)
 

@@ -64,6 +64,13 @@ impl LocalOpenAiClient {
         }
         let http = reqwest::Client::builder()
             .connect_timeout(config.connect_timeout)
+            // Loopback servers have no legitimate reason to redirect, and
+            // reqwest's default policy follows up to 10 redirects to ANY
+            // host - unconditionally disabled here so a malicious or
+            // misconfigured local server can never carry the (potentially
+            // sensitive, user-captured) translate request off-machine
+            // (BR-01, NFR-SEC-03).
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| ProviderError::Config {
                 provider: ProviderId::LocalOpenAi,
@@ -602,6 +609,38 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, ProviderError::Config { .. }));
+    }
+
+    #[tokio::test]
+    async fn redirect_to_non_loopback_host_is_not_followed() {
+        // A malicious or misconfigured local server answers with a 3xx that
+        // points off-machine. The client must NOT follow it - that would
+        // carry the (potentially sensitive, user-captured) translate
+        // request to an arbitrary external host, defeating the
+        // loopback-only invariant (BR-01, NFR-SEC-03).
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(302).insert_header("Location", "https://evil.example.com/"),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let err = client(&server.uri())
+            .translate(&request("Hello"), &api_key())
+            .await
+            .unwrap_err();
+
+        // The redirect must surface as an error, not be transparently
+        // followed.
+        assert!(matches!(err, ProviderError::Api { status: 302, .. }));
+        // `expect(1)` above is verified on drop, but assert explicitly too:
+        // only the loopback mock was ever hit - no request left for
+        // evil.example.com (wiremock only tracks requests to `server`).
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
     }
 
     #[tokio::test]
