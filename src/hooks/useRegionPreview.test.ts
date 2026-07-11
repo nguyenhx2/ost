@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     }),
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     recordTranslation: vi.fn().mockResolvedValue(null),
+    loadProviderSettings: vi.fn(),
   };
 });
 
@@ -46,6 +47,14 @@ vi.mock("../lib/ipc", async (importOriginal) => {
 vi.mock("../lib/history", () => ({
   recordTranslation: mocks.recordTranslation,
 }));
+
+vi.mock("../lib/settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/settings")>();
+  return {
+    ...actual,
+    loadProviderSettings: mocks.loadProviderSettings,
+  };
+});
 
 import {
   EVENT_REGION_OCR_RESULT,
@@ -94,6 +103,19 @@ beforeEach(() => {
   // Default: a key IS configured, so existing translate-request behavior is
   // unaffected; the zero-key describe block below overrides this per test.
   mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
+  // Default persisted selection matches the catalog default, so tests that do
+  // not care about provider selection see the previous behavior.
+  mocks.loadProviderSettings.mockResolvedValue({
+    defaultProvider: "gemini",
+    models: {
+      gemini: "gemini-2.5-flash",
+      anthropic: "claude-sonnet-4-5",
+      openai: "gpt-5-mini",
+      openrouter: "auto",
+    },
+    fallbackOrder: [],
+    localOpenAi: { baseUrl: "", modelId: "" },
+  });
 });
 
 describe("useRegionPreview - two-phase rendering (AC-02.3)", () => {
@@ -482,5 +504,67 @@ describe("useRegionPreview - live update and reposition", () => {
     act(() => result.current.nudge(16, 0));
 
     expect(mocks.regionIpc.nudgePreview).toHaveBeenCalledWith(16, 0);
+  });
+});
+
+describe("useRegionPreview - configured provider (AC-03.5)", () => {
+  it("translates with the provider configured in Settings, not the catalog default", async () => {
+    // The user configured OpenRouter and stored an OpenRouter key. Before this
+    // fix the preview held the hardcoded catalog default (gemini) forever, so
+    // every translate call went to a provider with no key and failed.
+    mocks.loadProviderSettings.mockResolvedValue({
+      defaultProvider: "openrouter",
+      models: {
+        gemini: "gemini-2.5-flash",
+        anthropic: "claude-sonnet-4-5",
+        openai: "gpt-5-mini",
+        openrouter: "auto",
+      },
+      fallbackOrder: [],
+      localOpenAi: { baseUrl: "", modelId: "" },
+    });
+
+    const { result } = renderHook(() => useRegionPreview());
+
+    await waitFor(() =>
+      expect(result.current.option.provider).toBe("openrouter"),
+    );
+
+    emitOcr({
+      requestId: "p1",
+      sourceText: "Hello world",
+      lowConfidence: false,
+    });
+
+    await waitFor(() =>
+      expect(mocks.regionIpc.requestTranslation).toHaveBeenCalled(),
+    );
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    expect(request.provider).toBe("openrouter");
+    expect(request.model).toBe("auto");
+  });
+
+  it("uses the local OpenAI-compatible provider when that is the selection", async () => {
+    mocks.loadProviderSettings.mockResolvedValue({
+      defaultProvider: "local_openai",
+      models: {
+        gemini: "gemini-2.5-flash",
+        anthropic: "claude-sonnet-4-5",
+        openai: "gpt-5-mini",
+        openrouter: "auto",
+      },
+      fallbackOrder: [],
+      localOpenAi: {
+        baseUrl: "http://localhost:1234/v1",
+        modelId: "gemma-3-12b",
+      },
+    });
+
+    const { result } = renderHook(() => useRegionPreview());
+
+    await waitFor(() =>
+      expect(result.current.option.provider).toBe("local_openai"),
+    );
+    expect(result.current.option.model).toBe("gemma-3-12b");
   });
 });
