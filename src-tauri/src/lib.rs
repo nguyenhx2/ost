@@ -157,6 +157,10 @@ pub fn run() {
             // compiled ONLY under the `e2e` feature - absent from production.
             #[cfg(feature = "e2e")]
             shell::region::e2e_region_probe,
+            // e2e acceptance gate (TASK-027): WebDriver-only open-window-label
+            // observability, compiled ONLY under the `e2e` feature.
+            #[cfg(feature = "e2e")]
+            shell::windows::e2e_list_window_labels,
         ])
         .run(tauri::generate_context!())
         // expect is acceptable here: outermost entry point, failure to start the

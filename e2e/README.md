@@ -36,6 +36,7 @@ Point at a prebuilt binary / driver with `OST_E2E_BINARY` and `OST_E2E_MSEDGEDRI
 | `settings-keys` | real SettingsView + key-status IPC + OS keychain; masked-key invariant | same (no capture) |
 | `overlay-lifecycle` | caption overlay keyboard operability | same (copy-with-content leg needs a live audio session -> dev host / manual) |
 | `region-select` | the REAL WindowsScreenCapturer + PaddleOcrEngine via `e2e_region_probe`; asserts a terminal outcome and NON-HANG | needs a DISPLAY + OCR models present (`~/.oar`) -> dev host, not headless CI |
+| `window-open-deferred` | TASK-027: `open_caption_overlay` / `open_settings` / `open_history` invoked from a real WebView IPC callback via `open_deferred`; asserts NON-HANG (the owner-confirmed "Start audio session from Settings" repro) | any display host + matching msedgedriver |
 
 A green `smoke`/`settings`/`overlay` run does NOT prove screen capture works - only a
 `region-select` run on a display-backed host with the OCR models present proves that.

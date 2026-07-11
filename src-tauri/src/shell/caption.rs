@@ -10,10 +10,11 @@
 //! consent re-signal, stop on close). Only NAMES from our own catalog travel
 //! here; they are still encoded defensively before being placed in the URL.
 
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl};
 
 use super::audio_session::AudioSessionRequest;
 use super::region::clamp_nudge;
+use super::windows::{open_deferred, Existing};
 
 /// Window label of the caption overlay (single instance).
 pub const CAPTION_WINDOW_LABEL: &str = "caption-overlay";
@@ -67,27 +68,34 @@ fn caption_url(request: &AudioSessionRequest) -> String {
 }
 
 /// Open (or focus) the always-on-top caption overlay window for a session.
+///
+/// The build itself is DEFERRED off the calling turn (TASK-027 `open_deferred`)
+/// so this never deadlocks when invoked from inside a WebView IPC callback (the
+/// owner-confirmed "Start audio session" hang from Settings); this function
+/// therefore always returns `Ok(())` once the open is scheduled - a deferred
+/// build failure is logged, not surfaced here.
 pub fn open_caption_window<R: Runtime>(
     app: &AppHandle<R>,
     request: &AudioSessionRequest,
 ) -> Result<(), CaptionWindowError> {
-    if let Some(existing) = app.get_webview_window(CAPTION_WINDOW_LABEL) {
-        existing.set_focus()?;
-        return Ok(());
-    }
-    WebviewWindowBuilder::new(
+    let url = WebviewUrl::App(caption_url(request).into());
+    open_deferred(
         app,
         CAPTION_WINDOW_LABEL,
-        WebviewUrl::App(caption_url(request).into()),
-    )
-    .title("OST")
-    .transparent(true)
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .inner_size(560.0, 220.0)
-    .min_inner_size(320.0, 140.0)
-    .build()?;
+        url,
+        Existing::FocusOnly,
+        |builder| {
+            builder
+                .title("OST")
+                .transparent(true)
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .inner_size(560.0, 220.0)
+                .min_inner_size(320.0, 140.0)
+        },
+        |_window| Ok(()),
+    );
     Ok(())
 }
 

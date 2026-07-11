@@ -7,8 +7,9 @@
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl};
 
+use super::windows::{open_deferred, Existing};
 use crate::capture::{CaptureRegion, ScreenCapturer};
 use crate::core::{HeavySessionCoordinator, HeavySessionKind};
 use crate::keys::{ApiKey, KeyStore};
@@ -550,54 +551,64 @@ pub fn open_selection_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Shell
     if let Some(state) = app.try_state::<RegionState>() {
         disarm_pending_region(&state);
     }
-    if let Some(existing) = app.get_webview_window(SELECT_WINDOW_LABEL) {
-        existing.set_focus()?;
-        return Ok(());
-    }
-    let window = WebviewWindowBuilder::new(
+    // The build itself is DEFERRED off the calling turn (TASK-027
+    // `open_deferred`) so this never deadlocks when invoked from inside a
+    // WebView IPC callback; `after_build` (monitor positioning + show + focus)
+    // runs once the window exists, still before the user ever sees it.
+    open_deferred(
         app,
         SELECT_WINDOW_LABEL,
         WebviewUrl::App("index.html?view=region-select".into()),
-    )
-    .title("OST")
-    .transparent(true)
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .resizable(false)
-    .visible(false)
-    .build()?;
-
-    // Cover the primary monitor exactly (multi-monitor selection is out of
-    // scope for TASK-008); fall back to maximized if no monitor is reported.
-    if let Some(monitor) = window.primary_monitor()? {
-        window.set_position(*monitor.position())?;
-        window.set_size(*monitor.size())?;
-    } else {
-        window.maximize()?;
-    }
-    window.show()?;
-    window.set_focus()?;
+        Existing::FocusOnly,
+        |builder| {
+            builder
+                .title("OST")
+                .transparent(true)
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .visible(false)
+        },
+        |window| {
+            // Cover the primary monitor exactly (multi-monitor selection is out
+            // of scope for TASK-008); fall back to maximized if no monitor is
+            // reported.
+            if let Some(monitor) = window.primary_monitor()? {
+                window.set_position(*monitor.position())?;
+                window.set_size(*monitor.size())?;
+            } else {
+                window.maximize()?;
+            }
+            window.show()?;
+            window.set_focus()?;
+            Ok(())
+        },
+    );
     Ok(())
 }
 
+/// Open (or focus) the region-preview overlay window. The build itself is
+/// DEFERRED off the calling turn (TASK-027 `open_deferred`) so this never
+/// deadlocks when invoked from inside a WebView IPC callback (or, as before
+/// TASK-023, from the select window's own `Destroyed` handler).
 pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
-    if let Some(existing) = app.get_webview_window(PREVIEW_WINDOW_LABEL) {
-        existing.set_focus()?;
-        return Ok(());
-    }
-    WebviewWindowBuilder::new(
+    open_deferred(
         app,
         PREVIEW_WINDOW_LABEL,
         WebviewUrl::App("index.html?view=region-preview".into()),
-    )
-    .title("OST")
-    .transparent(true)
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .inner_size(480.0, 320.0)
-    .build()?;
+        Existing::FocusOnly,
+        |builder| {
+            builder
+                .title("OST")
+                .transparent(true)
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .inner_size(480.0, 320.0)
+        },
+        |_window| Ok(()),
+    );
     Ok(())
 }
 
