@@ -9,6 +9,7 @@ import {
   listenIpc,
   modelIpc,
   regionIpc,
+  settingsIpc,
   type ConsentDisclosure,
   type OcrErrorPayload,
   type OcrFidelity,
@@ -21,6 +22,7 @@ import {
   type ProviderModelOption,
 } from "../lib/providers";
 import { recordTranslation } from "../lib/history";
+import { useHasAnyProviderKey } from "./useHasAnyProviderKey";
 
 /**
  * Default target language for recorded history (BR-07 target default `vi`,
@@ -54,9 +56,12 @@ export type PreviewStatus =
  * Why the preview ended in the "failed" state (drives the error copy):
  * - `error`   translation provider/network error;
  * - `timeout` translation exceeded the client-side budget;
- * - `ocr`     capture/OCR failed (region:ocr-error) - never the raw message.
+ * - `ocr`     capture/OCR failed (region:ocr-error) - never the raw message;
+ * - `noKey`   NO provider has a key configured (detected client-side before
+ *   ever sending a translate request) - a distinct, actionable notice, never
+ *   the generic failure copy (human-in-the-loop.md).
  */
-export type PreviewFailureReason = "error" | "timeout" | "ocr";
+export type PreviewFailureReason = "error" | "timeout" | "ocr" | "noKey";
 
 const FULL_FIDELITY: OcrFidelity = { kind: "full" };
 
@@ -130,6 +135,8 @@ export interface UseRegionPreviewResult {
   declineConsent: () => void;
   /** Re-open the consent dialog after declining. */
   reopenConsent: () => void;
+  /** Open Settings (the CTA for a missing provider key, human-in-the-loop.md). */
+  openSettings: () => void;
 }
 
 /**
@@ -149,8 +156,11 @@ export function useRegionPreview(): UseRegionPreviewResult {
   const [consentDisclosure, setConsentDisclosure] =
     useState<ConsentDisclosure | null>(null);
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
+  const { hasKey } = useHasAnyProviderKey();
 
   const optionRef = useRef(option);
+  const hasKeyRef = useRef(hasKey);
+  hasKeyRef.current = hasKey;
   const sourceTextRef = useRef("");
   /** Detected source language from the last OCR event (BR-07 hint), or "". */
   const sourceLanguageRef = useRef("");
@@ -220,6 +230,22 @@ export function useRegionPreview(): UseRegionPreviewResult {
       sourceTextRef.current = sourceText;
       sourceLanguageRef.current = payload.detectedLanguage ?? "";
       translationRef.current = null;
+      // No provider key configured: this is a distinct, actionable state, not
+      // a translation failure - never fire the doomed translate request
+      // (human-in-the-loop.md, requirement to detect BEFORE attempting).
+      if (!hasKeyRef.current) {
+        setState((prev) => ({
+          status: "failed",
+          sourceText,
+          lowConfidence: payload.lowConfidence,
+          fidelity: payload.fidelity ?? FULL_FIDELITY,
+          translation: null,
+          provider: prev.provider,
+          model: prev.model,
+          failureReason: "noKey",
+        }));
+        return;
+      }
       setState((prev) => ({
         status: "translating",
         sourceText,
@@ -369,6 +395,17 @@ export function useRegionPreview(): UseRegionPreviewResult {
     if (sourceText.trim() === "") {
       return; // nothing to translate (AC-02.7 guard)
     }
+    if (!hasKeyRef.current) {
+      // Same no-key gate as the initial OCR path - never a doomed request.
+      translationRef.current = null;
+      setState((prev) => ({
+        ...prev,
+        status: "failed",
+        translation: null,
+        failureReason: "noKey",
+      }));
+      return;
+    }
     translationRef.current = null;
     setState((prev) => ({
       ...prev,
@@ -445,6 +482,10 @@ export function useRegionPreview(): UseRegionPreviewResult {
     }
   }, [consentDisclosure]);
 
+  const openSettings = useCallback(() => {
+    void settingsIpc.open();
+  }, []);
+
   return {
     state,
     option,
@@ -465,5 +506,6 @@ export function useRegionPreview(): UseRegionPreviewResult {
     grantConsent,
     declineConsent,
     reopenConsent,
+    openSettings,
   };
 }

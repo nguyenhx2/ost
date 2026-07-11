@@ -35,6 +35,9 @@ const en = {
     "Translation timed out - please try again or switch provider",
   "preview.ocrError":
     "Could not recognize text - the capture or OCR step failed. Please try selecting the region again",
+  "preview.noProviderKey":
+    "No provider key is configured - open Settings to add one",
+  "preview.openSettings": "Open Settings",
   "preview.emptyOcr": "No text recognized in the selected region",
   "preview.lowConfidence": "Low confidence - the result may be inaccurate",
   "preview.degradedNotice":
@@ -251,6 +254,9 @@ const vi: Record<I18nKey, string> = {
     "Dịch quá thời gian chờ - vui lòng thử lại hoặc đổi provider",
   "preview.ocrError":
     "Không nhận dạng được văn bản - bước chụp hoặc OCR đã thất bại. Vui lòng chọn lại vùng màn hình",
+  "preview.noProviderKey":
+    "Chưa cấu hình khoá provider - mở Cài đặt để thêm khoá",
+  "preview.openSettings": "Mở Cài đặt",
   "preview.emptyOcr": "Không nhận dạng được văn bản trong vùng đã chọn",
   "preview.lowConfidence": "Độ tin cậy thấp - kết quả có thể không chính xác",
   "preview.degradedNotice":

@@ -157,7 +157,21 @@ export function RegionPreviewView() {
           </p>
         ) : null}
 
-        {state.status === "failed" ? (
+        {state.status === "failed" && state.failureReason === "noKey" ? (
+          // Distinct, actionable notice - NEVER the generic failure copy
+          // (human-in-the-loop.md, provider transparency).
+          <div className="region-preview-blocked" role="alert">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <div className="region-preview-blocked-body">
+              <span>{t("preview.noProviderKey")}</span>
+              <Button onClick={preview.openSettings}>
+                {t("preview.openSettings")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {state.status === "failed" && state.failureReason !== "noKey" ? (
           <p className="region-preview-error" role="alert">
             <AlertTriangle size={14} aria-hidden="true" />
             {/* Own localized copy only - the raw diagnostic string is DATA. */}

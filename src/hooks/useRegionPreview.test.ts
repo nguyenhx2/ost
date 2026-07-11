@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => {
       closePreview: vi.fn().mockResolvedValue(undefined),
       nudgePreview: vi.fn().mockResolvedValue(undefined),
     },
+    settingsIpc: { open: vi.fn().mockResolvedValue(undefined) },
+    keysIpc: { statuses: vi.fn() },
     listenIpc: vi.fn((event: string, handler: (payload: unknown) => void) => {
       handlers.set(event, handler);
       return Promise.resolve(() => handlers.delete(event));
@@ -34,6 +36,8 @@ vi.mock("../lib/ipc", async (importOriginal) => {
   return {
     ...actual,
     regionIpc: mocks.regionIpc,
+    settingsIpc: mocks.settingsIpc,
+    keysIpc: mocks.keysIpc,
     listenIpc: mocks.listenIpc,
     copyToClipboard: mocks.copyToClipboard,
   };
@@ -75,9 +79,21 @@ async function renderPreview() {
   return rendered;
 }
 
+function keyStatuses(present: Partial<Record<string, boolean>>) {
+  return [
+    { provider_id: "gemini", key_present: !!present.gemini },
+    { provider_id: "anthropic", key_present: !!present.anthropic },
+    { provider_id: "openai", key_present: !!present.openai },
+    { provider_id: "openrouter", key_present: !!present.openrouter },
+  ];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
+  // Default: a key IS configured, so existing translate-request behavior is
+  // unaffected; the zero-key describe block below overrides this per test.
+  mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
 });
 
 describe("useRegionPreview - two-phase rendering (AC-02.3)", () => {
@@ -238,6 +254,45 @@ describe("useRegionPreview - re-translate (AC-02.8)", () => {
     expect(second.provider).toBe("anthropic");
     expect(second.model).toBe("claude-sonnet-4-5");
     expect(result.current.state.status).toBe("translating");
+  });
+});
+
+describe("useRegionPreview - no provider key configured (TASK-025)", () => {
+  it("detects zero keys client-side and never fires the doomed translate request", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.keysIpc.statuses).toHaveBeenCalled());
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+
+    expect(result.current.state.status).toBe("failed");
+    expect(result.current.state.failureReason).toBe("noKey");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("retranslate stays gated (no-op translate call) while no key is configured", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.keysIpc.statuses).toHaveBeenCalled());
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+
+    act(() => result.current.retranslate());
+
+    expect(result.current.state.status).toBe("failed");
+    expect(result.current.state.failureReason).toBe("noKey");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("openSettings invokes the Settings-open IPC", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.keysIpc.statuses).toHaveBeenCalled());
+
+    act(() => result.current.openSettings());
+
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
   });
 });
 
