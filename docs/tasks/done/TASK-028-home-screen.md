@@ -1,6 +1,6 @@
 ---
 title: "TASK-028: Build the main-window home screen (primary actions + status at a glance)"
-status: Active
+status: Done
 fr: FR-04
 owner: frontend-ui-dev
 deps: TASK-025
@@ -58,4 +58,4 @@ Build a functional main-window home screen that exposes the app's primary action
 | 2026-07-11 | frontend-ui-dev | PR #58 review fix (a11y): the Settings and History quick-action buttons both had the accessible name "Open" - ambiguous for screen-reader users. Gave each a distinct name: `home.actionSettingsCta` -> "View Settings" / vi "Xem Cài đặt" (not "Open Settings", to avoid colliding with the already-established `home.openSettings`/`preview.openSettings`/`caption.openSettings` "Open Settings" CTA used by the shared `ProviderKeyNotice`, which co-renders on this same screen when no key is configured), `home.actionHistoryCta` -> "Open History" / vi "Mở Lịch sử". Updated `src/App.test.tsx` to assert by the new distinct names instead of `getAllByRole(..., { name: "Open" })[0]`/`[1]`. `npm run lint` clean; `npm run test` clean (36 files / 285 tests passing). No shell/ or master-plan.md touched. | Fixed, gates green, pushed to feat/home-screen (PR #58) |
 
 ## Result
-<Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
+Landed via PR #58, merge commit `3419237`. `src/App.tsx` now renders a real home screen: four primary actions (translate a screen region, start/stop live audio translation, settings, history), each showing its hotkey, plus a status block (active provider + model, whether an API key is configured, STT model tier + whether downloaded, whether an audio session is running). Reuses the TASK-025 no-key notice via a new shared `src/components/ProviderKeyNotice.tsx` (deliberately NOT a `ui/` primitive, so no design-system Landed row required - confirmed by code review). Design-system hard gate passed: primitives + tokens only, no hardcoded hex/px, no native select, no raw `title=`, no emoji, lucide icons, i18n vi+en fully accented. Obeys the TASK-024 shell-fill contract. a11y fix from review: Settings and History buttons now have distinct accessible names ("View Settings" / "Open History") instead of the ambiguous identical "Open". OPEN ITEM: author could not get conclusive pixel-level confirmation of right-aligned Badge/hotkey-chip/Button controls in the sandbox (suspected WebView2 repaint artifact under forced synthetic resize; not reproduced in headless Chromium or in caption-overlay window). Awaiting owner's own visual check on the release binary.
