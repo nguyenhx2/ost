@@ -269,10 +269,24 @@ fn default_threads() -> i32 {
         .unwrap_or(4)
 }
 
-/// Resamples mono `samples` from `src_rate` to whisper's 16 kHz using linear
-/// interpolation. Pure and in-memory (AC-01.6) so it is unit-tested without a
-/// model. A rate already at 16 kHz is returned unchanged; an empty input yields
-/// an empty output.
+/// Taps of the anti-alias low-pass FIR applied before decimation. Odd (a
+/// centered kernel with no fractional-sample group delay), and cheap: a 63-tap
+/// direct convolution over a worst-case 2 s/48 kHz chunk is on the order of
+/// 6M multiply-adds - sub-millisecond, far under the STT budget it protects.
+const ANTI_ALIAS_TAPS: usize = 63;
+
+/// Resamples mono `samples` from `src_rate` to whisper's 16 kHz. Pure and
+/// in-memory (AC-01.6) so it is unit-tested without a model. A rate already at
+/// 16 kHz is returned unchanged; an empty input yields an empty output.
+///
+/// DOWNsampling (the common WASAPI case, e.g. 48 kHz -> 16 kHz) first passes
+/// the signal through a windowed-sinc low-pass filter cut at the destination
+/// Nyquist frequency, THEN decimates by linear interpolation. Skipping the
+/// filter (as a naive decimate-only resampler does) folds any source energy
+/// above the new Nyquist back into the audible band as aliasing distortion -
+/// a real, measurable transcription-quality regression on live system audio,
+/// which routinely carries content above 8 kHz (sibilants, cymbals, etc.).
+/// UPsampling has no aliasing risk, so it stays plain linear interpolation.
 #[must_use]
 pub fn resample_to_16k(samples: &[f32], src_rate: u32) -> Vec<f32> {
     if samples.is_empty() || src_rate == 0 {
@@ -281,7 +295,19 @@ pub fn resample_to_16k(samples: &[f32], src_rate: u32) -> Vec<f32> {
     if src_rate == WHISPER_SAMPLE_RATE {
         return samples.to_vec();
     }
-    let src_len = samples.len();
+
+    let source = if src_rate > WHISPER_SAMPLE_RATE {
+        // Cutoff at 90% of the destination Nyquist: a safety margin so the
+        // filter's transition band (not a brick wall) still leaves the
+        // aliased tail below the target Nyquist, not just at it.
+        let cutoff_norm = 0.9 * (WHISPER_SAMPLE_RATE as f64 / (2.0 * src_rate as f64));
+        let kernel = lowpass_kernel(ANTI_ALIAS_TAPS, cutoff_norm);
+        apply_fir(samples, &kernel)
+    } else {
+        samples.to_vec()
+    };
+
+    let src_len = source.len();
     let dst_len = ((src_len as u64 * WHISPER_SAMPLE_RATE as u64) / src_rate as u64) as usize;
     if dst_len == 0 {
         return Vec::new();
@@ -292,13 +318,73 @@ pub fn resample_to_16k(samples: &[f32], src_rate: u32) -> Vec<f32> {
         let src_pos = i as f64 * ratio;
         let idx = src_pos.floor() as usize;
         let frac = (src_pos - idx as f64) as f32;
-        let a = samples[idx];
+        let a = source[idx];
         let b = if idx + 1 < src_len {
-            samples[idx + 1]
+            source[idx + 1]
         } else {
             a
         };
         out.push(a + (b - a) * frac);
+    }
+    out
+}
+
+/// Designs a windowed-sinc low-pass FIR kernel: `num_taps` coefficients, unity
+/// DC gain, cutoff at `cutoff_norm` (a fraction of the SOURCE sample rate,
+/// `0 < cutoff_norm < 0.5`). Hamming-windowed for a good stopband/transition
+/// trade-off at a small, real-time-cheap tap count. Pure and deterministic.
+fn lowpass_kernel(num_taps: usize, cutoff_norm: f64) -> Vec<f32> {
+    let m = (num_taps.max(1) - 1) as f64;
+    let mut kernel = vec![0f64; num_taps.max(1)];
+    let mut sum = 0f64;
+    for (n, tap) in kernel.iter_mut().enumerate() {
+        let x = n as f64 - m / 2.0;
+        let sinc = if x.abs() < 1e-9 {
+            2.0 * cutoff_norm
+        } else {
+            (2.0 * std::f64::consts::PI * cutoff_norm * x).sin() / (std::f64::consts::PI * x)
+        };
+        // Hamming window.
+        let window = if m > 0.0 {
+            0.54 - 0.46 * (2.0 * std::f64::consts::PI * n as f64 / m).cos()
+        } else {
+            1.0
+        };
+        let v = sinc * window;
+        *tap = v;
+        sum += v;
+    }
+    // Normalize so the passband (DC) gain is exactly 1 - the filter must not
+    // change the overall loudness of in-band speech.
+    if sum.abs() > 1e-12 {
+        for tap in kernel.iter_mut() {
+            *tap /= sum;
+        }
+    }
+    kernel.into_iter().map(|v| v as f32).collect()
+}
+
+/// Direct-form FIR convolution, zero-padded at the edges, output the same
+/// length as `input` (centered kernel, so no net delay is introduced beyond
+/// the negligible half-kernel edge taper already covered by the chunker's
+/// pre-roll/hangover margins).
+fn apply_fir(input: &[f32], kernel: &[f32]) -> Vec<f32> {
+    let n = input.len();
+    let k = kernel.len();
+    if k <= 1 {
+        return input.to_vec();
+    }
+    let half = (k / 2) as isize;
+    let mut out = vec![0f32; n];
+    for (i, sample) in out.iter_mut().enumerate() {
+        let mut acc = 0f64;
+        for (j, &coeff) in kernel.iter().enumerate() {
+            let idx = i as isize + j as isize - half;
+            if idx >= 0 && (idx as usize) < n {
+                acc += input[idx as usize] as f64 * coeff as f64;
+            }
+        }
+        *sample = acc as f32;
     }
     out
 }
@@ -370,6 +456,48 @@ mod tests {
         assert!((out[0] - 0.0).abs() < 1e-6);
         // Interpolated points lie within the ramp.
         assert!(out.iter().all(|&v| (0.0..=1.0).contains(&v)));
+    }
+
+    /// Synthetic tone at `hz` sampled at `rate`, `seconds` long, amplitude 0.2.
+    fn tone_signal(hz: f64, rate: u32, seconds: f64) -> Vec<f32> {
+        let n = (rate as f64 * seconds) as usize;
+        (0..n)
+            .map(|i| ((i as f64 * hz * std::f64::consts::TAU / rate as f64).sin() * 0.2) as f32)
+            .collect()
+    }
+
+    #[test]
+    fn resample_passes_in_band_tone_at_near_full_amplitude() {
+        // A 300 Hz tone (well under whisper's 8 kHz Nyquist) at 48 kHz -> 16 kHz
+        // must survive the anti-aliasing low-pass with amplitude close to intact
+        // (quality regression guard: the filter must not gut real speech energy).
+        let s = tone_signal(300.0, 48_000, 0.2);
+        let out = resample_to_16k(&s, 48_000);
+        let rms =
+            (out.iter().map(|&v| (v as f64) * (v as f64)).sum::<f64>() / out.len() as f64).sqrt();
+        // Input RMS of a 0.2-amplitude sine is 0.2/sqrt(2) ~= 0.1414.
+        assert!(
+            rms > 0.12,
+            "in-band tone lost too much energy through the resample: rms={rms}"
+        );
+    }
+
+    #[test]
+    fn resample_rejects_above_nyquist_energy_instead_of_aliasing_it_down() {
+        // AC-01.2/BR-01 quality guard: naive decimation (no anti-alias filter)
+        // folds a source-Nyquist-adjacent tone straight into the audible band -
+        // this is the aliasing bug that degrades live-audio transcription
+        // quality. An 18 kHz tone at 48 kHz is far above whisper's 8 kHz target
+        // Nyquist; a correct downsampler attenuates it heavily instead of
+        // aliasing it down to an in-band ~2 kHz artifact at near-full amplitude.
+        let s = tone_signal(18_000.0, 48_000, 0.2);
+        let out = resample_to_16k(&s, 48_000);
+        let rms =
+            (out.iter().map(|&v| (v as f64) * (v as f64)).sum::<f64>() / out.len() as f64).sqrt();
+        assert!(
+            rms < 0.05,
+            "above-Nyquist energy aliased into the output near full amplitude: rms={rms}"
+        );
     }
 
     #[test]
