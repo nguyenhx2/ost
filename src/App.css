@@ -1,7 +1,8 @@
 /* App shell placeholder styles - token-driven only (design-system.md). */
 
 .app {
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
