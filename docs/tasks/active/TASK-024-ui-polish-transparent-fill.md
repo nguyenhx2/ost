@@ -30,7 +30,7 @@ Fix the class of transparent-window layout bugs the owner hit in the region prev
 - [ ] No white/opaque bleed around panels on transparent overlay windows at any size.
 - [ ] Panels fill the window and resize with it.
 - [ ] Design-system hard gate: tokens + primitives only, no hardcoded hex/px, no inline style bypass.
-- [ ] npm run lint and npm run test pass (local-verification gate - CI quota out, see known-issues).
+- [ ] npm run lint and npm run test pass locally; CI lint-and-test green on the PR.
 
 ## Orchestration notes
 - Verify on the RELEASE binary (npm run tauri build -- --no-bundle then run ost.exe); debug/tauri dev load localhost and is blocked in this environment (known-issues). The dev agent cannot do the visual release check itself - flag it for owner confirmation.
