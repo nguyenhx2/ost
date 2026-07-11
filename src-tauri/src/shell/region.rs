@@ -571,7 +571,7 @@ pub fn open_selection_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Shell
     Ok(())
 }
 
-fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
+pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
     if let Some(existing) = app.get_webview_window(PREVIEW_WINDOW_LABEL) {
         existing.set_focus()?;
         return Ok(());
@@ -609,6 +609,39 @@ pub fn cancel_region_selection(app: AppHandle) -> Result<(), ShellError> {
     close_window(&app, SELECT_WINDOW_LABEL)
 }
 
+/// Arms the confirmed region + selected source language for pipeline pickup.
+/// Split out so the confirm ordering (arm BEFORE the select overlay closes) is
+/// unit-testable without a live `AppHandle` (TASK-023).
+fn arm_pending_region(
+    state: &RegionState,
+    region: RegionRect,
+    source_language: SourceLanguageSelection,
+) {
+    if let Ok(mut pending) = state.pending_region.lock() {
+        *pending = Some(PendingRegion {
+            rect: region,
+            source_language,
+        });
+    }
+}
+
+/// Whether the `region-select` overlay's `Destroyed` event should open the
+/// preview window: true iff a region is pending (a confirm armed one before
+/// closing the overlay), false for a cancel (which arms nothing). Consulted by
+/// [`crate::shell::on_window_event`] at the top of a FRESH event-loop iteration -
+/// after `NtUserDestroyWindow` has fully returned and the select window's
+/// `WebviewWrapper` is dropped and its webview-map mutex released - so the
+/// preview WebView2 create's message pump has no pending destroy to reenter
+/// (TASK-023 reentrant `WebviewWrapper::drop` -> `Mutex::lock_contended`
+/// self-deadlock).
+pub(crate) fn should_open_preview_after_select_close(state: &RegionState) -> bool {
+    state
+        .pending_region
+        .lock()
+        .map(|pending| pending.is_some())
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn confirm_region_selection(
     app: AppHandle,
@@ -618,14 +651,19 @@ pub fn confirm_region_selection(
 ) -> Result<(), ShellError> {
     validate_region(&region)?;
     let source_language = SourceLanguageSelection::parse(source_language.as_deref().unwrap_or(""));
-    close_window(&app, SELECT_WINDOW_LABEL)?;
-    if let Ok(mut pending) = state.pending_region.lock() {
-        *pending = Some(PendingRegion {
-            rect: region,
-            source_language,
-        });
-    }
-    open_preview_window(&app)
+    // Arm the pending region BEFORE closing the select overlay so the window's
+    // `Destroyed` handler can tell a confirm (region armed -> open preview) from
+    // a cancel (nothing armed -> no preview).
+    arm_pending_region(&state, region, source_language);
+    // Queue the select overlay's destroy and RETURN. The preview window is NOT
+    // opened here: doing so in the same command turn synchronously creates a
+    // WebView2 whose `wait_with_pump` dispatches the select overlay's still-
+    // pending `DestroyWindow`, reentering wry to drop the select window's
+    // `WebviewWrapper` and block on the non-reentrant webview-map mutex the
+    // create already holds - a fatal single-thread self-deadlock (TASK-023).
+    // Instead the select window's `Destroyed` event opens the preview at the top
+    // of a fresh event-loop iteration (see `crate::shell::on_window_event`).
+    close_window(&app, SELECT_WINDOW_LABEL)
 }
 
 /// Take -> capture/OCR -> restore-on-consent core of [`region_preview_ready`],
@@ -1678,6 +1716,53 @@ mod tests {
         assert_eq!(coordinator.active(), None, "return-to-idle after stop");
         assert!(!pipeline.ocr_latin.is_loaded());
         assert!(!pipeline.ocr_korean.is_loaded());
+    }
+
+    #[test]
+    fn confirm_arms_pending_region_before_the_select_overlay_closes() {
+        // TASK-023 (the reorder that breaks the reentrant deadlock): confirm
+        // ARMS the pending region FIRST, then closes the select overlay and
+        // returns - it does NOT open the preview in-turn. Because the region is
+        // armed, the select window's `Destroyed` handler will open the preview
+        // at the top of a fresh event-loop iteration. This pins the "arm before
+        // close, decision gated on pending" invariant without a live AppHandle.
+        let state = RegionState::default();
+        // Before confirm nothing is armed, so a Destroyed would open no preview.
+        assert!(
+            !should_open_preview_after_select_close(&state),
+            "no pending region before confirm -> Destroyed opens no preview"
+        );
+
+        arm_pending_region(&state, rect(), SourceLanguageSelection::Pinned("vi".into()));
+
+        // A region is armed, so the Destroyed handler WILL open the preview.
+        assert!(
+            should_open_preview_after_select_close(&state),
+            "confirm armed a region -> Destroyed opens the preview"
+        );
+        let pending = state.pending_region.lock().unwrap();
+        let armed = pending
+            .as_ref()
+            .expect("confirm must arm the pending region before closing the overlay");
+        assert_eq!(armed.rect, rect());
+        assert_eq!(
+            armed.source_language,
+            SourceLanguageSelection::Pinned("vi".into())
+        );
+    }
+
+    #[test]
+    fn cancel_arms_nothing_so_the_select_destroyed_opens_no_preview() {
+        // The confirm/cancel distinction the Destroyed handler keys off
+        // (TASK-023): `cancel_region_selection` only closes the overlay and arms
+        // NO region, so when the select window is destroyed no preview opens -
+        // exactly the branch that must NOT re-create a WebView on the Esc path.
+        let state = RegionState::default();
+        // cancel never calls arm_pending_region.
+        assert!(
+            !should_open_preview_after_select_close(&state),
+            "cancel arms no region -> Destroyed handler must NOT open the preview"
+        );
     }
 
     #[test]
