@@ -1,6 +1,6 @@
 ---
 title: "TASK-029: Tray item + left-click to restore the main window"
-status: Blocked
+status: Active
 fr: FR-04
 owner: frontend-ui-dev
 deps: TASK-027
@@ -42,8 +42,8 @@ Once the main window is closed there is no way to reopen it. The tray menu has a
 - [ ] E2E test passes: close main window -> verify hidden -> click tray -> verify restored and focused
 
 ## Orchestration notes
-- BLOCKED: sequenced behind TASK-027 because both edit `src-tauri/src/shell/`; reopening the main window must go through TASK-027's deferred window helper to avoid deadlock.
-- This task depends on TASK-027 being complete and merged.
+- UNBLOCKED: TASK-027 landed in `f7a31a3` (PR #57), so `src-tauri/src/shell/` is free and the deferred window helper (`shell::windows::open_deferred`) exists and is ready for use.
+- Reopening the main window must go through the TASK-027 deferred window helper to avoid deadlock.
 - Use the TASK-027 helper to ensure the main window respects the deferred window-open pattern.
 
 ## Session log (AI session log)
