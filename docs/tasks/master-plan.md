@@ -49,6 +49,6 @@ overlay system.
 | TASK-021 | Fix region-capture WGC hang + first-run ordering + download timeout | screen-translate-dev | TASK-007 | P0 | 1 | Done |
 | TASK-022 | Wire e2e acceptance gate (WebdriverIO + tauri-driver) | qa-test | TASK-021 | P0 | 1 | Done |
 | TASK-023 | Fix reentrant window-lifecycle deadlock (close-select + open-preview) | frontend-ui-dev | TASK-021 | P0 | 1 | Done |
-| TASK-024 | UI polish: transparent-window white-bleed, scrollbars, fill-on-resize sweep | frontend-ui-dev | TASK-023 | P1 | 3 | Active |
-| TASK-025 | No-API-key onboarding notice on translation surfaces | frontend-ui-dev | TASK-009 | P1 | 3 | Active |
+| TASK-024 | UI polish: transparent-window white-bleed, scrollbars, fill-on-resize sweep | frontend-ui-dev | TASK-023 | P1 | 3 | Done |
+| TASK-025 | No-API-key onboarding notice on translation surfaces | frontend-ui-dev | TASK-009 | P1 | 3 | Done |
 | TASK-026 | STT backend options (research + design + cloud-STT ADR package) | tech-researcher | TASK-014 | P1 | 2 | Active |

@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => {
       grantConsent: vi.fn().mockResolvedValue(undefined),
       revokeConsent: vi.fn().mockResolvedValue(undefined),
     },
+    settingsIpc: { open: vi.fn().mockResolvedValue(undefined) },
+    keysIpc: { statuses: vi.fn() },
     listenIpc: vi.fn((event: string, handler: (payload: unknown) => void) => {
       handlers.set(event, handler);
       return Promise.resolve(() => handlers.delete(event));
@@ -48,6 +50,8 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     ...actual,
     regionIpc: mocks.regionIpc,
     modelIpc: mocks.modelIpc,
+    settingsIpc: mocks.settingsIpc,
+    keysIpc: mocks.keysIpc,
     listenIpc: mocks.listenIpc,
     copyToClipboard: mocks.copyToClipboard,
   };
@@ -112,10 +116,22 @@ async function renderPreview() {
   return rendered;
 }
 
+function keyStatuses(present: Partial<Record<string, boolean>>) {
+  return [
+    { provider_id: "gemini", key_present: !!present.gemini },
+    { provider_id: "anthropic", key_present: !!present.anthropic },
+    { provider_id: "openai", key_present: !!present.openai },
+    { provider_id: "openrouter", key_present: !!present.openrouter },
+  ];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
   setLocale("en");
+  // Default: a key IS configured, so existing translate-request behavior is
+  // unaffected; the zero-key describe block below overrides this per test.
+  mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
 });
 
 describe("RegionPreviewView (SCR-03)", () => {
@@ -405,6 +421,52 @@ describe("RegionPreviewView (SCR-03)", () => {
     expect(
       screen.getByRole("button", { name: "Review model download" }),
     ).toBeEnabled();
+  });
+
+  it("shows the distinct no-key notice (not the generic failure) when zero keys are configured (TASK-025)", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hallo", lowConfidence: false });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "No provider key is configured - open Settings to add one",
+        ),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(
+        "Translation failed - please try again or switch provider",
+      ),
+    ).toBeNull();
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Settings" }),
+    );
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the generic failure message (not the no-key notice) for a real failure with a key configured", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
+    await renderPreview();
+    emitOcr({ requestId: "p1", sourceText: "Hallo", lowConfidence: false });
+
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    emitTranslationError({ requestId: request.requestId });
+
+    expect(
+      screen.getByText(
+        "Translation failed - please try again or switch provider",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "No provider key is configured - open Settings to add one",
+      ),
+    ).toBeNull();
   });
 
   it("every icon-only control exposes an aria-label (WCAG 2.1 AA)", async () => {

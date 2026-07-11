@@ -7,6 +7,7 @@ import {
   EVENT_AUDIO_CAPTION,
   EVENT_AUDIO_ERROR,
   EVENT_MODELS_CONSENT_REQUIRED,
+  keysIpc,
   listenIpc,
   modelIpc,
   settingsIpc,
@@ -19,6 +20,7 @@ import {
 } from "../lib/ipc";
 import { recordTranslation } from "../lib/history";
 import { DEFAULT_TARGET_LANGUAGE } from "../lib/languages";
+import { hasAnyProviderKey } from "../lib/providerKeys";
 
 /**
  * A session-level start failure the overlay surfaces (never a raw backend
@@ -96,6 +98,20 @@ export function useCaptionOverlay(
 
   const startSession = useCallback(async () => {
     setStartError(null);
+    // Detect the zero-key state client-side BEFORE attempting to start the
+    // session, so a session with no chance of translating never spins up
+    // capture (human-in-the-loop.md). Falls through to the ordinary start
+    // attempt (and its backend-mapped error) if the status check itself
+    // fails - this is a best-effort fast path, not the only defense.
+    try {
+      const statuses = await keysIpc.statuses();
+      if (!hasAnyProviderKey(statuses)) {
+        setStartError({ kind: "noProviderKey" });
+        return;
+      }
+    } catch {
+      // Ignore - fall back to the backend's own noProviderKey mapping below.
+    }
     try {
       await audioIpc.start(requestRef.current);
     } catch (err) {
