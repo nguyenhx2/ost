@@ -100,6 +100,12 @@ stt-live = []
 # region pipeline never hangs (the emitted events go to a separate preview
 # window the driver cannot observe). Off by default: NEVER in production builds.
 e2e = []
+# SPIKE (perf/whisper-acceleration): measurement-only feature gating GPU offload
+# via whisper.cpp's Vulkan backend. Forwards to whisper-rs's own `vulkan` feature
+# (-> whisper-rs-sys/vulkan); needs the Vulkan SDK at build time (VULKAN_SDK env)
+# and a Vulkan-capable driver at runtime. NOT the production default - see the
+# spike report before promoting this out of measurement-only status.
+vulkan = ["whisper-rs/vulkan"]
 
 [[bench]]
 name = "ocr_stage"
