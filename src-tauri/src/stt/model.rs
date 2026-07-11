@@ -28,9 +28,17 @@ pub const HUGGING_FACE: ModelHost = ModelHost {
     domain: "huggingface.co",
 };
 
-/// A whisper model size. Ordered smallest -> largest; larger models are more
-/// accurate but slower and need more RAM (the trade-off the hardware probe
+/// A whisper model size. Ordered roughly smallest -> largest; larger models are
+/// more accurate but slower and need more RAM (the trade-off the hardware probe
 /// balances against the p95 < 3s latency budget).
+///
+/// `LargeV3Turbo` and `LargeV3` (TASK-026, PRD-FR-01-stt-backend-options) are
+/// the Settings model-switcher tier additions on top of the original BR-08
+/// first-run tiers (`Tiny`/`Base`/`Small`/`Medium`); `Medium` itself stays out
+/// of the switcher's catalog (`stt::catalog`) per the PRD (no accuracy
+/// advantage over `LargeV3Turbo` at a similar RAM cost) but remains here since
+/// [`super::hardware::recommend_model`] still names it for the dormant
+/// GPU+high-RAM branch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WhisperModelSize {
     /// ~75 MB download, ~390 MB RAM. The floor for low-RAM machines.
@@ -41,7 +49,19 @@ pub enum WhisperModelSize {
     Small,
     /// ~1.5 GB download, ~2.6 GB RAM. High accuracy; recommended only with GPU
     /// acceleration (Phase 4) - too slow for the CPU latency budget otherwise.
+    /// Excluded from the Settings switcher catalog (`stt::catalog`).
     Medium,
+    /// ~1.6 GB download, ~2.0 GB RAM (estimate - whisper.cpp's published
+    /// memory table has no dedicated turbo row; by disk-size analogy with
+    /// `medium`, which shares the ~1.5 GiB disk footprint and measures ~2.1 GB
+    /// resident). 4-decoder-layer variant of `large-v3`: 2-5x faster with
+    /// near-equal accuracy (tech-researcher 2026-07-11). AVAILABLE but not
+    /// RECOMMENDED until the Japanese spot-test gate closes (PRD section 6).
+    LargeV3Turbo,
+    /// ~2.95 GB download, ~3.9 GB RAM (whisper.cpp README "Memory usage" table:
+    /// `large` ~3.9 GB). Highest accuracy; gated to machines the hardware probe
+    /// reports a compatible CUDA GPU on (too slow for the CPU latency budget).
+    LargeV3,
 }
 
 /// A downloadable whisper model: its ggml filename, approximate download and
@@ -98,6 +118,26 @@ impl WhisperModel {
         approx_ram_bytes: 2_600_000_000,
         sha256: Some("6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"),
     };
+    /// TASK-026 catalog addition. Digest confirmed 2026-07-11 against the
+    /// `ggerganov/whisper.cpp` Hugging Face repo's git-LFS pointer metadata
+    /// (`paths-info` API `lfs.oid`), the same method that pinned the constants
+    /// above.
+    pub const LARGE_V3_TURBO: WhisperModel = WhisperModel {
+        size: WhisperModelSize::LargeV3Turbo,
+        filename: "ggml-large-v3-turbo.bin",
+        approx_download_bytes: 1_624_555_275,
+        approx_ram_bytes: 2_000_000_000,
+        sha256: Some("1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"),
+    };
+    /// TASK-026 catalog addition (CUDA-gated - `stt::catalog`). Digest
+    /// confirmed the same way as [`Self::LARGE_V3_TURBO`].
+    pub const LARGE_V3: WhisperModel = WhisperModel {
+        size: WhisperModelSize::LargeV3,
+        filename: "ggml-large-v3.bin",
+        approx_download_bytes: 3_095_033_483,
+        approx_ram_bytes: 3_900_000_000,
+        sha256: Some("64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2"),
+    };
 
     /// Resolves a model from its size.
     #[must_use]
@@ -107,6 +147,8 @@ impl WhisperModel {
             WhisperModelSize::Base => Self::BASE,
             WhisperModelSize::Small => Self::SMALL,
             WhisperModelSize::Medium => Self::MEDIUM,
+            WhisperModelSize::LargeV3Turbo => Self::LARGE_V3_TURBO,
+            WhisperModelSize::LargeV3 => Self::LARGE_V3,
         }
     }
 
@@ -175,6 +217,8 @@ mod tests {
         assert!(WhisperModelSize::Tiny < WhisperModelSize::Base);
         assert!(WhisperModelSize::Base < WhisperModelSize::Small);
         assert!(WhisperModelSize::Small < WhisperModelSize::Medium);
+        assert!(WhisperModelSize::Medium < WhisperModelSize::LargeV3Turbo);
+        assert!(WhisperModelSize::LargeV3Turbo < WhisperModelSize::LargeV3);
     }
 
     #[test]
@@ -184,6 +228,8 @@ mod tests {
             WhisperModelSize::Base,
             WhisperModelSize::Small,
             WhisperModelSize::Medium,
+            WhisperModelSize::LargeV3Turbo,
+            WhisperModelSize::LargeV3,
         ] {
             assert_eq!(WhisperModel::for_size(size).size, size);
         }
@@ -242,6 +288,8 @@ mod tests {
             WhisperModel::BASE,
             WhisperModel::SMALL,
             WhisperModel::MEDIUM,
+            WhisperModel::LARGE_V3_TURBO,
+            WhisperModel::LARGE_V3,
         ] {
             let digest = model
                 .sha256

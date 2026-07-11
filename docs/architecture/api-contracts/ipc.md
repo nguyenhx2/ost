@@ -115,6 +115,65 @@ Model whisper dùng lại cổng đồng thuận tải-model dùng chung với `
 (kèm `ConsentDisclosure`) rồi trả lỗi `consentRequired`; sau khi người dùng `grant_model_consent`,
 UI gọi lại `start_audio_session`.
 
+### Commands bộ chọn model whisper (FR-01, TASK-026)
+
+Do `src-tauri/src/shell/audio_session.rs` sở hữu (cùng module với phiên âm thanh); mở rộng
+luồng đồng thuận-tải BR-08 từ "chỉ lần chạy đầu" sang "bất kỳ lúc nào trong Settings"
+(PRD-FR-01-stt-backend-options mục 4, FR-01.STT-3). Danh mục tier: `tiny` / `base` (mặc định)
+/ `small` / `large-v3-turbo` / `large-v3` (chỉ khả dụng khi hardware probe phát hiện GPU CUDA
+tương thích - `large-v3` cũng đòi RAM sàn như `large-v3-turbo`); `medium` không có trong danh
+mục này. Model đang dùng được lưu tại `settings.json` khoá `sttModel` (CHỈ id, không phải file
+hay đường dẫn).
+
+| Command                     | Tham số            | Trả về                    | Vai trò                                                                                     |
+| ---------------------------- | ------------------ | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `list_stt_models`            | -                  | `SttModelInfo[]`           | Liệt kê 5 tier với dung lượng/RAM ước tính, đã tải chưa, có được phần cứng hiện tại cho phép không, có phải model đang dùng không. |
+| `request_stt_model_switch`   | `modelId: string`  | `SttModelSwitchOutcome`    | Kiểm tra id/phần cứng/phiên đang chạy; nếu model đã có sẵn trên đĩa thì áp dụng NGAY (lưu + đổi); nếu chưa có thì trả `consentRequired` kèm dung lượng CHÍNH XÁC của tier đó (không tải). |
+| `confirm_stt_model_switch`  | `modelId: string`  | `void`                     | Gọi sau khi người dùng xác nhận `consentRequired`: cấp đồng thuận (cùng cờ `whisper-ggml`, idempotent), tải kèm tiến độ (`stt:model-download-progress`), rồi lưu + đổi model đang dùng. |
+
+Lỗi tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownModel | notAllowed | sessionActive |
+download | store`; `sessionActive` xuất hiện khi một phiên âm thanh đang chạy - đổi model bị
+từ chối cho tới khi phiên dừng (không đổi engine dưới một vòng lặp phiên âm đang chạy).
+
+#### `SttModelInfo`
+
+```ts
+type SttModelInfo = {
+  id: string; // "tiny" | "base" | "small" | "large-v3-turbo" | "large-v3"
+  label: string;
+  approxDownloadBytes: number;
+  approxRamBytes: number;
+  downloaded: boolean;
+  allowedByProbe: boolean; // false = ẩn/disable kèm lý do (sàn RAM hoặc thiếu CUDA)
+  requiresCuda: boolean; // true chỉ với "large-v3"
+  current: boolean;
+};
+```
+
+#### `SttModelSwitchOutcome` (union gắn thẻ theo `status`)
+
+```ts
+type SttModelSwitchOutcome =
+  | { status: "alreadyCurrent" }
+  | { status: "switched" }
+  | { status: "consentRequired"; disclosure: ConsentDisclosure };
+```
+
+`disclosure` dùng lại kiểu `ConsentDisclosure` chung (xem dưới) nhưng CHỈ liệt kê MỘT artifact
+- đúng file của tier được chọn, không phải toàn bộ danh mục - để dung lượng disclosure trung
+thực với đúng một lần tải.
+
+#### `stt:model-download-progress` -> `SttModelDownloadProgressPayload`
+
+Phát lặp lại trong lúc `confirm_stt_model_switch` đang tải, để Settings hiển thị thanh tiến độ
+thay vì treo im lặng trong lúc tải file vài trăm MB - vài GB (human-in-the-loop.md).
+
+| Trường            | Kiểu     | Ghi chú                                   |
+| ----------------- | -------- | ------------------------------------------ |
+| `modelId`         | `string` | Id tier đang tải.                          |
+| `downloadedBytes` | `number` | Số byte đã tải.                            |
+| `totalBytes`      | `number` | Tổng số byte (từ header hoặc ước tính khi thiếu). |
+
 ### Commands cửa sổ overlay caption (FR-01, TASK-016)
 
 Do `src-tauri/src/shell/caption.rs` sở hữu; wrapper TypeScript là `captionIpc` trong `ipc.ts`.
