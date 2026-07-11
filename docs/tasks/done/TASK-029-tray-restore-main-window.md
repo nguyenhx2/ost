@@ -1,6 +1,6 @@
 ---
 title: "TASK-029: Tray item + left-click to restore the main window"
-status: Active
+status: Done
 fr: FR-04
 owner: frontend-ui-dev
 deps: TASK-027
@@ -54,4 +54,17 @@ Once the main window is closed there is no way to reopen it. The tray menu has a
 | 2026-07-11 | frontend-ui-dev | Added `MENU_ID_SHOW_WINDOW` ("Hiện cửa sổ chính", placed first in the menu) and a new `shell::main_window::restore_main_window` helper routed through `windows::open_deferred` (`Existing::ShowAndFocus`); refactored `tray.rs` so menu-id and icon-click dispatch both resolve through a pure `TrayAction` mapping (unit-tested, 7 new tests); wired `on_tray_icon_event` for a left-click(release)-only restore and set `show_menu_on_left_click(false)` (native right-click menu is unaffected by that flag). `cargo fmt`/`clippy -D warnings`/`cargo test --lib` clean (incl. the TASK-027 `no_raw_webview_window_builder_outside_this_module` guard). Verified against the release binary (`npm run tauri build -- --no-bundle`): WM_CLOSE on the main window hides it while the process stays alive; a real OS-level click on the tray icon (via Shell_NotifyIconGetRect + SendInput, since this box has an actual interactive desktop) shows AND foregrounds the main window (`GetForegroundWindow` == main hwnd, title "OST"); a right-click on the icon still opens the native `#32768` context-menu window (menu stays reachable). No e2e spec added (tauri-driver cannot drive the native tray/menu) and `window-open-deferred.spec.ts` left untouched. | Done - PR opened |
 
 ## Result
-<Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>
+
+Landed via PR #60, merge commit d4e2ace.
+
+Added tray menu item "Hiện cửa sổ chính" (placed first, then a separator, then the existing items) that shows and focuses the main window.
+
+Left-click on the tray icon now restores the main window: set `show_menu_on_left_click(false)` plus a new `on_tray_icon_event` handler; right-click still opens the native context menu. The handler fires only on `MouseButtonState::Up` (button release) so one click dispatches once.
+
+Restore routes through the TASK-027 deferred window helper via a new `src-tauri/src/shell/main_window.rs` (`restore_main_window` function calls `windows::open_deferred` with `Existing::ShowAndFocus`); no raw `WebviewWindowBuilder` outside `windows.rs`. The recursive TASK-027 guard test (`no_raw_webview_window_builder_outside_this_module`) provably covers this new shell file.
+
+Close-to-tray confirmed already correct: `CLOSE_TO_TRAY_LABELS` in `src-tauri/src/shell/mod.rs` contains `"main"`, and `on_window_event` calls `api.prevent_close()` followed by `window.hide()`, so closing the main window hides it rather than destroying it.
+
+Verified on the RELEASE binary with real OS input: `WM_CLOSE` hides the window while the process stays resident; a `SendInput` left-click on the real tray icon restores and foregrounds it; right-click still opens the menu. 62 shell tests pass, including 7 new tray tests.
+
+No e2e spec added: tauri-driver only drives the app's own WebView and cannot interact with the native tray icon or menu.
