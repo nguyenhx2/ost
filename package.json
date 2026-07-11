@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:e2e": "wdio run e2e/wdio.conf.ts",
-    "test:e2e:region": "wdio run e2e/wdio.conf.ts --spec e2e/specs/region-select.spec.ts"
+    "test:e2e:region": "wdio run e2e/wdio.conf.ts --spec e2e/specs/region-select.spec.ts",
+    "test:e2e:window-open": "wdio run e2e/wdio.conf.ts --spec e2e/specs/window-open-deferred.spec.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

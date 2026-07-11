@@ -7,6 +7,7 @@ pub mod hotkeys;
 pub mod region;
 pub mod settings;
 pub mod tray;
+pub mod windows;
 
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent};
 
