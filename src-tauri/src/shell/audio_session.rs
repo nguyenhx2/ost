@@ -765,7 +765,7 @@ pub fn list_stt_models(pipeline: State<'_, AudioSessionPipeline>) -> Vec<SttMode
 /// per-model download size) when a fetch is required - the caller must then
 /// call [`confirm_stt_model_switch`] after the user confirms.
 #[tauri::command]
-pub fn request_stt_model_switch(
+pub async fn request_stt_model_switch(
     app: AppHandle,
     pipeline: State<'_, AudioSessionPipeline>,
     model_id: String,
@@ -783,7 +783,7 @@ pub fn request_stt_model_switch(
     match decision {
         SwitchDecision::AlreadyCurrent => Ok(SttModelSwitchOutcome::AlreadyCurrent),
         SwitchDecision::Switched => {
-            apply_model_switch(&app, &pipeline, &model_id, entry.model)?;
+            apply_model_switch(&app, &pipeline, &model_id, entry.model).await?;
             Ok(SttModelSwitchOutcome::Switched)
         }
         SwitchDecision::ConsentRequired => {
@@ -838,26 +838,37 @@ pub async fn confirm_stt_model_switch(
     .await
     .map_err(|_| SttModelSwitchError::Download)?;
 
-    apply_model_switch(&app, &pipeline, &model_id, model)
+    apply_model_switch(&app, &pipeline, &model_id, model).await
 }
 
 /// Persists `model_id` to the settings store and swaps the pipeline's current
 /// model. Called once the target model is confirmed present on disk (either
 /// it already was, or [`confirm_stt_model_switch`] just fetched it).
-fn apply_model_switch(
+///
+/// The settings-store write (`store.save()`) is synchronous file I/O
+/// (`tauri-plugin-store`); this is called from `confirm_stt_model_switch`, an
+/// async command running on a Tokio worker, so the write is off-loaded to
+/// `tokio::task::spawn_blocking` (coding-standards.md: no blocking calls in
+/// async contexts) - the same pattern `run_caption_loop` uses for whisper
+/// inference (AC-05.3).
+async fn apply_model_switch(
     app: &AppHandle,
     pipeline: &AudioSessionPipeline,
     model_id: &str,
     model: WhisperModel,
 ) -> Result<(), SttModelSwitchError> {
-    let store = app
-        .store(SETTINGS_STORE_FILE)
-        .map_err(|_| SttModelSwitchError::Store)?;
-    store.set(
-        STT_MODEL_STORE_KEY,
-        serde_json::Value::String(model_id.to_string()),
-    );
-    store.save().map_err(|_| SttModelSwitchError::Store)?;
+    let app = app.clone();
+    let model_id = model_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<(), SttModelSwitchError> {
+        let store = app
+            .store(SETTINGS_STORE_FILE)
+            .map_err(|_| SttModelSwitchError::Store)?;
+        store.set(STT_MODEL_STORE_KEY, serde_json::Value::String(model_id));
+        store.save().map_err(|_| SttModelSwitchError::Store)?;
+        Ok(())
+    })
+    .await
+    .map_err(|_| SttModelSwitchError::Store)??;
 
     if let Ok(mut guard) = pipeline.model.lock() {
         *guard = model;
