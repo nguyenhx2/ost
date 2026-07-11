@@ -24,7 +24,11 @@ export const PROVIDER_MODEL_OPTIONS: ProviderModelOption[] = [
     model: "claude-sonnet-4-5",
   },
   { id: "openai/gpt-5-mini", provider: "openai", model: "gpt-5-mini" },
-  { id: "openrouter/auto", provider: "openrouter", model: "auto" },
+  {
+    id: "openrouter/openrouter/auto",
+    provider: "openrouter",
+    model: "openrouter/auto",
+  },
 ];
 
 export const DEFAULT_PROVIDER_OPTION: ProviderModelOption =
@@ -86,7 +90,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   anthropic: {
     id: "anthropic",
     displayName: "Anthropic (Claude)",
-    supportsValidation: false,
+    supportsValidation: true,
     models: [
       { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
       { id: "claude-opus-4-1", label: "Claude Opus 4.1" },
@@ -96,7 +100,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   openai: {
     id: "openai",
     displayName: "OpenAI",
-    supportsValidation: false,
+    supportsValidation: true,
     models: [
       { id: "gpt-5-mini", label: "GPT-5 mini" },
       { id: "gpt-5", label: "GPT-5" },
@@ -106,9 +110,9 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
   openrouter: {
     id: "openrouter",
     displayName: "OpenRouter",
-    supportsValidation: false,
+    supportsValidation: true,
     models: [
-      { id: "auto", label: "Auto (OpenRouter routing)" },
+      { id: "openrouter/auto", label: "Auto (OpenRouter routing)" },
       { id: "openai/gpt-5-mini", label: "GPT-5 mini" },
       { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
     ],

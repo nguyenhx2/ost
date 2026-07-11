@@ -553,7 +553,20 @@ export function SettingsView() {
               present={keys.statuses[meta.id]}
               result={keys.results[meta.id]}
               model={selection.settings.models[meta.id]}
-              onSave={keys.saveKey}
+              onSave={async (id, value) => {
+                const cleared = await keys.saveKey(id, value);
+                // Adding a key while the ACTIVE provider has no key is a dead
+                // end: every translation still routes to the keyless provider
+                // and fails with a generic error. Make the provider you just
+                // configured the active one. The local OpenAI-compatible
+                // provider needs no key, so never switch away from it.
+                const active = selection.settings.defaultProvider;
+                const activeNeedsKey = isProviderId(active);
+                if (cleared && activeNeedsKey && !keys.statuses[active]) {
+                  await selection.setDefaultProvider(id);
+                }
+                return cleared;
+              }}
               onCheck={(id) => void keys.checkKey(id)}
               onRemove={(id) => void keys.removeKey(id)}
               onModelChange={(id, m) => void selection.setProviderModel(id, m)}
