@@ -55,3 +55,4 @@ overlay system.
 | TASK-027 | Generalize the deferred window-open helper across all five window sites | frontend-ui-dev | TASK-023 | P0 | 1 | Done |
 | TASK-028 | Build the main-window home screen (primary actions + status at a glance) | frontend-ui-dev | TASK-025 | P0 | 3 | Done |
 | TASK-029 | Tray item + left-click to restore the main window | frontend-ui-dev | TASK-027 | P1 | 3 | Done |
+| TASK-030 | Fix Badge accessible name hiding the value from assistive tech | frontend-ui-dev | TASK-028 | P1 | 3 | Active |
