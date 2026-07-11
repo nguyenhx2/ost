@@ -7,6 +7,33 @@
 const en = {
   "app.title": "OST",
 
+  // Home screen (main window, FR-04 TASK-028)
+  "home.subtitle": "Live audio and screen translation",
+  "home.statusHeading": "Status",
+  "home.providerLabel": "Active provider and model",
+  "home.sttLabel": "Speech-to-text model",
+  "home.sttDownloaded": "Downloaded",
+  "home.sttNotDownloaded": "Not downloaded yet",
+  "home.audioSessionLabel": "Audio session",
+  "home.audioRunning": "Running",
+  "home.audioIdle": "Not running",
+  "home.noProviderKey":
+    "No provider key is configured yet - open Settings to add one",
+  "home.openSettings": "Open Settings",
+  "home.actionsHeading": "Quick actions",
+  "home.hotkeyLabel": "Hotkey",
+  "home.actionRegion": "Translate a screen region",
+  "home.actionRegionCta": "Select region",
+  "home.actionAudio": "Start / stop live audio translation",
+  "home.actionAudioStart": "Start",
+  "home.actionAudioStop": "Stop",
+  "home.actionSettings": "Settings",
+  "home.actionSettingsCta": "View Settings",
+  "home.actionHistory": "History",
+  "home.actionHistoryCta": "Open History",
+  "home.audioStartError":
+    "Could not start the audio session - please try again",
+
   // SCR-02: region selection overlay
   "select.overlayLabel": "Select a screen region to translate",
   "select.hintMouse": "Drag to select a region - release or Enter to confirm",
@@ -279,6 +306,31 @@ const en = {
 
 const vi: Record<I18nKey, string> = {
   "app.title": "OST",
+
+  "home.subtitle": "Dịch âm thanh và màn hình theo thời gian thực",
+  "home.statusHeading": "Trạng thái",
+  "home.providerLabel": "Provider và model đang hoạt động",
+  "home.sttLabel": "Mô hình chuyển giọng nói thành văn bản",
+  "home.sttDownloaded": "Đã tải",
+  "home.sttNotDownloaded": "Chưa tải",
+  "home.audioSessionLabel": "Phiên âm thanh",
+  "home.audioRunning": "Đang chạy",
+  "home.audioIdle": "Chưa chạy",
+  "home.noProviderKey": "Chưa cấu hình khoá provider - mở Cài đặt để thêm khoá",
+  "home.openSettings": "Mở Cài đặt",
+  "home.actionsHeading": "Thao tác nhanh",
+  "home.hotkeyLabel": "Phím tắt",
+  "home.actionRegion": "Dịch một vùng màn hình",
+  "home.actionRegionCta": "Chọn vùng",
+  "home.actionAudio": "Bắt đầu / dừng dịch âm thanh trực tiếp",
+  "home.actionAudioStart": "Bắt đầu",
+  "home.actionAudioStop": "Dừng",
+  "home.actionSettings": "Cài đặt",
+  "home.actionSettingsCta": "Xem Cài đặt",
+  "home.actionHistory": "Lịch sử",
+  "home.actionHistoryCta": "Mở Lịch sử",
+  "home.audioStartError":
+    "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
 
   "select.overlayLabel": "Chọn vùng màn hình để dịch",
   "select.hintMouse":

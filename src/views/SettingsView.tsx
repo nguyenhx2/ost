@@ -61,6 +61,7 @@ import {
   type SttModelSwitchErrorKind,
 } from "../lib/ipc";
 import { formatBytes } from "../lib/format";
+import { STT_MODEL_LABEL_KEYS } from "../lib/sttModelLabels";
 import type { I18nKey } from "../lib/i18n";
 
 /** Per-action row label (AC-04.1); every string is an i18n key. */
@@ -76,21 +77,6 @@ const HOTKEY_ERROR_KEYS: Record<HotkeyErrorKind, I18nKey> = {
   duplicate: "settings.hotkeyErrorDuplicate",
   conflict: "settings.hotkeyErrorConflict",
   store: "settings.hotkeyErrorStore",
-};
-
-/**
- * STT engine picker (FR-01, TASK-026 part C). This is a SEPARATE picker from
- * the FR-03 translation-provider one below - never shared state, never a
- * shared list (PRD-FR-01-stt-backend-options section 3 "Ranh giới hai bộ
- * chọn"). i18n owns the tier display names (the core's `label` is an English
- * fallback only, used for unknown/future ids).
- */
-const STT_MODEL_LABEL_KEYS: Partial<Record<string, I18nKey>> = {
-  tiny: "settings.sttModelTiny",
-  base: "settings.sttModelBase",
-  small: "settings.sttModelSmall",
-  "large-v3-turbo": "settings.sttModelLargeTurbo",
-  "large-v3": "settings.sttModelLargeV3",
 };
 
 /**
