@@ -48,3 +48,4 @@ overlay system.
 | TASK-020 | Auto-update + installer/bundler (gated release) | devops | TASK-004 | P1 | 3 | Done |
 | TASK-021 | Fix region-capture WGC hang + first-run ordering + download timeout | screen-translate-dev | TASK-007 | P0 | 1 | Done |
 | TASK-022 | Wire e2e acceptance gate (WebdriverIO + tauri-driver) | qa-test | TASK-021 | P0 | 1 | Done |
+| TASK-023 | Fix reentrant window-lifecycle deadlock (close-select + open-preview) | frontend-ui-dev | TASK-021 | P0 | 1 | Active |
