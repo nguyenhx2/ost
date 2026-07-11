@@ -4,7 +4,15 @@ import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
-    ignores: ["dist/", "node_modules/", "src-tauri/target/", "src-tauri/gen/"],
+    // `.claude/` holds agent worktrees (full repo copies), which otherwise give
+    // every file a second TSConfigRootDir candidate and fail parsing.
+    ignores: [
+      "dist/",
+      "node_modules/",
+      "src-tauri/target/",
+      "src-tauri/gen/",
+      ".claude/",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
