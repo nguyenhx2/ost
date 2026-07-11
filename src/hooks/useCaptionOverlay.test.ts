@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
       revokeConsent: vi.fn().mockResolvedValue(undefined),
     },
     settingsIpc: { open: vi.fn().mockResolvedValue(undefined) },
+    keysIpc: { statuses: vi.fn() },
     listenIpc: vi.fn((event: string, handler: (payload: unknown) => void) => {
       handlers.set(event, handler);
       return Promise.resolve(() => handlers.delete(event));
@@ -43,6 +44,7 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     captionIpc: mocks.captionIpc,
     modelIpc: mocks.modelIpc,
     settingsIpc: mocks.settingsIpc,
+    keysIpc: mocks.keysIpc,
     listenIpc: mocks.listenIpc,
     copyToClipboard: mocks.copyToClipboard,
   };
@@ -119,6 +121,15 @@ const DISCLOSURE: ConsentDisclosure = {
   destination: "~/.cache/whisper",
 };
 
+function keyStatuses(present: Partial<Record<string, boolean>>) {
+  return [
+    { provider_id: "gemini", key_present: !!present.gemini },
+    { provider_id: "anthropic", key_present: !!present.anthropic },
+    { provider_id: "openai", key_present: !!present.openai },
+    { provider_id: "openrouter", key_present: !!present.openrouter },
+  ];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
@@ -126,6 +137,9 @@ beforeEach(() => {
   mocks.audioIpc.stop.mockResolvedValue(undefined);
   mocks.captionIpc.closeOverlay.mockResolvedValue(undefined);
   mocks.modelIpc.grantConsent.mockResolvedValue(undefined);
+  // Default: a key IS configured, so existing session-start behavior is
+  // unaffected; the zero-key describe block below overrides this per test.
+  mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
 });
 
 describe("useCaptionOverlay - session start (AC-01.1)", () => {
@@ -230,6 +244,30 @@ describe("useCaptionOverlay - model consent (fail-closed, AC-01.8)", () => {
     // Re-signal: the session start is called again after the grant.
     await waitFor(() => expect(mocks.audioIpc.start).toHaveBeenCalledTimes(2));
     expect(result.current.consentDialogOpen).toBe(false);
+  });
+});
+
+describe("useCaptionOverlay - no provider key configured (TASK-025)", () => {
+  it("detects zero keys client-side and never fires the doomed start call", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    const { result } = renderHook(() => useCaptionOverlay(REQUEST));
+
+    await waitFor(() =>
+      expect(result.current.state.startError?.kind).toBe("noProviderKey"),
+    );
+    expect(mocks.audioIpc.start).not.toHaveBeenCalled();
+  });
+
+  it("openSettings invokes the Settings-open IPC", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    const { result } = renderHook(() => useCaptionOverlay(REQUEST));
+
+    await waitFor(() =>
+      expect(result.current.state.startError?.kind).toBe("noProviderKey"),
+    );
+    act(() => result.current.openSettings());
+
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
       revokeConsent: vi.fn().mockResolvedValue(undefined),
     },
     settingsIpc: { open: vi.fn().mockResolvedValue(undefined) },
+    keysIpc: { statuses: vi.fn() },
     listenIpc: vi.fn((event: string, handler: (payload: unknown) => void) => {
       handlers.set(event, handler);
       return Promise.resolve(() => handlers.delete(event));
@@ -38,6 +39,7 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     captionIpc: mocks.captionIpc,
     modelIpc: mocks.modelIpc,
     settingsIpc: mocks.settingsIpc,
+    keysIpc: mocks.keysIpc,
     listenIpc: mocks.listenIpc,
     copyToClipboard: mocks.copyToClipboard,
   };
@@ -112,11 +114,23 @@ async function renderOverlay() {
   return rendered;
 }
 
+function keyStatuses(present: Partial<Record<string, boolean>>) {
+  return [
+    { provider_id: "gemini", key_present: !!present.gemini },
+    { provider_id: "anthropic", key_present: !!present.anthropic },
+    { provider_id: "openai", key_present: !!present.openai },
+    { provider_id: "openrouter", key_present: !!present.openrouter },
+  ];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
   setLocale("en");
   mocks.audioIpc.start.mockResolvedValue(undefined);
+  // Default: a key IS configured, so the session starts as before; the
+  // zero-key tests below override this per test.
+  mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
 });
 
 describe("CaptionOverlayView", () => {
@@ -171,6 +185,45 @@ describe("CaptionOverlayView", () => {
     expect(dialog).toBeInTheDocument();
     // The disclosure host is named (fail-closed egress transparency).
     expect(screen.getByText(/huggingface\.co/)).toBeInTheDocument();
+  });
+
+  it("shows the distinct no-key notice (not the generic start-failed message) when zero keys are configured (TASK-025)", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    window.history.pushState(
+      {},
+      "",
+      "/?view=caption&provider=gemini&model=gemini-2.5-flash&source=auto&target=vi",
+    );
+    render(<CaptionOverlayView />);
+
+    await screen.findByText(
+      "No provider key is configured - open Settings to add one",
+    );
+    expect(mocks.audioIpc.start).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(
+        "Could not start the audio session - please try again",
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Open Settings" }).click();
+    });
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the generic start-failed message (not the no-key notice) for a real start failure with a key configured", async () => {
+    mocks.audioIpc.start.mockRejectedValueOnce({ kind: "capture" });
+    await renderOverlay();
+
+    await screen.findByText(
+      "Could not start the audio session - please try again",
+    );
+    expect(
+      screen.queryByText(
+        "No provider key is configured - open Settings to add one",
+      ),
+    ).toBeNull();
   });
 
   it("has keyboard-operable pin and copy controls (AC-04.3/04.8)", async () => {
