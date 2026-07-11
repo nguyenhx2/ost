@@ -51,4 +51,4 @@ overlay system.
 | TASK-023 | Fix reentrant window-lifecycle deadlock (close-select + open-preview) | frontend-ui-dev | TASK-021 | P0 | 1 | Done |
 | TASK-024 | UI polish: transparent-window white-bleed, scrollbars, fill-on-resize sweep | frontend-ui-dev | TASK-023 | P1 | 3 | Done |
 | TASK-025 | No-API-key onboarding notice on translation surfaces | frontend-ui-dev | TASK-009 | P1 | 3 | Done |
-| TASK-026 | STT backend options (research + design + cloud-STT ADR package) | tech-researcher | TASK-014 | P1 | 2 | Active |
+| TASK-026 | STT backend options (research + design + cloud-STT ADR package) | tech-researcher | TASK-014 | P1 | 2 | Done |
