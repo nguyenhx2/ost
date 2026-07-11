@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ClipboardCopy,
   Copy,
+  Crop,
   Move,
   Pin,
   PinOff,
@@ -22,6 +23,10 @@ import {
 import { ConsentDialog } from "../components/ConsentDialog";
 import { useRegionPreview } from "../hooks/useRegionPreview";
 import { t } from "../lib/i18n";
+import {
+  SOURCE_LANGUAGE_OPTIONS,
+  TARGET_LANGUAGE_OPTIONS,
+} from "../lib/languages";
 import { PROVIDER_MODEL_OPTIONS, providerOptionLabel } from "../lib/providers";
 import "./RegionPreviewView.css";
 
@@ -41,8 +46,16 @@ export function RegionPreviewView() {
   const preview = useRegionPreview();
   const [opacity, setOpacity] = useState(OPACITY_DEFAULT);
 
-  const { state, copied, pinned, liveUpdate, option, consentDialogOpen } =
-    preview;
+  const {
+    state,
+    copied,
+    pinned,
+    liveUpdate,
+    option,
+    consentDialogOpen,
+    sourceLanguage,
+    targetLanguage,
+  } = preview;
 
   const providerBadgeText =
     state.provider && state.model
@@ -75,6 +88,14 @@ export function RegionPreviewView() {
             {t("preview.title")}
           </h1>
           <Badge label={t("preview.providerBadge")}>{providerBadgeText}</Badge>
+          <Tooltip text={t("preview.reselect")}>
+            <IconButton
+              label={t("preview.reselect")}
+              onClick={preview.reselect}
+            >
+              <Crop size={16} aria-hidden="true" />
+            </IconButton>
+          </Tooltip>
           <Tooltip text={t("preview.moveHandle")}>
             <IconButton
               label={t("preview.moveHandle")}
@@ -227,6 +248,24 @@ export function RegionPreviewView() {
         {/* Docked control bar (owner complaint: controls must not eat the
             panel) - fixed at the bottom, outside the scrolling body above. */}
         <div className="region-preview-controls">
+          <Select
+            label={t("preview.sourceLanguage")}
+            options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: t(o.labelKey),
+            }))}
+            value={sourceLanguage}
+            onChange={preview.setSourceLanguage}
+          />
+          <Select
+            label={t("preview.targetLanguage")}
+            options={TARGET_LANGUAGE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: t(o.labelKey),
+            }))}
+            value={targetLanguage}
+            onChange={preview.setTargetLanguage}
+          />
           <Select
             label={t("preview.providerModel")}
             options={selectableOptions.map((o) => ({

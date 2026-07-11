@@ -4,6 +4,7 @@ import {
   EVENT_MODELS_CONSENT_REQUIRED,
   EVENT_REGION_OCR_ERROR,
   EVENT_REGION_OCR_RESULT,
+  EVENT_REGION_SELECTED,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
   listenIpc,
@@ -14,23 +15,25 @@ import {
   type OcrErrorPayload,
   type OcrFidelity,
   type OcrResultPayload,
+  type SourceLanguage,
   type TranslationErrorPayload,
   type TranslationResultPayload,
 } from "../lib/ipc";
+import {
+  DEFAULT_SOURCE_LANGUAGE,
+  DEFAULT_TARGET_LANGUAGE,
+} from "../lib/languages";
 import {
   DEFAULT_PROVIDER_OPTION,
   type ProviderModelOption,
 } from "../lib/providers";
 import { activeModel, loadProviderSettings } from "../lib/settings";
 import { recordTranslation } from "../lib/history";
+import {
+  loadRegionLanguageSettings,
+  saveRegionLanguageSettings,
+} from "../lib/regionLanguageSettings";
 import { useHasAnyProviderKey } from "./useHasAnyProviderKey";
-
-/**
- * Default target language for recorded history (BR-07 target default `vi`,
- * HISTORY_ENTRY.target_language). No target picker exists in the preview yet;
- * when one lands it threads through to `recordTranslation` here.
- */
-const DEFAULT_TARGET_LANGUAGE = "vi";
 
 export type PreviewStatus =
   /** Waiting for the first OCR event after region confirm. */
@@ -138,6 +141,27 @@ export interface UseRegionPreviewResult {
   reopenConsent: () => void;
   /** Open Settings (the CTA for a missing provider key, human-in-the-loop.md). */
   openSettings: () => void;
+  /**
+   * Persisted source-language pin (BR-07, item 3): the default the NEXT region
+   * selection uses (this dialog cannot retroactively re-run OCR for the
+   * region already captured). Shared with the home screen and the select
+   * overlay via `regionLanguageSettings`.
+   */
+  sourceLanguage: SourceLanguage;
+  setSourceLanguage: (language: SourceLanguage) => void;
+  /**
+   * Target language for translation (item 3). Feeds every (re-)translate
+   * request and the recorded history `targetLanguage`; persisted so it
+   * survives across sessions (BR-07 default `vi`).
+   */
+  targetLanguage: string;
+  setTargetLanguage: (language: string) => void;
+  /**
+   * Start a NEW region capture WITHOUT closing this dialog (item 1). Opens the
+   * same fullscreen select overlay as the main screen/tray/hotkey; when the
+   * user confirms, this SAME dialog refreshes for the new region (item 2 fix).
+   */
+  reselect: () => void;
 }
 
 /**
@@ -157,11 +181,40 @@ export function useRegionPreview(): UseRegionPreviewResult {
   const [consentDisclosure, setConsentDisclosure] =
     useState<ConsentDisclosure | null>(null);
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
+  const [sourceLanguage, setSourceLanguageState] = useState<SourceLanguage>(
+    DEFAULT_SOURCE_LANGUAGE,
+  );
+  const [targetLanguage, setTargetLanguageState] = useState<string>(
+    DEFAULT_TARGET_LANGUAGE,
+  );
   const { hasKey } = useHasAnyProviderKey();
 
   const optionRef = useRef(option);
   const hasKeyRef = useRef(hasKey);
   hasKeyRef.current = hasKey;
+  const sourceLanguagePrefRef = useRef(sourceLanguage);
+  const targetLanguageRef = useRef(targetLanguage);
+
+  // Item 3 (language pickers): load the persisted preference on mount so this
+  // dialog reflects whatever the user last chose (here or on the home
+  // screen). An unreadable store must never break the overlay.
+  useEffect(() => {
+    let cancelled = false;
+    void loadRegionLanguageSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+        sourceLanguagePrefRef.current = settings.sourceLanguage;
+        setSourceLanguageState(settings.sourceLanguage);
+        targetLanguageRef.current = settings.targetLanguage;
+        setTargetLanguageState(settings.targetLanguage);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // AC-03.5: translate with the provider/model the user actually configured in
   // Settings. Without this the preview stayed on the hardcoded catalog default
@@ -235,6 +288,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
         sourceText,
         provider,
         model,
+        targetLanguage: targetLanguageRef.current,
       });
     },
     [clearTranslationTimeout],
@@ -348,7 +402,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
         sourceText: sourceTextRef.current,
         translatedText: payload.translatedText,
         sourceLanguage: sourceLanguageRef.current,
-        targetLanguage: DEFAULT_TARGET_LANGUAGE,
+        targetLanguage: targetLanguageRef.current,
         providerId: payload.provider,
         modelId: payload.model,
       }).catch(() => {
@@ -367,6 +421,30 @@ export function useRegionPreview(): UseRegionPreviewResult {
           ? { ...prev, status: "failed", failureReason: "error" }
           : prev,
       );
+    };
+
+    // BUG FIX (item 2): a NEW region confirmed while this dialog is ALREADY
+    // open (main screen, tray, hotkey, or the in-dialog re-select button) only
+    // FOCUSES this window core-side - it never re-mounts, so the one-time
+    // mount handshake below never runs again on its own. The core emits
+    // `region:selected` in exactly that case; reset every piece of state back
+    // to the initial "waiting for OCR" shape and re-run the handshake so the
+    // dialog actually refreshes for the new region instead of silently
+    // keeping the old one.
+    const onRegionSelected = () => {
+      clearTranslationTimeout();
+      requestIdRef.current = null;
+      sourceTextRef.current = "";
+      sourceLanguageRef.current = "";
+      translationRef.current = null;
+      setConsentDisclosure(null);
+      setConsentDialogOpen(false);
+      setState((prev) => ({
+        ...INITIAL_STATE,
+        provider: prev.provider,
+        model: prev.model,
+      }));
+      void regionIpc.previewReady();
     };
 
     void (async () => {
@@ -390,15 +468,20 @@ export function useRegionPreview(): UseRegionPreviewResult {
         EVENT_MODELS_CONSENT_REQUIRED,
         onConsentRequired,
       );
+      const un6 = await listenIpc<void>(
+        EVENT_REGION_SELECTED,
+        onRegionSelected,
+      );
       if (disposed) {
         un1();
         un2();
         un3();
         un4();
         un5();
+        un6();
         return;
       }
-      unlistens.push(un1, un2, un3, un4, un5);
+      unlistens.push(un1, un2, un3, un4, un5, un6);
       // Handshake: listeners are attached, the pipeline may emit now.
       await regionIpc.previewReady();
     })();
@@ -519,6 +602,35 @@ export function useRegionPreview(): UseRegionPreviewResult {
     void settingsIpc.open();
   }, []);
 
+  const setSourceLanguage = useCallback((language: SourceLanguage) => {
+    sourceLanguagePrefRef.current = language;
+    setSourceLanguageState(language);
+    // Persist so the NEXT selection (here, home screen, or select overlay)
+    // defaults to this pin; best-effort only.
+    void loadRegionLanguageSettings()
+      .then((settings) =>
+        saveRegionLanguageSettings({ ...settings, sourceLanguage: language }),
+      )
+      .catch(() => undefined);
+  }, []);
+
+  const setTargetLanguage = useCallback((language: string) => {
+    targetLanguageRef.current = language;
+    setTargetLanguageState(language);
+    void loadRegionLanguageSettings()
+      .then((settings) =>
+        saveRegionLanguageSettings({ ...settings, targetLanguage: language }),
+      )
+      .catch(() => undefined);
+  }, []);
+
+  const reselect = useCallback(() => {
+    // Opens the SAME fullscreen select overlay as the main screen/tray/hotkey
+    // (item 1); confirming it refreshes THIS dialog via `region:selected`
+    // (item 2 fix) instead of requiring the user to close and reopen.
+    void regionIpc.startSelection();
+  }, []);
+
   return {
     state,
     option,
@@ -540,5 +652,10 @@ export function useRegionPreview(): UseRegionPreviewResult {
     declineConsent,
     reopenConsent,
     openSettings,
+    sourceLanguage,
+    setSourceLanguage,
+    targetLanguage,
+    setTargetLanguage,
+    reselect,
   };
 }

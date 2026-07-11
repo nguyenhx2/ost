@@ -33,6 +33,8 @@ const en = {
   "home.actionHistoryCta": "Open History",
   "home.audioStartError":
     "Could not start the audio session - please try again",
+  "home.regionSourceLanguage": "Region source language",
+  "home.regionTargetLanguage": "Region target language",
 
   // SCR-02: region selection overlay
   "select.overlayLabel": "Select a screen region to translate",
@@ -83,6 +85,9 @@ const en = {
   "preview.providerBadge": "Active provider and model",
   "preview.dragHandle": "Drag to reposition",
   "preview.moveHandle": "Move overlay (arrow keys while focused)",
+  "preview.reselect": "Select new region",
+  "preview.sourceLanguage": "Source language",
+  "preview.targetLanguage": "Target language",
 
   // SCR-01: live caption overlay (FR-01)
   "caption.title": "Live captions",
@@ -331,6 +336,8 @@ const vi: Record<I18nKey, string> = {
   "home.actionHistoryCta": "Mở Lịch sử",
   "home.audioStartError":
     "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
+  "home.regionSourceLanguage": "Ngôn ngữ nguồn cho vùng",
+  "home.regionTargetLanguage": "Ngôn ngữ đích cho vùng",
 
   "select.overlayLabel": "Chọn vùng màn hình để dịch",
   "select.hintMouse":
@@ -379,6 +386,9 @@ const vi: Record<I18nKey, string> = {
   "preview.providerBadge": "Provider và model đang dịch",
   "preview.dragHandle": "Kéo để đổi vị trí",
   "preview.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
+  "preview.reselect": "Chọn vùng mới",
+  "preview.sourceLanguage": "Ngôn ngữ nguồn",
+  "preview.targetLanguage": "Ngôn ngữ đích",
 
   "caption.title": "Phụ đề trực tiếp",
   "caption.sourceLabel": "Nghe được",

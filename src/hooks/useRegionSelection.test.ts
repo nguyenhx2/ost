@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 const regionIpcMock = vi.hoisted(() => ({
   startSelection: vi.fn().mockResolvedValue(undefined),
@@ -16,6 +16,15 @@ vi.mock("../lib/ipc", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/ipc")>();
   return { ...actual, regionIpc: regionIpcMock };
 });
+
+const regionLanguageSettingsMock = vi.hoisted(() => ({
+  loadRegionLanguageSettings: vi
+    .fn()
+    .mockResolvedValue({ sourceLanguage: "auto", targetLanguage: "vi" }),
+  saveRegionLanguageSettings: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../lib/regionLanguageSettings", () => regionLanguageSettingsMock);
 
 import { useRegionSelection } from "./useRegionSelection";
 
@@ -122,6 +131,38 @@ describe("useRegionSelection - mouse path (AC-02.1)", () => {
 
     expect(regionIpcMock.confirmSelection).not.toHaveBeenCalled();
     expect(result.current.selecting).toBe(false);
+  });
+});
+
+describe("useRegionSelection - persisted language default (item 3)", () => {
+  it("defaults the source-language pin from the persisted preference", async () => {
+    regionLanguageSettingsMock.loadRegionLanguageSettings.mockResolvedValueOnce(
+      { sourceLanguage: "ja", targetLanguage: "en" },
+    );
+    const { result } = renderHook(() => useRegionSelection());
+
+    await waitFor(() => expect(result.current.sourceLanguage).toBe("ja"));
+
+    act(() => result.current.onMouseDown({ x: 10, y: 20 }));
+    act(() => result.current.onMouseMove({ x: 110, y: 70 }));
+    act(() => result.current.onMouseUp());
+
+    expect(regionIpcMock.confirmSelection).toHaveBeenCalledWith(
+      { x: 10, y: 20, width: 100, height: 50 },
+      "ja",
+    );
+  });
+
+  it("persists a new pin so the next selection defaults to it", async () => {
+    const { result } = renderHook(() => useRegionSelection());
+
+    act(() => result.current.setSourceLanguage("ko"));
+
+    await waitFor(() =>
+      expect(
+        regionLanguageSettingsMock.saveRegionLanguageSettings,
+      ).toHaveBeenCalledWith(expect.objectContaining({ sourceLanguage: "ko" })),
+    );
   });
 });
 

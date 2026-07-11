@@ -7,16 +7,21 @@ import {
   Square,
 } from "lucide-react";
 import "./App.css";
-import { Badge, Button } from "./components/ui";
+import { Badge, Button, Select } from "./components/ui";
 import { ProviderKeyNotice } from "./components/ProviderKeyNotice";
 import { useAudioSession } from "./hooks/useAudioSession";
 import { useHasAnyProviderKey } from "./hooks/useHasAnyProviderKey";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useProviderPickerMetadata } from "./hooks/useProviderPickerMetadata";
 import { useProviderSelection } from "./hooks/useProviderSelection";
+import { useRegionLanguageSettings } from "./hooks/useRegionLanguageSettings";
 import { useSttModels } from "./hooks/useSttModels";
 import { historyIpc, regionIpc, settingsIpc } from "./lib/ipc";
 import { t } from "./lib/i18n";
+import {
+  SOURCE_LANGUAGE_OPTIONS,
+  TARGET_LANGUAGE_OPTIONS,
+} from "./lib/languages";
 import { isProviderId, PROVIDER_META } from "./lib/providers";
 import { activeModel } from "./lib/settings";
 import { STT_MODEL_LABEL_KEYS } from "./lib/sttModelLabels";
@@ -39,6 +44,7 @@ function App() {
   const stt = useSttModels();
   const audio = useAudioSession();
   const hotkeys = useHotkeys();
+  const regionLanguage = useRegionLanguageSettings();
 
   const activeProvider = selection.settings.defaultProvider;
   const activeProviderModel = activeModel(selection.settings);
@@ -146,6 +152,27 @@ function App() {
                 {hotkeys.config.regionSelect}
               </Badge>
             ) : null}
+            {/* Item 3: language pickers default the NEXT region selection
+                anywhere in the app (select overlay + preview dialog read the
+                same persisted preference, useRegionLanguageSettings). */}
+            <Select
+              label={t("home.regionSourceLanguage")}
+              options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
+                value: o.value,
+                label: t(o.labelKey),
+              }))}
+              value={regionLanguage.settings.sourceLanguage}
+              onChange={regionLanguage.setSourceLanguage}
+            />
+            <Select
+              label={t("home.regionTargetLanguage")}
+              options={TARGET_LANGUAGE_OPTIONS.map((o) => ({
+                value: o.value,
+                label: t(o.labelKey),
+              }))}
+              value={regionLanguage.settings.targetLanguage}
+              onChange={regionLanguage.setTargetLanguage}
+            />
             <Button
               variant="primary"
               onClick={() => void regionIpc.startSelection()}
