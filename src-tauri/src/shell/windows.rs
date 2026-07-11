@@ -56,10 +56,15 @@ pub enum Existing {
 
 impl Existing {
     fn apply<R: Runtime>(self, window: &WebviewWindow<R>) {
+        let label = window.label();
         if matches!(self, Existing::ShowAndFocus) {
-            let _ = window.show();
+            if let Err(error) = window.show() {
+                tracing::error!(label, %error, "failed to show an already-open window");
+            }
         }
-        let _ = window.set_focus();
+        if let Err(error) = window.set_focus() {
+            tracing::error!(label, %error, "failed to focus an already-open window");
+        }
     }
 }
 
@@ -100,6 +105,18 @@ pub fn open_deferred<R, F, A>(
     // Spawn OFF the main thread so `run_on_main_thread` cannot take its
     // same-thread fast path (which would run `build()` inline, on THIS call
     // stack, reproducing the reentrant deadlock). See module docs.
+    //
+    // `std::thread::spawn`, not `tokio::task::spawn_blocking` (the usual
+    // convention, coding-standards.md): this closure does no blocking I/O or
+    // CPU work of its own to hand off a Tokio worker thread for - its entire
+    // job is to exist as "a thread that is not the main thread" so the call
+    // to `run_on_main_thread` below is made from off-main-thread and is
+    // forced onto tao's queued event-loop-proxy path (see module docs). A
+    // Tokio blocking-pool thread would satisfy that same "not main thread"
+    // requirement, but it would tie this fire-and-forget scheduling step to
+    // the Tokio runtime being alive and would needlessly borrow a slot from
+    // the blocking pool for a call that returns almost immediately. A bare
+    // OS thread has neither dependency and is the more precise tool here.
     thread::spawn(move || {
         let deferred_app = main_thread_app.clone();
         let schedule_result = main_thread_app.run_on_main_thread(move || {
@@ -144,25 +161,39 @@ pub fn e2e_list_window_labels(app: tauri::AppHandle) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    /// Recursively collects every `.rs` file under `dir` into `out`, so the
+    /// guard below catches a raw `WebviewWindowBuilder` reintroduced in a
+    /// future nested submodule (e.g. `shell/foo/bar.rs`), not just top-level
+    /// siblings of `windows.rs`.
+    fn collect_rs_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let entries = std::fs::read_dir(dir)
+            .unwrap_or_else(|error| panic!("read {}: {error}", dir.display()));
+        for entry in entries {
+            let entry = entry.expect("dir entry");
+            let path = entry.path();
+            if path.is_dir() {
+                collect_rs_files(&path, out);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                out.push(path);
+            }
+        }
+    }
+
     /// GUARD (TASK-027): a raw `WebviewWindowBuilder` outside this module
     /// reintroduces the exact reentrant-deadlock risk TASK-023/027 fixed - any
     /// new (or reverted) window-creation site MUST go through
     /// [`super::open_deferred`] instead of calling `WebviewWindowBuilder`
-    /// directly. This test greps every sibling `shell/*.rs` source file so a
-    /// regression fails `cargo test`, not just code review.
+    /// directly. This test greps every `shell/**/*.rs` source file (any
+    /// nesting depth) so a regression fails `cargo test`, not just code
+    /// review.
     #[test]
     fn no_raw_webview_window_builder_outside_this_module() {
         let shell_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/shell");
-        let entries = std::fs::read_dir(&shell_dir)
-            .unwrap_or_else(|error| panic!("read {}: {error}", shell_dir.display()));
+        let mut files = Vec::new();
+        collect_rs_files(&shell_dir, &mut files);
 
         let mut offenders = Vec::new();
-        for entry in entries {
-            let entry = entry.expect("dir entry");
-            let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
-                continue;
-            }
+        for path in files {
             if path.file_name().and_then(|name| name.to_str()) == Some("windows.rs") {
                 continue; // the ONLY module allowed to build a webview window.
             }
