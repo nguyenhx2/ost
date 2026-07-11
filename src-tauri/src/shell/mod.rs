@@ -4,6 +4,7 @@ pub mod audio_session;
 pub mod caption;
 pub mod history;
 pub mod hotkeys;
+pub mod main_window;
 pub mod region;
 pub mod settings;
 pub mod tray;
