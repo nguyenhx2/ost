@@ -34,6 +34,16 @@ pub enum ProviderError {
         message: String,
     },
 
+    /// The local OpenAI-compatible server (e.g. LM Studio) refused the
+    /// connection - distinct from [`Self::Network`] so the UI can render a
+    /// specific "local server is not running" message instead of a generic
+    /// transport failure (FR-03.CUSTOM local provider requirement).
+    #[error("local server for {provider} is not reachable: {message}")]
+    LocalServerUnreachable {
+        provider: ProviderId,
+        message: String,
+    },
+
     /// The configured request or stream-idle timeout elapsed.
     #[error("request to {provider} timed out after {timeout_ms} ms")]
     Timeout {
@@ -74,6 +84,7 @@ impl ProviderError {
             ProviderError::Auth { provider, .. }
             | ProviderError::Quota { provider, .. }
             | ProviderError::Network { provider, .. }
+            | ProviderError::LocalServerUnreachable { provider, .. }
             | ProviderError::Timeout { provider, .. }
             | ProviderError::InvalidResponse { provider, .. }
             | ProviderError::Api { provider, .. }
@@ -82,13 +93,15 @@ impl ProviderError {
     }
 
     /// Whether the fallback router should try the next provider for this
-    /// error class (AC-03.6 groundwork: auth/quota/network/timeout).
+    /// error class (AC-03.6 groundwork: auth/quota/network/timeout). A local
+    /// server that is not running is treated the same as a network failure.
     pub fn is_fallback_trigger(&self) -> bool {
         matches!(
             self,
             ProviderError::Auth { .. }
                 | ProviderError::Quota { .. }
                 | ProviderError::Network { .. }
+                | ProviderError::LocalServerUnreachable { .. }
                 | ProviderError::Timeout { .. }
         )
     }
@@ -122,6 +135,11 @@ mod tests {
         }
         .is_fallback_trigger());
         assert!(!ProviderError::InvalidResponse {
+            provider: p,
+            message: "m".into()
+        }
+        .is_fallback_trigger());
+        assert!(ProviderError::LocalServerUnreachable {
             provider: p,
             message: "m".into()
         }

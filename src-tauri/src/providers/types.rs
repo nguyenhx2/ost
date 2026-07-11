@@ -2,10 +2,17 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The four supported providers (spec 08-data-model: `provider_id`).
-/// Serde strings are frozen: `"gemini" | "anthropic" | "openai" | "openrouter"`.
-/// Only Gemini has a client in TASK-006; the others are follow-up modules that
-/// implement [`super::TranslationProvider`] with zero trait changes (NFR-SCA-02).
+/// The supported providers (spec 08-data-model: `provider_id`).
+/// Serde strings are frozen: `"gemini" | "anthropic" | "openai" | "openrouter"
+/// | "local_openai"`. Only Gemini has a client in TASK-006; the others are
+/// follow-up modules that implement [`super::TranslationProvider`] with zero
+/// trait changes (NFR-SCA-02).
+///
+/// `LocalOpenAi` (TASK-026 part B) is a distinct case: it identifies by a
+/// user-configured, loopback-only `base_url` instead of an API key, so it is
+/// intentionally EXCLUDED from [`Self::ALL`] (the four keychain-backed
+/// providers iterated by `keys::KeyStore`) - it never touches the OS
+/// keychain. See `docs/architecture/api-contracts/providers.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderId {
@@ -13,15 +20,29 @@ pub enum ProviderId {
     Anthropic,
     OpenAI,
     OpenRouter,
+    #[serde(rename = "local_openai")]
+    LocalOpenAi,
 }
 
 impl ProviderId {
-    /// All providers in canonical order (Settings listing, AC-03.1 backend).
+    /// The four KEYCHAIN-BACKED providers in canonical order (Settings key
+    /// listing, AC-03.1 backend; `keys::KeyStore::all_statuses`).
+    /// `LocalOpenAi` is deliberately absent - it never stores a key.
     pub const ALL: [ProviderId; 4] = [
         ProviderId::Gemini,
         ProviderId::Anthropic,
         ProviderId::OpenAI,
         ProviderId::OpenRouter,
+    ];
+
+    /// All providers the translation-provider PICKER can show, including the
+    /// local/base-url provider (Settings provider picker, FR-03.CUSTOM-1).
+    pub const ALL_TRANSLATION: [ProviderId; 5] = [
+        ProviderId::Gemini,
+        ProviderId::Anthropic,
+        ProviderId::OpenAI,
+        ProviderId::OpenRouter,
+        ProviderId::LocalOpenAi,
     ];
 
     /// The frozen serde string for this provider.
@@ -31,6 +52,25 @@ impl ProviderId {
             ProviderId::Anthropic => "anthropic",
             ProviderId::OpenAI => "openai",
             ProviderId::OpenRouter => "openrouter",
+            ProviderId::LocalOpenAi => "local_openai",
+        }
+    }
+
+    /// Static Settings-picker metadata for this provider (FR-03.CUSTOM-1):
+    /// display name and whether it identifies by `base_url` instead of an
+    /// API key.
+    pub fn metadata(self) -> ProviderMetadata {
+        let (display_name, requires_base_url) = match self {
+            ProviderId::Gemini => ("Gemini", false),
+            ProviderId::Anthropic => ("Anthropic (Claude)", false),
+            ProviderId::OpenAI => ("OpenAI", false),
+            ProviderId::OpenRouter => ("OpenRouter", false),
+            ProviderId::LocalOpenAi => ("Custom (local, OpenAI-compatible)", true),
+        };
+        ProviderMetadata {
+            provider_id: self,
+            display_name,
+            requires_base_url,
         }
     }
 }
@@ -50,9 +90,21 @@ impl std::str::FromStr for ProviderId {
             "anthropic" => Ok(ProviderId::Anthropic),
             "openai" => Ok(ProviderId::OpenAI),
             "openrouter" => Ok(ProviderId::OpenRouter),
+            "local_openai" => Ok(ProviderId::LocalOpenAi),
             other => Err(format!("unknown provider id '{other}'")),
         }
     }
+}
+
+/// Settings provider-picker metadata (FR-03.CUSTOM-1): what the WebView needs
+/// to render a provider entry without knowing per-provider internals. Never
+/// carries key material - `requires_base_url` tells the UI to render a
+/// `base_url` field instead of an API-key field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ProviderMetadata {
+    pub provider_id: ProviderId,
+    pub display_name: &'static str,
+    pub requires_base_url: bool,
 }
 
 /// One translation request. `text` is UNTRUSTED DATA (STT/OCR capture) and is
@@ -114,6 +166,7 @@ mod tests {
             (ProviderId::Anthropic, "\"anthropic\""),
             (ProviderId::OpenAI, "\"openai\""),
             (ProviderId::OpenRouter, "\"openrouter\""),
+            (ProviderId::LocalOpenAi, "\"local_openai\""),
         ];
         for (id, json) in cases {
             assert_eq!(serde_json::to_string(&id).unwrap(), json);
@@ -124,10 +177,27 @@ mod tests {
 
     #[test]
     fn provider_id_from_str_round_trips() {
-        for id in ProviderId::ALL {
+        for id in ProviderId::ALL_TRANSLATION {
             assert_eq!(id.as_str().parse::<ProviderId>().unwrap(), id);
         }
         assert!("claude".parse::<ProviderId>().is_err());
+    }
+
+    #[test]
+    fn local_openai_is_excluded_from_the_keychain_provider_list() {
+        // ALL drives keys::KeyStore iteration - LocalOpenAi never stores a key.
+        assert!(!ProviderId::ALL.contains(&ProviderId::LocalOpenAi));
+        assert!(ProviderId::ALL_TRANSLATION.contains(&ProviderId::LocalOpenAi));
+    }
+
+    #[test]
+    fn local_openai_metadata_requires_base_url_not_a_key() {
+        let meta = ProviderId::LocalOpenAi.metadata();
+        assert!(meta.requires_base_url);
+        assert_eq!(meta.provider_id, ProviderId::LocalOpenAi);
+        for id in ProviderId::ALL {
+            assert!(!id.metadata().requires_base_url);
+        }
     }
 
     #[test]
