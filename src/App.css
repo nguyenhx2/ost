@@ -1,19 +1,123 @@
-/* App shell placeholder styles - token-driven only (design-system.md). */
+/*
+ * Home screen (main window, FR-04 / TASK-028). Token-driven only
+ * (design-system.md). Opaque, resizable window (tauri.conf.json has no
+ * `transparent` flag) - fills the window and is the ONE contained vertical
+ * scroll region, mirroring the settings/history shell-fill contract
+ * (TASK-024) so a resize never produces a window-level scrollbar.
+ */
 
-.app {
-  width: 100%;
-  height: 100%;
+.home {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-5);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-5);
   background-color: var(--color-bg);
   color: var(--color-text);
+  font-family: var(--font-sans);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.app-title {
+.home-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-title {
   margin: 0;
   font-size: var(--font-size-xl);
   color: var(--color-text);
+}
+
+.home-subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.home-section h2 {
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+/* ---------- Status ---------- */
+
+.home-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-status-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.home-status-label {
+  flex: 1 1 auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.home-status-value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+/* ---------- Primary actions ---------- */
+
+.home-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.home-action-label {
+  flex: 1 1 auto;
+  font-size: var(--font-size-sm);
+}
+
+.home-message {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.home-message--danger {
+  color: var(--color-danger);
 }
