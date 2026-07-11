@@ -15,7 +15,10 @@ export default defineConfig(async () => ({
     // Vitest owns the jsdom unit layer (src/). The e2e/ specs are WebdriverIO +
     // tauri-driver against the release binary (TASK-022) - a different runner;
     // exclude them so `vitest run` never tries to load @wdio/globals in jsdom.
-    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
+    // `.claude/**` also: agent worktrees are full repo copies checked out under
+    // `.claude/worktrees/`, so without this every spec is collected N+1 times
+    // and the e2e specs get loaded into jsdom, failing the run.
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**", ".claude/**"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

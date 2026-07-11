@@ -21,6 +21,7 @@ import {
   DEFAULT_PROVIDER_OPTION,
   type ProviderModelOption,
 } from "../lib/providers";
+import { activeModel, loadProviderSettings } from "../lib/settings";
 import { recordTranslation } from "../lib/history";
 import { useHasAnyProviderKey } from "./useHasAnyProviderKey";
 
@@ -161,6 +162,38 @@ export function useRegionPreview(): UseRegionPreviewResult {
   const optionRef = useRef(option);
   const hasKeyRef = useRef(hasKey);
   hasKeyRef.current = hasKey;
+
+  // AC-03.5: translate with the provider/model the user actually configured in
+  // Settings. Without this the preview stayed on the hardcoded catalog default
+  // (gemini) forever, so a user who configured a different provider got
+  // "translation failed" from a provider they never set a key for.
+  useEffect(() => {
+    let cancelled = false;
+    void loadProviderSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+        const provider = settings.defaultProvider;
+        const model = activeModel(settings);
+        if (!model) {
+          return;
+        }
+        const configured: ProviderModelOption = {
+          id: `${provider}/${model}`,
+          provider,
+          model,
+        };
+        optionRef.current = configured;
+        setOptionState(configured);
+      })
+      // An unreadable store must never break the overlay: fall back to the
+      // catalog default instead of rejecting into an unhandled error.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const sourceTextRef = useRef("");
   /** Detected source language from the last OCR event (BR-07 hint), or "". */
   const sourceLanguageRef = useRef("");

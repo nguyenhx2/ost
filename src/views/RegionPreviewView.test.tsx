@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => {
       return Promise.resolve(() => handlers.delete(event));
     }),
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
+    loadProviderSettings: vi.fn(),
   };
 });
 
@@ -54,6 +55,17 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     keysIpc: mocks.keysIpc,
     listenIpc: mocks.listenIpc,
     copyToClipboard: mocks.copyToClipboard,
+  };
+});
+
+// The preview loads the persisted provider selection on mount; without this the
+// real tauri-plugin-store call runs in jsdom and rejects with an undefined
+// `invoke`.
+vi.mock("../lib/settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/settings")>();
+  return {
+    ...actual,
+    loadProviderSettings: mocks.loadProviderSettings,
   };
 });
 
@@ -132,6 +144,19 @@ beforeEach(() => {
   // Default: a key IS configured, so existing translate-request behavior is
   // unaffected; the zero-key describe block below overrides this per test.
   mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
+  // Persisted selection matches the catalog default, so these view tests keep
+  // asserting the gemini badge they already assert.
+  mocks.loadProviderSettings.mockResolvedValue({
+    defaultProvider: "gemini",
+    models: {
+      gemini: "gemini-2.5-flash",
+      anthropic: "claude-sonnet-4-5",
+      openai: "gpt-5-mini",
+      openrouter: "auto",
+    },
+    fallbackOrder: [],
+    localOpenAi: { baseUrl: "", modelId: "" },
+  });
 });
 
 describe("RegionPreviewView (SCR-03)", () => {

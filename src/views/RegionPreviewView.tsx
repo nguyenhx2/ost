@@ -49,6 +49,16 @@ export function RegionPreviewView() {
       ? `${state.provider} / ${state.model}`
       : providerOptionLabel(option);
 
+  // The catalog is a static placeholder; the provider the user configured in
+  // Settings (e.g. openrouter, or the local OpenAI-compatible server) may not
+  // be in it. Always offer the active option so the Select can display it and
+  // the user is never silently switched back to a provider they never chose.
+  const selectableOptions = PROVIDER_MODEL_OPTIONS.some(
+    (o) => o.id === option.id,
+  )
+    ? PROVIDER_MODEL_OPTIONS
+    : [option, ...PROVIDER_MODEL_OPTIONS];
+
   return (
     <div
       className="region-preview"
@@ -219,13 +229,13 @@ export function RegionPreviewView() {
         <div className="region-preview-controls">
           <Select
             label={t("preview.providerModel")}
-            options={PROVIDER_MODEL_OPTIONS.map((o) => ({
+            options={selectableOptions.map((o) => ({
               value: o.id,
               label: providerOptionLabel(o),
             }))}
             value={option.id}
             onChange={(id) => {
-              const next = PROVIDER_MODEL_OPTIONS.find((o) => o.id === id);
+              const next = selectableOptions.find((o) => o.id === id);
               if (next) {
                 preview.setOption(next);
               }
