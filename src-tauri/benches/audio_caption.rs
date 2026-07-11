@@ -5,8 +5,17 @@
 //! whisper.cpp transcribe (the CPU-bound cost) -> provider translate. The
 //! translate step is provider I/O, so it is MOCKED with an instant stub here
 //! (testing.md: no real provider calls in benches); the measured cost is
-//! therefore the STT chunk path plus the (negligible) mock translate, which is
-//! what the p95 budget is dominated by on a local, latency-only run.
+//! therefore the STT chunk path plus the (negligible) mock translate.
+//!
+//! IMPORTANT scope note: this number is NOT the whole AC-01.2 end-to-end
+//! latency. The real pipeline also pays (a) the chunk-buffering wait - up to
+//! `ChunkConfig::for_rate`'s force-split cap for a word spoken right after a
+//! chunk boundary during continuous speech - and (b) the REAL provider
+//! translate round-trip (network I/O, mocked here as instant). Both are
+//! outside this crate's STT module: (a) is accounted for separately against
+//! the budget (see `src/audio/chunk.rs`), and (b) is the provider layer's
+//! responsibility. Treat this bench's p95 as the STT floor of the budget, not
+//! the ceiling of what the user experiences.
 //!
 //! This bench requires a REAL whisper model. It fetches one ONCE through the
 //! pinned + SHA-256-verified, consent-gated download path (`stt::download`) into
@@ -32,12 +41,17 @@ use ost_lib::stt::{
     WhisperModel, WhisperModelSize, WhisperStt,
 };
 
-/// One second of a 220 Hz synthetic tone at 16 kHz (never real user audio). The
-/// chunker force-splits utterances at ~2 s, so a 2 s chunk is the worst-case
-/// caption unit; whisper pads to its 30 s encoder window regardless, so this is
-/// representative of the real per-chunk transcribe cost.
-fn synthetic_chunk(seconds: u32) -> AudioChunk {
-    let n = 16_000 * seconds as usize;
+/// The chunker's force-split cap (`ChunkConfig::for_rate`, `src/audio/chunk.rs`):
+/// during continuous speech this is the worst-case chunk length, and thus the
+/// worst-case caption unit this bench must represent.
+const MAX_CHUNK_MS: u32 = 1_200;
+
+/// A synthetic 220 Hz tone at 16 kHz, `ms` milliseconds long (never real user
+/// audio). Whisper pads every call to its 30 s encoder window regardless of
+/// input length, so this is representative of the real per-chunk transcribe
+/// cost for any chunk up to the force-split cap.
+fn synthetic_chunk(ms: u32) -> AudioChunk {
+    let n = (16_000u64 * ms as u64 / 1_000) as usize;
     let samples: Vec<f32> = (0..n)
         .map(|i| (i as f32 * 220.0 * std::f32::consts::TAU / 16_000.0).sin() * 0.2)
         .collect();
@@ -90,7 +104,7 @@ fn setup_engine() -> WhisperStt {
 
     let engine = WhisperStt::new(model, dir, gate);
     // Warm the lazy context so the one-time model load is excluded from timing.
-    let warm = synthetic_chunk(1);
+    let warm = synthetic_chunk(1_000);
     engine
         .transcribe(&warm, &TranscribeOptions::auto())
         .expect("warm transcribe");
@@ -105,7 +119,7 @@ fn mock_translate(source_text: &str) -> String {
 
 fn bench_audio_caption(c: &mut Criterion) {
     let engine = setup_engine();
-    let chunk = synthetic_chunk(2);
+    let chunk = synthetic_chunk(MAX_CHUNK_MS);
     let options = TranscribeOptions::auto();
 
     // --- Manual p95 harness: the headline the latency budget is stated in. ---
@@ -143,7 +157,7 @@ fn bench_audio_caption(c: &mut Criterion) {
     let mut group = c.benchmark_group("audio_caption");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(30));
-    group.bench_function("transcribe_2s_chunk", |b| {
+    group.bench_function("transcribe_max_chunk", |b| {
         b.iter(|| {
             let transcript = engine.transcribe(&chunk, &options).expect("transcribe");
             let translated = mock_translate(&transcript.text(" "));

@@ -39,7 +39,21 @@ pub struct ChunkConfig {
 
 impl ChunkConfig {
     /// Default tuning for a `sample_rate` stream: 30 ms VAD frames, drop chunks
-    /// under ~250 ms, force-split at ~2 s (keeps end-to-end latency in budget).
+    /// under ~250 ms, force-split at ~1.2 s.
+    ///
+    /// The force-split cap is a DIRECT term in the AC-01.2 end-to-end budget
+    /// (audio plays -> caption shown, p95 < 3s): during continuous speech a
+    /// word spoken right after a chunk boundary waits up to the FULL cap
+    /// before its chunk even closes, before STT and translate even start. At
+    /// the previous 2 s cap that alone could consume two-thirds of the whole
+    /// 3 s budget, leaving little headroom for inference + translate -
+    /// measured as the "very slow to pick up speech" symptom. 1.2 s keeps
+    /// enough headroom for STT (whisper.cpp pads every call to its fixed 30 s
+    /// encoder window regardless of chunk length, so shortening the cap does
+    /// NOT meaningfully increase per-chunk inference cost - see
+    /// `benches/audio_caption.rs`) and translate to fit inside the budget,
+    /// while staying well above the ~250 ms floor so ordinary short
+    /// utterances are unaffected.
     #[must_use]
     pub fn for_rate(sample_rate: u32) -> Self {
         let frame_samples = ((sample_rate as u64 * 30) / 1000) as usize;
@@ -50,7 +64,7 @@ impl ChunkConfig {
             },
             sample_rate,
             min_chunk_samples: ((sample_rate as u64 * 250) / 1000) as usize,
-            max_chunk_samples: ((sample_rate as u64 * 2_000) / 1000) as usize,
+            max_chunk_samples: ((sample_rate as u64 * 1_200) / 1000) as usize,
         }
     }
 }
