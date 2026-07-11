@@ -61,12 +61,36 @@ impl ProviderHttpConfig {
         }
         match url.scheme() {
             "https" => true,
-            "http" => match url.host() {
-                Some(Host::Domain("localhost")) => true,
-                Some(Host::Ipv4(ip)) => ip.is_loopback(),
-                Some(Host::Ipv6(ip)) => ip.is_loopback(),
-                _ => false,
-            },
+            "http" => Self::host_is_loopback(&url),
+            _ => false,
+        }
+    }
+
+    /// True when `base_url` targets loopback (`127.0.0.1` / `localhost` /
+    /// `[::1]`) REGARDLESS of scheme, with no embedded userinfo. Unlike
+    /// [`Self::base_url_is_allowed`] (which allows any `https://` host for the
+    /// cloud provider clients), this is the stricter check for clients that
+    /// must never egress off the local machine even over `https://` - e.g. the
+    /// local OpenAI-compatible provider (FR-03.CUSTOM-2, BR-01, NFR-SEC-03).
+    pub fn is_loopback_only(&self) -> bool {
+        let Ok(url) = Url::parse(&self.base_url) else {
+            return false;
+        };
+        if !url.username().is_empty() || url.password().is_some() {
+            return false;
+        }
+        if !matches!(url.scheme(), "http" | "https") {
+            return false;
+        }
+        Self::host_is_loopback(&url)
+    }
+
+    /// Shared host check: `localhost` domain, or a loopback IPv4/IPv6 literal.
+    fn host_is_loopback(url: &Url) -> bool {
+        match url.host() {
+            Some(Host::Domain("localhost")) => true,
+            Some(Host::Ipv4(ip)) => ip.is_loopback(),
+            Some(Host::Ipv6(ip)) => ip.is_loopback(),
             _ => false,
         }
     }
@@ -121,6 +145,31 @@ mod tests {
     fn malformed_url_is_rejected() {
         assert!(!ProviderHttpConfig::with_base_url("not a url").base_url_is_allowed());
         assert!(!ProviderHttpConfig::with_base_url("").base_url_is_allowed());
+    }
+
+    #[test]
+    fn is_loopback_only_accepts_http_and_https_loopback() {
+        assert!(ProviderHttpConfig::with_base_url("http://127.0.0.1:1234").is_loopback_only());
+        assert!(ProviderHttpConfig::with_base_url("http://localhost:1234").is_loopback_only());
+        assert!(ProviderHttpConfig::with_base_url("https://127.0.0.1:1234").is_loopback_only());
+        assert!(ProviderHttpConfig::with_base_url("http://[::1]:1234").is_loopback_only());
+    }
+
+    #[test]
+    fn is_loopback_only_rejects_non_loopback_hosts_even_over_https() {
+        // The stricter check must reject a real domain even under https://,
+        // unlike `base_url_is_allowed` which permits any https:// host.
+        assert!(!ProviderHttpConfig::with_base_url("https://example.com").is_loopback_only());
+        assert!(!ProviderHttpConfig::with_base_url("http://example.com").is_loopback_only());
+        assert!(!ProviderHttpConfig::with_base_url("ftp://127.0.0.1").is_loopback_only());
+        assert!(!ProviderHttpConfig::with_base_url("not a url").is_loopback_only());
+    }
+
+    #[test]
+    fn is_loopback_only_rejects_userinfo_embedding_loopback() {
+        assert!(
+            !ProviderHttpConfig::with_base_url("http://localhost:8080@evil.com").is_loopback_only()
+        );
     }
 
     #[test]

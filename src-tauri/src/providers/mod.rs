@@ -15,12 +15,16 @@
 //! - [`gemini`], [`anthropic`], [`openai`], [`openrouter`]: one client module
 //!   per provider, each implementing the same trait with zero trait changes
 //!   (NFR-SCA-02).
+//! - [`local_openai`]: the user-hosted, loopback-only OpenAI-compatible
+//!   provider (e.g. LM Studio, FR-03.CUSTOM-1) - identifies by `base_url`
+//!   instead of an API key; never touches the OS keychain.
 
 pub mod anthropic;
 pub mod config;
 pub mod error;
 pub mod factory;
 pub mod gemini;
+pub mod local_openai;
 pub mod openai;
 pub mod openrouter;
 pub mod prompt;
@@ -31,12 +35,14 @@ pub mod types;
 pub use anthropic::AnthropicClient;
 pub use config::ProviderHttpConfig;
 pub use error::ProviderError;
-pub use factory::build_provider;
+pub use factory::{build_local_openai_provider, build_provider};
 pub use gemini::GeminiClient;
+pub use local_openai::LocalOpenAiClient;
 pub use openai::OpenAiClient;
 pub use openrouter::OpenRouterClient;
 pub use prompt::{build_translation_prompt, TranslationPrompt};
 pub use traits::{TranslationProvider, TranslationStream};
 pub use types::{
-    KeyValidation, ModelInfo, ProviderId, TranslationChunk, TranslationRequest, TranslationResult,
+    KeyValidation, ModelInfo, ProviderId, ProviderMetadata, TranslationChunk, TranslationRequest,
+    TranslationResult,
 };

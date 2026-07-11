@@ -38,6 +38,9 @@ pub enum KeyCommandError {
     /// Transport failure reaching the provider (DNS/refused/TLS/reset).
     #[error("network error")]
     Network,
+    /// The local OpenAI-compatible server (e.g. LM Studio) is not running.
+    #[error("local server not reachable")]
+    LocalServerUnreachable,
     /// Provider quota exhausted or rate limited.
     #[error("quota exceeded")]
     Quota,
@@ -63,6 +66,7 @@ impl KeyCommandError {
             KeyCommandError::InvalidInput => "invalidInput",
             KeyCommandError::NotConfigured => "notConfigured",
             KeyCommandError::Network => "network",
+            KeyCommandError::LocalServerUnreachable => "localServerUnreachable",
             KeyCommandError::Quota => "quota",
             KeyCommandError::Timeout => "timeout",
             KeyCommandError::Config => "config",
@@ -129,6 +133,7 @@ fn map_provider_error(err: ProviderError) -> KeyCommandError {
     match err {
         ProviderError::Quota { .. } => KeyCommandError::Quota,
         ProviderError::Network { .. } => KeyCommandError::Network,
+        ProviderError::LocalServerUnreachable { .. } => KeyCommandError::LocalServerUnreachable,
         ProviderError::Timeout { .. } => KeyCommandError::Timeout,
         ProviderError::Config { .. } => KeyCommandError::Config,
         ProviderError::Auth { .. }

@@ -23,11 +23,17 @@ NFR-SCA-02, ADR-003, data model 08.
 ## `ProviderId`
 
 Enum serde string cố định (data model 08 - KHÔNG đổi):
-`"gemini" | "anthropic" | "openai" | "openrouter"`.
+`"gemini" | "anthropic" | "openai" | "openrouter" | "local_openai"`.
 
-Cả 4 provider đều đã có client (Gemini từ TASK-006; Anthropic, OpenAI, OpenRouter từ
-TASK-010) - mỗi client là một module implement trait, KHÔNG sửa trait, resolve qua
+Cả 4 provider "keyed" đều đã có client (Gemini từ TASK-006; Anthropic, OpenAI, OpenRouter
+từ TASK-010) - mỗi client là một module implement trait, KHÔNG sửa trait, resolve qua
 `factory::build_provider` (NFR-SCA-02).
+
+`local_openai` (TASK-026 phần B, FR-03.CUSTOM-1..5) là provider thứ 5 - xem mục riêng
+"Provider dịch local OpenAI-compatible" bên dưới. Nó KHÔNG nằm trong `ProviderId::ALL`
+(danh sách 4 provider dùng keychain, iterate bởi `keys::KeyStore`) mà nằm trong
+`ProviderId::ALL_TRANSLATION` (danh sách 5 provider cho picker Settings) - vì nó không
+bao giờ đụng tới OS keychain.
 
 ## Trait `TranslationProvider` (Rust, `src-tauri/src/providers/traits.rs`)
 
@@ -88,10 +94,15 @@ pub type TranslationStream =
 | `Auth` | 401/403, hoặc Gemini 400 "API key not valid" | Có |
 | `Quota` | HTTP 429 | Có |
 | `Network` | DNS/connect/TLS/reset | Có |
+| `LocalServerUnreachable` | `local_openai` từ chối kết nối (connection refused) - server local (LM Studio) chưa chạy | Có |
 | `Timeout` | request timeout hoặc stream idle timeout | Có |
 | `InvalidResponse` | serde schema validation fail / thiếu field bắt buộc | Không |
 | `Api` | HTTP status khác chưa phân loại | Không |
 | `Config` | base URL không an toàn, model_id sai định dạng, build client fail | Không |
+
+`LocalServerUnreachable` tách biệt khỏi `Network` CHỈ cho `local_openai`: một connection
+refused ở đây nghĩa là "server local chưa bật", nên UI hiển thị thông điệp khác hẳn một
+lỗi mạng chung chung của các provider cloud.
 
 Mọi `message` trong error đi qua `redact_secret` (thay giá trị key bằng `[REDACTED]`,
 cắt còn <= 300 ký tự) trước khi được tạo - NFR-SEC-08.
@@ -173,10 +184,69 @@ cấu hình khác bằng `ProviderError::Config`.
 ## Factory (`src-tauri/src/providers/factory.rs`)
 
 `build_provider(provider: ProviderId) -> Result<Box<dyn TranslationProvider>, ProviderError>`
-là NƠI DUY NHẤT map `ProviderId` sang client cụ thể. Cả command key (validate/store) lẫn
-router fallback tương lai (AC-03.6) dựng client qua đây, nên thêm provider = một match arm,
-zero call-site (NFR-SCA-02). Enum đóng trên 4 provider nên factory là total: chỉ lỗi khi
-build client thất bại (`ProviderError::Config`), không bao giờ vì provider lạ.
+là NƠI DUY NHẤT map `ProviderId` sang client cụ thể cho 4 provider "keyed". Cả command key
+(validate/store) lẫn router fallback tương lai (AC-03.6) dựng client qua đây, nên thêm
+provider keyed mới = một match arm, zero call-site (NFR-SCA-02). Gọi `build_provider` với
+`ProviderId::LocalOpenAi` trả về `ProviderError::Config` (provider này cần `base_url`, không
+có slot trong chữ ký hàm) - dùng `build_local_openai_provider` thay thế.
+
+`build_local_openai_provider(base_url: impl Into<String>) -> Result<Box<dyn
+TranslationProvider>, ProviderError>` dựng `local_openai::LocalOpenAiClient` từ `base_url`
+người dùng nhập; từ chối bất kỳ giá trị không loopback nào bằng `ProviderError::Config`
+(đây là nơi DUY NHẤT enforce ràng buộc loopback cho provider này, qua
+`ProviderHttpConfig::is_loopback_only`).
+
+## Provider dịch local OpenAI-compatible (`src-tauri/src/providers/local_openai.rs`, FR-03.
+CUSTOM-1..5, TASK-026 phần B)
+
+| Thao tác | Endpoint |
+|----------|----------|
+| translate | `POST {base}/v1/chat/completions` (`stream: false`) |
+| translate_stream | `POST {base}/v1/chat/completions` (`stream: true`, SSE) |
+| list_models | `GET {base}/v1/models` (catalog OpenAI-compatible, best-effort) |
+| validate_key | `GET {base}/v1/models` (dùng lại làm connectivity check - xem dưới) |
+
+- Phục vụ LM Studio và các server tương thích OpenAI khác chạy trên máy người dùng
+  (`localhost`/`127.0.0.1`/`[::1]`), KHÔNG BAO GIỜ một host thật, kể cả qua `https://`
+  (khác với các client cloud - `ProviderHttpConfig::is_loopback_only` nghiêm hơn
+  `base_url_is_allowed`). Vi phạm bị từ chối bằng `ProviderError::Config` tại
+  `LocalOpenAiClient::with_config` / `build_local_openai_provider`.
+- KHÔNG yêu cầu và KHÔNG BAO GIỜ đọc API key: tham số `key: &ApiKey` bắt buộc bởi trait vẫn
+  tồn tại (đồng nhất chữ ký với 4 client kia) nhưng client này không bao giờ gọi
+  `key.expose()` và không gửi header `Authorization` - LM Studio bỏ qua auth. Không có gì
+  của provider này được ghi vào OS keychain (xem mục `ProviderId` ở trên).
+- Wire schema (`WireRequest`/`WireResponse`), tách chỉ thị/dữ liệu (AC-03.8), và phần lớn
+  logic HTTP (parse lỗi, đọc SSE) TÁI SỬ DỤNG nguyên vẹn từ `openai.rs` vì bề mặt tương
+  thích OpenAI theo định nghĩa.
+- `list_models` gọi `GET /v1/models` và parse catalog OpenAI-compatible
+  (`{"data": [{"id": ...}]}`) thành `ModelInfo` (không có tên hiển thị riêng, dùng `id` cho
+  cả hai trường); nếu server không hỗ trợ hoặc không phản hồi đúng schema, người dùng vẫn
+  nhập `model_id` tự do (trường free-text, mục 4.B PRD-FR-01) - `model_id` vẫn là chuỗi
+  opaque như mọi provider khác.
+- `validate_key` được TÁI DÙNG làm connectivity check (không có khái niệm "sai key" ở đây):
+  gọi `GET /v1/models`, `200` -> `KeyValidation::Valid`; các lỗi transport được phân loại
+  bằng taxonomy chung, bao gồm `LocalServerUnreachable` khi bị từ chối kết nối.
+- Connection refused (server local chưa chạy) map thành `ProviderError::LocalServerUnreachable`
+  ở CẢ BỐN thao tác (`translate`, `translate_stream`, `list_models`, `validate_key`) - phân
+  biệt rõ với `ProviderError::Network` chung chung, để UI hiển thị đúng "hãy khởi động LM
+  Studio" thay vì một lỗi mạng mơ hồ.
+- Không có base URL production mặc định (không giống 4 client kia) - người dùng PHẢI nhập
+  `base_url` trong Settings; lưu trữ giá trị này (KHÔNG phải secret) là trách nhiệm của
+  settings store (tauri-plugin-store), NGOÀI phạm vi layer này.
+
+### Command surface tối thiểu (`src-tauri/src/commands/providers.rs`)
+
+- `provider_picker_metadata() -> Vec<ProviderMetadata>`: metadata tĩnh (`provider_id`,
+  `display_name`, `requires_base_url`) cho cả 5 provider (`ProviderId::ALL_TRANSLATION`) để
+  WebView render picker mà không cần hardcode danh sách thứ hai. `requires_base_url = true`
+  CHỈ cho `local_openai` - UI hiển thị trường `base_url` thay vì trường API key.
+- `check_local_provider_connection(base_url: String) -> Result<(), LocalProviderCommandError>`:
+  validate `base_url` (loopback-only) rồi thử kết nối TRƯỚC KHI frontend lưu giá trị vào
+  settings store. Lỗi trả về dạng `{ "kind": "invalidBaseUrl" | "localServerUnreachable" |
+  "network" | "timeout" | "provider" }` - không bao giờ mang message thô từ provider.
+- Cả hai command KHÔNG đụng tới `keys::KeyStore` và KHÔNG lưu bất kỳ giá trị nào - việc lưu
+  `base_url` vào settings store là việc của tầng UI/shell, ngoài phạm vi `providers/` và
+  `keys/`.
 
 ## Gemini client (`src-tauri/src/providers/gemini.rs`)
 
@@ -242,7 +312,10 @@ build client thất bại (`ProviderError::Config`), không bao giờ vì provid
 
 ## Testing (testing.md)
 
-- Mọi HTTP provider mock bằng wiremock; KHÔNG có lệnh gọi API thật trong test/CI.
+- Mọi HTTP provider mock bằng wiremock; KHÔNG có lệnh gọi API thật trong test/CI. Với
+  `local_openai`, "server không chạy" được mô phỏng bằng cách trỏ tới một cổng loopback
+  không ai lắng nghe (`http://127.0.0.1:1`) để kích hoạt connection-refused một cách
+  deterministic, thay vì cần một server LM Studio thật.
 - Keyring được mock qua trait `KeyBackend`; round-trip Windows Credential Manager thật là
   manual smoke test.
 - Smoke test live (nếu có) chỉ chạy opt-in sau cờ env `OST_TEST_*`, không bao giờ chạy

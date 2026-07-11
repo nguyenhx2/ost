@@ -131,6 +131,8 @@ pub fn run() {
             commands::keys::save_provider_key,
             commands::keys::check_provider_key,
             commands::keys::delete_provider_key,
+            commands::providers::provider_picker_metadata,
+            commands::providers::check_local_provider_connection,
             models::model_consent_status,
             models::grant_model_consent,
             models::revoke_model_consent,
