@@ -606,6 +606,10 @@ pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
                 .always_on_top(true)
                 .skip_taskbar(true)
                 .inner_size(480.0, 320.0)
+                // Mirrors the caption overlay's floor (`caption.rs`) and the
+                // CSS `--overlay-min-width` token so the panel never gets
+                // squeezed below a usable size (owner complaint, TASK shell).
+                .min_inner_size(320.0, 200.0)
         },
         |_window| Ok(()),
     );

@@ -23,4 +23,19 @@ describe("base.css shell fill contract", () => {
     expect(rule).toMatch(/overflow:\s*hidden/);
     expect(rule).toMatch(/background-color:\s*transparent/);
   });
+
+  /*
+   * Owner complaint: scrollbars are thick and ugly everywhere a surface
+   * scrolls (region preview, caption overlay, settings, history). Guards
+   * that the thin, token-driven scrollbar styling stays in place and never
+   * regresses to a hardcoded px/hex value.
+   */
+  it("styles every scrollbar as thin and token-driven", () => {
+    expect(css).toMatch(/scrollbar-width:\s*thin/);
+    expect(css).toMatch(/scrollbar-color:\s*var\(--color-border\)/);
+    const thumbMatch = css.match(/::-webkit-scrollbar-thumb\s*{([^}]*)}/);
+    expect(thumbMatch).not.toBeNull();
+    expect(thumbMatch?.[1] ?? "").toMatch(/var\(--color-border\)/);
+    expect(css).not.toMatch(/::-webkit-scrollbar\s*{[^}]*\d+px/);
+  });
 });

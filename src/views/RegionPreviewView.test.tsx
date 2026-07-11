@@ -503,4 +503,29 @@ describe("RegionPreviewView (SCR-03)", () => {
       expect(name).toBeTruthy();
     }
   });
+
+  it("keeps a single scrollable body between the fixed header and the docked controls (owner complaint: long content must scroll, not squeeze)", async () => {
+    const { container } = await renderPreview();
+    emitOcr({ requestId: "p1", sourceText: "Guten Tag", lowConfidence: false });
+
+    const panel = container.querySelector(".ost-overlay-panel");
+    const body = container.querySelector(".region-preview-body");
+    const controls = container.querySelector(".region-preview-controls");
+    expect(panel).not.toBeNull();
+    expect(body).not.toBeNull();
+    expect(controls).not.toBeNull();
+    // Structural contract: header, body, controls are direct panel children in
+    // that order, so the body is the ONE flexed/scrolled region and the
+    // header/controls stay docked (see RegionPreviewView.css).
+    const children = Array.from(panel?.children ?? []);
+    expect(children.indexOf(body!)).toBeGreaterThan(
+      children.findIndex((el) => el.tagName === "HEADER"),
+    );
+    expect(children.indexOf(controls!)).toBeGreaterThan(
+      children.indexOf(body!),
+    );
+    // The source text lives inside the scrollable body, not directly in the
+    // panel (so it scrolls instead of shrinking the panel).
+    expect(body?.textContent).toContain("Guten Tag");
+  });
 });

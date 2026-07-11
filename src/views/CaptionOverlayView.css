@@ -7,24 +7,44 @@
 }
 
 /*
- * The panel fills the (transparent) window so a resize never uncovers empty
- * chrome, and is the ONE contained scroll region on this surface (base.css
- * hides overflow at the html/body/#root level) so a resize-below-content
- * never produces a window-level scrollbar.
+ * The panel fills the (transparent) window and TRACKS it on resize (owner
+ * complaint: stretching the window used to leave the dialog behind) - only a
+ * min-width floor, deliberately no max-width ceiling. The panel itself does
+ * NOT scroll: it clips (`overflow: hidden`) and hands the ONE contained
+ * scroll region to `.caption-overlay-body` below, so the fixed header and
+ * docked controls never compete with content for space and never get
+ * squeezed illegible (base.css also hides overflow at the html/body/#root
+ * level, so a resize-below-content never produces a window-level scrollbar).
  */
 .caption-overlay .ost-overlay-panel {
   width: 100%;
   height: 100%;
-  min-width: 20rem;
-  max-width: 40rem;
-  overflow-y: auto;
-  overflow-x: hidden;
+  min-width: var(--overlay-min-width);
+  overflow: hidden;
 }
 
 .caption-overlay-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/*
+ * The one scroll region: flex:1 so it takes whatever space the fixed header
+ * and docked controls leave, min-height:0 so it can actually shrink to that
+ * space instead of forcing the panel to overflow (the flexbox default
+ * min-height:auto is what caused content to get squeezed instead of
+ * scrolling).
+ */
+.caption-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .caption-overlay-title {
@@ -97,6 +117,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
+  flex-shrink: 0;
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
 }

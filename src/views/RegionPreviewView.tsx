@@ -115,107 +115,117 @@ export function RegionPreviewView() {
           </Tooltip>
         </header>
 
-        {state.status === "waitingOcr" ? (
-          <p className="region-preview-status" role="status">
-            {t("preview.waitingOcr")}
-          </p>
-        ) : null}
+        {/*
+         * The ONE contained scroll region on this surface (owner complaint:
+         * long content must scroll, never get squeezed illegible). Header
+         * above and controls below are fixed/docked (flex-shrink: 0 in CSS)
+         * so only this body competes for space - see RegionPreviewView.css.
+         */}
+        <div className="region-preview-body">
+          {state.status === "waitingOcr" ? (
+            <p className="region-preview-status" role="status">
+              {t("preview.waitingOcr")}
+            </p>
+          ) : null}
 
-        {state.status === "empty" ? (
-          <p className="region-preview-status" role="status">
-            {t("preview.emptyOcr")}
-          </p>
-        ) : null}
+          {state.status === "empty" ? (
+            <p className="region-preview-status" role="status">
+              {t("preview.emptyOcr")}
+            </p>
+          ) : null}
 
-        {state.sourceText !== "" ? (
-          <section className="region-preview-section">
-            <span className="region-preview-section-label">
-              {t("preview.sourceLabel")}
-            </span>
-            {state.lowConfidence ? (
-              <Badge variant="warning">
-                <AlertTriangle size={12} aria-hidden="true" />
-                {t("preview.lowConfidence")}
-              </Badge>
-            ) : null}
-            {state.fidelity.kind === "degraded" ? (
-              // AC-02.6: STANDING degraded-fidelity notice. Renders whenever
-              // fidelity is degraded, INDEPENDENT of lowConfidence, because the
-              // dropped diacritics are not caught by the confidence flag
-              // (human-in-the-loop.md). The reason is untrusted DATA (PlainText).
-              <div className="region-preview-degraded" role="status">
-                <AlertTriangle size={14} aria-hidden="true" />
-                <div className="region-preview-degraded-body">
-                  <span>{t("preview.degradedNotice")}</span>
-                  <span className="region-preview-degraded-reason">
-                    {t("preview.degradedReasonLabel")}
-                    {": "}
-                    <PlainText text={state.fidelity.reason} />
-                  </span>
+          {state.sourceText !== "" ? (
+            <section className="region-preview-section">
+              <span className="region-preview-section-label">
+                {t("preview.sourceLabel")}
+              </span>
+              {state.lowConfidence ? (
+                <Badge variant="warning">
+                  <AlertTriangle size={12} aria-hidden="true" />
+                  {t("preview.lowConfidence")}
+                </Badge>
+              ) : null}
+              {state.fidelity.kind === "degraded" ? (
+                // AC-02.6: STANDING degraded-fidelity notice. Renders whenever
+                // fidelity is degraded, INDEPENDENT of lowConfidence, because the
+                // dropped diacritics are not caught by the confidence flag
+                // (human-in-the-loop.md). The reason is untrusted DATA (PlainText).
+                <div className="region-preview-degraded" role="status">
+                  <AlertTriangle size={14} aria-hidden="true" />
+                  <div className="region-preview-degraded-body">
+                    <span>{t("preview.degradedNotice")}</span>
+                    <span className="region-preview-degraded-reason">
+                      {t("preview.degradedReasonLabel")}
+                      {": "}
+                      <PlainText text={state.fidelity.reason} />
+                    </span>
+                  </div>
                 </div>
+              ) : null}
+              <p className="region-preview-text">
+                <PlainText text={state.sourceText} />
+              </p>
+            </section>
+          ) : null}
+
+          {state.status === "translating" ? (
+            <p className="region-preview-status" role="status">
+              {t("preview.translating")}
+            </p>
+          ) : null}
+
+          {state.status === "failed" && state.failureReason === "noKey" ? (
+            // Distinct, actionable notice - NEVER the generic failure copy
+            // (human-in-the-loop.md, provider transparency).
+            <div className="region-preview-blocked" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <div className="region-preview-blocked-body">
+                <span>{t("preview.noProviderKey")}</span>
+                <Button onClick={preview.openSettings}>
+                  {t("preview.openSettings")}
+                </Button>
               </div>
-            ) : null}
-            <p className="region-preview-text">
-              <PlainText text={state.sourceText} />
-            </p>
-          </section>
-        ) : null}
-
-        {state.status === "translating" ? (
-          <p className="region-preview-status" role="status">
-            {t("preview.translating")}
-          </p>
-        ) : null}
-
-        {state.status === "failed" && state.failureReason === "noKey" ? (
-          // Distinct, actionable notice - NEVER the generic failure copy
-          // (human-in-the-loop.md, provider transparency).
-          <div className="region-preview-blocked" role="alert">
-            <AlertTriangle size={14} aria-hidden="true" />
-            <div className="region-preview-blocked-body">
-              <span>{t("preview.noProviderKey")}</span>
-              <Button onClick={preview.openSettings}>
-                {t("preview.openSettings")}
-              </Button>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {state.status === "failed" && state.failureReason !== "noKey" ? (
-          <p className="region-preview-error" role="alert">
-            <AlertTriangle size={14} aria-hidden="true" />
-            {/* Own localized copy only - the raw diagnostic string is DATA. */}
-            {state.failureReason === "ocr"
-              ? t("preview.ocrError")
-              : state.failureReason === "timeout"
-                ? t("preview.translationTimeout")
-                : t("preview.translationError")}
-          </p>
-        ) : null}
-
-        {state.status === "consentRequired" && !consentDialogOpen ? (
-          <div className="region-preview-blocked" role="status">
-            <AlertTriangle size={14} aria-hidden="true" />
-            <div className="region-preview-blocked-body">
-              <span>{t("consent.blocked")}</span>
-              <Button onClick={preview.reopenConsent}>
-                {t("consent.reopen")}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {state.translation !== null ? (
-          <section className="region-preview-section">
-            <span className="region-preview-section-label">
-              {t("preview.translationLabel")}
-            </span>
-            <p className="region-preview-text">
-              <PlainText text={state.translation} />
+          {state.status === "failed" && state.failureReason !== "noKey" ? (
+            <p className="region-preview-error" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              {/* Own localized copy only - the raw diagnostic string is DATA. */}
+              {state.failureReason === "ocr"
+                ? t("preview.ocrError")
+                : state.failureReason === "timeout"
+                  ? t("preview.translationTimeout")
+                  : t("preview.translationError")}
             </p>
-          </section>
-        ) : null}
+          ) : null}
 
+          {state.status === "consentRequired" && !consentDialogOpen ? (
+            <div className="region-preview-blocked" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <div className="region-preview-blocked-body">
+                <span>{t("consent.blocked")}</span>
+                <Button onClick={preview.reopenConsent}>
+                  {t("consent.reopen")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {state.translation !== null ? (
+            <section className="region-preview-section">
+              <span className="region-preview-section-label">
+                {t("preview.translationLabel")}
+              </span>
+              <p className="region-preview-text">
+                <PlainText text={state.translation} />
+              </p>
+            </section>
+          ) : null}
+        </div>
+
+        {/* Docked control bar (owner complaint: controls must not eat the
+            panel) - fixed at the bottom, outside the scrolling body above. */}
         <div className="region-preview-controls">
           <Select
             label={t("preview.providerModel")}
