@@ -1,6 +1,6 @@
 ---
 title: "TASK-024: UI polish - transparent-window white-bleed, scrollbars, fill-on-resize sweep"
-status: Active
+status: Done
 fr: FR-04
 owner: frontend-ui-dev
 deps: TASK-023
@@ -53,6 +53,7 @@ Fix the class of transparent-window layout bugs the owner hit in the region prev
 |------|-----|---------------|--------|
 | 2026-07-11 | orchestrator | Registered task; dispatched frontend-ui-dev (sonnet) after registration merge | pending |
 | 2026-07-11 | frontend-ui-dev | Established the html/body/#root shell fill contract in base.css (fixes WebView white bleed + window-level scrollbars); applied the matching per-surface fill/scroll fix to region-preview, caption-overlay, settings and history; audited region-select, ConsentDialog/Dialog and the Rust window configs with no issue found; added a base.css.test.ts regression guard | npm run lint and npm run test (229 tests) pass; visual confirmation still needed on the owner's release binary |
+| 2026-07-11 | orchestrator | PR #47 merged (9dceccc); code review APPROVE; CI green; task closed, owner visual check pending on release binary | Done |
 
 ## Result
-<Fill when moving to Done; link the PR/commit.>
+Shipped in PR #47 (merge commit 9dceccc, branch feat/ui-transparent-fill-sweep, commit 224e40c). Shell fill contract in src/styles/base.css (html/body/#root 100 percent fill, overflow hidden, transparent) plus per-surface fill/scroll rules for region preview, caption overlay, settings, history; region select and Dialog/ConsentDialog audited and already correct. Code review APPROVE; secret scan clean; CI lint-and-test green; 229 Vitest tests passing including a new regression guard (src/styles/base.css.test.ts). Remaining verification: owner's pixel-level check (no white margin on stretch, no double scrollbars, panel fills on resize) on a rebuilt release binary - flagged to the coordinator, not claimable in this environment. Known accepted deviation: inner commit subject was 73 chars (1 over the rule); noted for the hook follow-up.
