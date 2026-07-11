@@ -1,14 +1,30 @@
 /*
- * Global base styles shared by every window (main, region-select, region-preview).
- * Token-driven only (design-system.md). The body background stays transparent so
- * overlay windows can composite over the desktop; opaque surfaces are set per view.
+ * Global base styles shared by every window (main, region-select, region-preview,
+ * caption-overlay, settings, history). Token-driven only (design-system.md).
+ *
+ * Shell fill contract: html, body and #root always fill the WHOLE window and
+ * stay transparent, with overflow hidden at this outermost level. Without an
+ * explicit size, html/body/#root only grow to fit their content, so any part
+ * of the window client area they do not cover falls back to the WebView's own
+ * default (opaque) background - the white bleed seen around transparent
+ * overlay panels on resize - and unconstrained overflow at this level is what
+ * produced scrollbars on the window itself. Each view then owns its own fill
+ * and (for opaque, content-scrolling windows) its own single internal
+ * scroll region - see the per-view *.css files.
  */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background-color: transparent;
+}
 
 body {
-  margin: 0;
   font-family: var(--font-sans);
   color: var(--color-text);
-  background-color: transparent;
 }
 
 *,
