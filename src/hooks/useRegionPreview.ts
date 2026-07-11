@@ -169,23 +169,27 @@ export function useRegionPreview(): UseRegionPreviewResult {
   // "translation failed" from a provider they never set a key for.
   useEffect(() => {
     let cancelled = false;
-    void loadProviderSettings().then((settings) => {
-      if (cancelled) {
-        return;
-      }
-      const provider = settings.defaultProvider;
-      const model = activeModel(settings);
-      if (!model) {
-        return;
-      }
-      const configured: ProviderModelOption = {
-        id: `${provider}/${model}`,
-        provider,
-        model,
-      };
-      optionRef.current = configured;
-      setOptionState(configured);
-    });
+    void loadProviderSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+        const provider = settings.defaultProvider;
+        const model = activeModel(settings);
+        if (!model) {
+          return;
+        }
+        const configured: ProviderModelOption = {
+          id: `${provider}/${model}`,
+          provider,
+          model,
+        };
+        optionRef.current = configured;
+        setOptionState(configured);
+      })
+      // An unreadable store must never break the overlay: fall back to the
+      // catalog default instead of rejecting into an unhandled error.
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
