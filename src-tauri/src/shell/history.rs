@@ -3,7 +3,9 @@
 //! the same bundle with `?view=history` and lists the locally persisted,
 //! text-only translation entries. Mirrors `settings.rs` window creation.
 
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Runtime, WebviewUrl};
+
+use super::windows::{open_deferred, Existing};
 
 pub const HISTORY_WINDOW_LABEL: &str = "history";
 
@@ -19,25 +21,28 @@ impl serde::Serialize for HistoryWindowError {
     }
 }
 
-/// Open the History window, showing + focusing it if it already exists (single
-/// instance). A close-to-tray hidden window is re-shown here (see
-/// `shell::on_window_event`).
+/// Open the History window, showing + focusing it if it already exists
+/// (single instance). A close-to-tray hidden window is re-shown here (see
+/// `shell::on_window_event`). The build itself is DEFERRED off the calling
+/// turn (TASK-027 `open_deferred`) so this never deadlocks when invoked from
+/// inside a WebView IPC callback; this function always returns `Ok(())` once
+/// the open is scheduled - a deferred build failure is logged, not surfaced
+/// here.
 pub fn open_history_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), HistoryWindowError> {
-    if let Some(existing) = app.get_webview_window(HISTORY_WINDOW_LABEL) {
-        existing.show()?;
-        existing.set_focus()?;
-        return Ok(());
-    }
-    WebviewWindowBuilder::new(
+    open_deferred(
         app,
         HISTORY_WINDOW_LABEL,
         WebviewUrl::App("index.html?view=history".into()),
-    )
-    .title("OST - History")
-    .inner_size(720.0, 640.0)
-    .min_inner_size(480.0, 480.0)
-    .resizable(true)
-    .build()?;
+        Existing::ShowAndFocus,
+        |builder| {
+            builder
+                .title("OST - History")
+                .inner_size(720.0, 640.0)
+                .min_inner_size(480.0, 480.0)
+                .resizable(true)
+        },
+        |_window| Ok(()),
+    );
     Ok(())
 }
 

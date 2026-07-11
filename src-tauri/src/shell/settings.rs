@@ -2,7 +2,9 @@
 //! a normal decorated window (not an overlay); it loads the same bundle with
 //! `?view=settings` and hosts the provider key / model management UI.
 
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Runtime, WebviewUrl};
+
+use super::windows::{open_deferred, Existing};
 
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
 
@@ -18,24 +20,26 @@ impl serde::Serialize for SettingsWindowError {
     }
 }
 
-/// Open the Settings window, focusing it if it already exists (single instance).
+/// Open the Settings window, focusing it if it already exists (single
+/// instance). The build itself is DEFERRED off the calling turn (TASK-027
+/// `open_deferred`) so this never deadlocks when invoked from inside a WebView
+/// IPC callback; this function always returns `Ok(())` once the open is
+/// scheduled - a deferred build failure is logged, not surfaced here.
 pub fn open_settings_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), SettingsWindowError> {
-    if let Some(existing) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
-        // The window may be hidden (close-to-tray, AC-04.2); re-show then focus.
-        existing.show()?;
-        existing.set_focus()?;
-        return Ok(());
-    }
-    WebviewWindowBuilder::new(
+    open_deferred(
         app,
         SETTINGS_WINDOW_LABEL,
         WebviewUrl::App("index.html?view=settings".into()),
-    )
-    .title("OST - Settings")
-    .inner_size(720.0, 640.0)
-    .min_inner_size(480.0, 480.0)
-    .resizable(true)
-    .build()?;
+        Existing::ShowAndFocus,
+        |builder| {
+            builder
+                .title("OST - Settings")
+                .inner_size(720.0, 640.0)
+                .min_inner_size(480.0, 480.0)
+                .resizable(true)
+        },
+        |_window| Ok(()),
+    );
     Ok(())
 }
 
