@@ -23,24 +23,28 @@ Let Settings choose the STT tool/model for live translation (local or cloud). Re
 - Owner authorization (2026-07-11) to PROPOSE cloud STT; local parts apply immediately.
 
 ## To do
-- [ ] tech-researcher: local whisper.cpp model upgrades (small/medium/large-v3/distil/turbo) RAM/latency vs audio p95 < 3s; credible local ASR vs whisper for ja/en; cloud STT (Google, Azure, OpenAI) pricing/streaming/vi-ja-en quality - with citations.
-- [ ] brainstormer: trade-off matrix + recommended default.
-- [ ] ba-analyst: design (Settings STT backend picker + LM Studio provider entry) + cloud-STT ADR (Proposed) + BR-01/NFR-SEC amendment drafts.
+- [x] tech-researcher: local whisper.cpp model upgrades (small/medium/large-v3/distil/turbo) RAM/latency vs audio p95 < 3s; credible local ASR vs whisper for ja/en; cloud STT (Google, Azure, OpenAI) pricing/streaming/vi-ja-en quality - with citations.
+- [x] brainstormer: trade-off matrix + recommended default.
+- [x] ba-analyst: design (Settings STT backend picker + LM Studio provider entry) + cloud-STT ADR (Proposed) + BR-01/NFR-SEC amendment drafts.
 - [ ] Implementation order: (1) whisper model-size switcher (local, no spec change), (2) LM Studio/custom-base-URL local provider (localhost, no spec change), (3) cloud STT blocked on owner sign-off.
 
 ## Test scenarios / acceptance
-- [ ] Research conclusions cited; recommended local default named.
-- [ ] Cloud-STT ADR package (ADR Proposed + BR/NFR amendment drafts + consent pattern) ready for one-read owner decision.
-- [ ] Local parts specified for immediate implementation without spec change.
+- [x] Research conclusions cited; recommended local default named.
+- [x] Cloud-STT ADR package (ADR Proposed + BR/NFR amendment drafts + consent pattern) ready for one-read owner decision.
+- [x] Local parts specified for immediate implementation without spec change.
 
 ## Orchestration notes
 - HARD STOP: no cloud-STT code or dependency lands before recorded owner sign-off of the ADR package.
+- Cloud-STT package (ADR-005 + draft BR-01/NFR-SEC-03/BR-10 amendments) awaits owner sign-off; local parts (whisper model-size switcher, Custom local OpenAI-compatible provider) are cleared for implementation without waiting on that sign-off.
 
 ## Session log (AI session log)
 
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-11 | orchestrator | Registered task; dispatched tech-researcher (sonnet) for the research phase | pending |
+| 2026-07-11 | tech-researcher | Research complete: recommended local whisper lineup tiny/base/small/large-v3-turbo (medium dropped, no accuracy win over turbo at ~5GB RAM), default base; large-v3 CUDA-only; cloud STT (Google/Azure/OpenAI) surveyed - not compelling enough today to justify audio egress for the general case | done |
+| 2026-07-11 | brainstormer | Trade-off matrix complete: local tiers vs RAM/latency/budget; cloud candidates vs streaming/pricing/scope; recommended owner-gated opt-in framing for cloud STT, modeled on ADR-004's cloud-OCR pattern | done |
+| 2026-07-11 | ba-analyst | Drafted docs/requirements/PRD-FR-01-stt-backend-options.md (STT engine picker + separate Custom local OpenAI-compatible provider entry) and docs/architecture/decisions/ADR-005-cloud-stt-opt-in.md (Proposed, with draft BR-01/NFR-SEC-03 amendments and new BR-10) | done |
 
 ## Result
 <Fill when moving to Done; link the PR/commit.>
