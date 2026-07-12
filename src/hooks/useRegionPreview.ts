@@ -129,8 +129,6 @@ export interface UseRegionPreviewResult {
   copied: "source" | "translation" | null;
   pinned: boolean;
   togglePin: () => void;
-  liveUpdate: boolean;
-  setLiveUpdate: (enabled: boolean) => void;
   /** Explicit close (button) - always closes, even when pinned. */
   close: () => void;
   /** Esc dismiss - ignored while pinned (AC-04.3 pin semantics). */
@@ -211,7 +209,6 @@ export function useRegionPreview(): UseRegionPreviewResult {
   );
   const [copied, setCopied] = useState<"source" | "translation" | null>(null);
   const [pinned, setPinned] = useState(false);
-  const [liveUpdate, setLiveUpdateState] = useState(true);
   const [consentDisclosure, setConsentDisclosure] =
     useState<ConsentDisclosure | null>(null);
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
@@ -699,11 +696,6 @@ export function useRegionPreview(): UseRegionPreviewResult {
 
   const togglePin = useCallback(() => setPinned((p) => !p), []);
 
-  const setLiveUpdate = useCallback((enabled: boolean) => {
-    setLiveUpdateState(enabled);
-    void regionIpc.setLiveUpdate(enabled);
-  }, []);
-
   const close = useCallback(() => {
     void regionIpc.closePreview();
   }, []);
@@ -792,8 +784,6 @@ export function useRegionPreview(): UseRegionPreviewResult {
     copied,
     pinned,
     togglePin,
-    liveUpdate,
-    setLiveUpdate,
     close,
     dismiss,
     nudge,

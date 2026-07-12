@@ -505,10 +505,6 @@ export const regionIpc = {
   requestTranslation: (request: RegionTranslationRequest): Promise<void> =>
     invokeIpc("request_region_translation", { request }),
 
-  /** Toggle live update of the captured region (AC-02.4 UI half). */
-  setLiveUpdate: (enabled: boolean): Promise<void> =>
-    invokeIpc("set_region_live_update", { enabled }),
-
   /** Close the preview overlay window. */
   closePreview: (): Promise<void> => invokeIpc("close_region_preview"),
 

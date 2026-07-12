@@ -81,7 +81,6 @@ tuần tự hoá, không chứa nội dung người dùng hay bí mật).
 | `confirm_region_selection`  | `region: RegionRect`, `sourceLanguage?: string` | Xác nhận vùng chọn (kèm ngôn ngữ nguồn, xem `SourceLanguage`), đóng overlay chọn, mở overlay preview. |
 | `region_preview_ready`      | -                                   | Handshake: preview đã mount và lắng nghe; pipeline có thể bắt đầu phát. |
 | `request_region_translation`| `request: RegionTranslationRequest` | Yêu cầu dịch/dịch lại text hiện tại (AC-02.8).                          |
-| `set_region_live_update`    | `enabled: boolean`                  | Bật/tắt cập nhật trực tiếp vùng đã chọn (AC-02.4, nửa UI).              |
 | `close_region_preview`      | -                                   | Đóng overlay preview.                                                    |
 | `nudge_region_preview`      | `dx: number, dy: number`            | Dời overlay preview bằng bàn phím (AC-04.3); mỗi bước bị kẹp `<= 256`.  |
 

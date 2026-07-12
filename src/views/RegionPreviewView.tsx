@@ -20,7 +20,6 @@ import {
   Select,
   Slider,
   Spinner,
-  Switch,
   Textarea,
   Tooltip,
 } from "../components/ui";
@@ -54,7 +53,6 @@ export function RegionPreviewView() {
     state,
     copied,
     pinned,
-    liveUpdate,
     option,
     consentDialogOpen,
     sourceLanguage,
@@ -361,16 +359,6 @@ export function RegionPreviewView() {
             >
               <ClipboardCopy size={16} aria-hidden="true" />
             </IconButton>
-          </Tooltip>
-          {/* Owner item 3: the owner did not understand what this toggle
-              does - explain it via a Tooltip (no raw title=) and a clearer
-              label; the behaviour itself is unchanged. */}
-          <Tooltip text={t("preview.liveUpdateHelp")}>
-            <Switch
-              checked={liveUpdate}
-              onChange={preview.setLiveUpdate}
-              label={t("preview.liveUpdate")}
-            />
           </Tooltip>
           <Slider
             label={t("preview.opacity")}

@@ -25,7 +25,6 @@ const mocks = vi.hoisted(() => {
       confirmSelection: vi.fn().mockResolvedValue(undefined),
       previewReady: vi.fn().mockResolvedValue(undefined),
       requestTranslation: vi.fn().mockResolvedValue(undefined),
-      setLiveUpdate: vi.fn().mockResolvedValue(undefined),
       closePreview: vi.fn().mockResolvedValue(undefined),
       nudgePreview: vi.fn().mockResolvedValue(undefined),
     },
@@ -352,13 +351,8 @@ describe("RegionPreviewView (SCR-03)", () => {
     expect(mocks.regionIpc.closePreview).toHaveBeenCalledTimes(2);
   });
 
-  it("live-update switch and opacity slider are keyboard-operable controls (AC-04.3)", async () => {
+  it("opacity slider is a keyboard-operable control (AC-04.3)", async () => {
     await renderPreview();
-
-    const sw = screen.getByRole("switch", { name: /Live update/ });
-    expect(sw).toHaveAttribute("aria-checked", "true");
-    await userEvent.click(sw);
-    expect(mocks.regionIpc.setLiveUpdate).toHaveBeenCalledWith(false);
 
     const slider = screen.getByRole("slider", { name: "Background opacity" });
     fireEvent.change(slider, { target: { value: "0.5" } });
@@ -683,19 +677,6 @@ describe("RegionPreviewView (SCR-03)", () => {
 
     expect(
       screen.getByPlaceholderText("Paste or type text here to translate"),
-    ).toBeInTheDocument();
-  });
-
-  it("explains the Live update toggle via a tooltip (owner item 3)", async () => {
-    await renderPreview();
-
-    const toggle = screen.getByRole("switch", { name: /Live update/ });
-    await userEvent.hover(toggle);
-
-    expect(
-      await screen.findByRole("tooltip", {
-        name: /re-runs recognition and translation/i,
-      }),
     ).toBeInTheDocument();
   });
 });

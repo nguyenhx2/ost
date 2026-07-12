@@ -79,9 +79,6 @@ const en = {
   "preview.pin": "Pin overlay",
   "preview.unpin": "Unpin overlay",
   "preview.close": "Close",
-  "preview.liveUpdate": "Live update (re-translate on change)",
-  "preview.liveUpdateHelp":
-    "When on, automatically re-runs recognition and translation whenever the selected region's on-screen content changes - useful for a changing area like subtitles or a live log. When off, the region is translated once and stays as-is until you re-select or re-translate.",
   "preview.opacity": "Background opacity",
   "preview.providerModel": "Provider and model",
   "preview.providerBadge": "Active provider and model",
@@ -485,9 +482,6 @@ const vi: Record<I18nKey, string> = {
   "preview.pin": "Ghim overlay",
   "preview.unpin": "Bỏ ghim overlay",
   "preview.close": "Đóng",
-  "preview.liveUpdate": "Tự cập nhật (dịch lại khi nội dung đổi)",
-  "preview.liveUpdateHelp":
-    "Khi bật, tự động chạy lại nhận dạng và dịch mỗi khi nội dung trên màn hình của vùng đã chọn thay đổi - hữu ích cho vùng luôn thay đổi như phụ đề hoặc nhật ký trực tiếp. Khi tắt, vùng chỉ được dịch một lần và giữ nguyên cho đến khi bạn chọn lại vùng hoặc dịch lại.",
   "preview.opacity": "Độ mờ nền",
   "preview.providerModel": "Provider và model",
   "preview.providerBadge": "Provider và model đang dịch",
