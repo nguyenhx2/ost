@@ -119,8 +119,14 @@ impl WhisperStt {
         }
 
         let mut params = WhisperContextParameters::default();
-        // CPU-only MVP build (ADR-002): never touch a GPU here.
-        params.use_gpu(false);
+        // CPU-only MVP build (ADR-002): never touch a GPU here. SPIKE NOTE
+        // (perf/whisper-acceleration): explicit (not just relying on
+        // whisper-rs's own `_gpu`-feature-based default) so a `vulkan`-featured
+        // build can measure GPU offload while the default (no GPU feature
+        // compiled in) stays unchanged CPU-only. Not a production default
+        // change by itself - the spike report is what decides whether GPU
+        // offload ships.
+        params.use_gpu(cfg!(feature = "vulkan"));
         let path_str = path.to_string_lossy();
         let ctx = WhisperContext::new_with_params(&path_str, params)
             .map_err(|e| SttError::ModelLoad(e.to_string()))?;
