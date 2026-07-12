@@ -51,6 +51,12 @@ describe("Badge", () => {
     const badge = screen.getByText("Độ tin cậy thấp");
     expect(badge).toHaveClass("ost-badge", "ost-badge--warning");
   });
+
+  it("renders the success variant class for a configured status", () => {
+    render(<Badge variant="success">Đã cấu hình</Badge>);
+    const badge = screen.getByText("Đã cấu hình");
+    expect(badge).toHaveClass("ost-badge", "ost-badge--success");
+  });
 });
 
 describe("Tooltip", () => {

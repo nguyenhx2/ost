@@ -27,7 +27,8 @@ pub use catalog::{
     CatalogEntry, CATALOG, DEFAULT_ID as CATALOG_DEFAULT_ID,
 };
 pub use download::{
-    ensure_model_available, ensure_model_available_with_progress, verify_model_bytes, DownloadError,
+    ensure_model_available, ensure_model_available_with_progress,
+    ensure_model_available_with_progress_and_cancel, verify_model_bytes, CancelFlag, DownloadError,
 };
 pub use engine::{
     mean_token_confidence, DetectedLanguage, SpeechToText, SttError, TranscribeOptions, Transcript,

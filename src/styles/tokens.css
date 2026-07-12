@@ -19,6 +19,8 @@
   --color-danger: #f28b9b;
   --color-warning: #fdd663;
   --color-on-warning: #1f1a05;
+  --color-success: #81c995;
+  --color-on-success: #0a2912;
   /* Region selection overlay (SCR-02) */
   --color-scrim: rgba(8, 10, 14, 0.55);
   --color-selection-fill: rgba(138, 180, 248, 0.15);
@@ -92,6 +94,8 @@
   --color-danger: #b3261e;
   --color-warning: #7a5a00;
   --color-on-warning: #fff8e1;
+  --color-success: #1e7e34;
+  --color-on-success: #ffffff;
   --color-scrim: rgba(28, 32, 40, 0.4);
   --color-selection-fill: rgba(26, 86, 219, 0.12);
   --color-selection-border: #1a56db;

@@ -36,7 +36,12 @@ export function ConsentDialog({
   introKey = "consent.intro",
 }: ConsentDialogProps) {
   return (
-    <Dialog open={open} label={t(titleKey)} onClose={onDecline}>
+    <Dialog
+      open={open}
+      label={t(titleKey)}
+      onClose={onDecline}
+      closeLabel={t("consent.close")}
+    >
       <h2 className="consent-dialog-title">{t(titleKey)}</h2>
       <p className="consent-dialog-intro">{t(introKey)}</p>
 

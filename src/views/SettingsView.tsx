@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Download,
   History,
   Keyboard,
   Play,
@@ -20,7 +21,9 @@ import {
   ProgressBar,
   Select,
   Switch,
+  Tabs,
   type SelectOption,
+  type TabItem,
 } from "../components/ui";
 import { ConsentDialog } from "../components/ConsentDialog";
 import { t } from "../lib/i18n";
@@ -52,7 +55,7 @@ import { useModelConsent, type RevokeState } from "../hooks/useModelConsent";
 import { useHistorySettings } from "../hooks/useHistorySettings";
 import { useAudioSession } from "../hooks/useAudioSession";
 import { useHotkeys } from "../hooks/useHotkeys";
-import { useSttModels } from "../hooks/useSttModels";
+import { useSttModels, type UseSttModelsResult } from "../hooks/useSttModels";
 import { resultMessage } from "./settingsMessages";
 import {
   historyIpc,
@@ -61,6 +64,7 @@ import {
   type HotkeyErrorKind,
   type LocalProviderErrorKind,
   type ModelConsentStatus,
+  type SttModelDeleteErrorKind,
   type SttModelSwitchErrorKind,
 } from "../lib/ipc";
 import { formatBytes } from "../lib/format";
@@ -100,6 +104,13 @@ const STT_SWITCH_ERROR_KEYS: Record<SttModelSwitchErrorKind, I18nKey> = {
   sessionActive: "settings.sttErrorSessionActive",
   download: "settings.sttErrorDownload",
   store: "settings.sttErrorStore",
+  cancelled: "settings.sttErrorCancelled",
+};
+
+const STT_DELETE_ERROR_KEYS: Record<SttModelDeleteErrorKind, I18nKey> = {
+  unknownModel: "settings.sttModelDeleteErrorUnknownModel",
+  sessionActive: "settings.sttModelDeleteErrorSessionActive",
+  io: "settings.sttModelDeleteErrorIo",
 };
 
 const LOCAL_PROVIDER_ERROR_KEYS: Record<LocalProviderErrorKind, I18nKey> = {
@@ -110,24 +121,38 @@ const LOCAL_PROVIDER_ERROR_KEYS: Record<LocalProviderErrorKind, I18nKey> = {
   provider: "settings.localErrorProvider",
 };
 
+/** Resolves a catalog id's display label through the i18n mapping, falling
+ * back to the core's English string for an unknown/future id. */
+function sttModelLabel(id: string, fallback: string): string {
+  const key = STT_MODEL_LABEL_KEYS[id];
+  return key ? t(key) : fallback;
+}
+
 /**
  * Speech-to-text engine section (FR-01, TASK-026 part C, AC-01.8). Lists the
  * local whisper tiers (hardware-gated, with a Tooltip reason on disabled
  * entries) plus the static cloud-STT rows (always disabled, pending ADR-005).
  * Switching reuses the shared BR-08 consent-download dialog, extended with a
  * live progress bar; a mid-session switch is rejected with a clear message.
+ * Takes the shared `stt` hook instance (lifted to `SettingsView`) so an
+ * in-flight download's progress survives a tab switch, not just a dropdown
+ * change (TASK-034).
  */
-function SttEngineSection() {
-  const stt = useSttModels();
+function SttEngineSection({ stt }: { stt: UseSttModelsResult }) {
   const current = stt.models.find((m) => m.current) ?? null;
+  // Tracks which model id THIS section's "current pick" progress bar reflects
+  // (set when the user just confirmed a download) - the per-id `downloads`
+  // map itself is what actually persists across a dropdown change or a tab
+  // switch (TASK-034); this is only which one to show inline here.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const download = confirmingId ? stt.downloads[confirmingId] : undefined;
 
   const options: SelectOption[] = [
     ...stt.models.map((m) => ({
       value: m.id,
       label:
-        (STT_MODEL_LABEL_KEYS[m.id]
-          ? t(STT_MODEL_LABEL_KEYS[m.id]!)
-          : m.label) + (m.current ? ` (${t("settings.sttCurrent")})` : ""),
+        sttModelLabel(m.id, m.label) +
+        (m.current ? ` (${t("settings.sttCurrent")})` : ""),
       disabled: !m.allowedByProbe,
       disabledReason: !m.allowedByProbe
         ? t(m.requiresCuda ? "settings.sttReasonCuda" : "settings.sttReasonRam")
@@ -174,7 +199,7 @@ function SttEngineSection() {
             )}`}
           </span>
           {current.downloaded ? (
-            <Badge variant="default" label={t("settings.sttDownloaded")}>
+            <Badge variant="success" label={t("settings.sttDownloaded")}>
               <ShieldCheck size={12} aria-hidden="true" />
               {t("settings.sttDownloaded")}
             </Badge>
@@ -182,20 +207,22 @@ function SttEngineSection() {
         </div>
       ) : null}
 
-      {stt.phase === "downloading" ? (
+      {download ? (
         <div className="settings-field">
           <ProgressBar
             label={t("settings.sttDownloadProgress")}
             value={
-              stt.progress && stt.progress.totalBytes > 0
-                ? (stt.progress.downloadedBytes / stt.progress.totalBytes) * 100
+              download.progress && download.progress.totalBytes > 0
+                ? (download.progress.downloadedBytes /
+                    download.progress.totalBytes) *
+                  100
                 : 0
             }
           />
-          {stt.progress ? (
+          {download.progress ? (
             <p className="settings-hint" role="status" aria-live="polite">
-              {`${formatBytes(stt.progress.downloadedBytes)} / ${formatBytes(
-                stt.progress.totalBytes,
+              {`${formatBytes(download.progress.downloadedBytes)} / ${formatBytes(
+                download.progress.totalBytes,
               )}`}
             </p>
           ) : null}
@@ -216,12 +243,169 @@ function SttEngineSection() {
         <ConsentDialog
           open
           disclosure={stt.pendingConsent.disclosure}
-          onGrant={stt.confirmDownload}
+          onGrant={() => {
+            setConfirmingId(stt.pendingConsent?.modelId ?? null);
+            stt.confirmDownload();
+          }}
           onDecline={stt.cancelConsent}
           titleKey="consent.sttSwitchTitle"
           introKey="consent.sttSwitchIntro"
         />
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * Downloaded speech-to-text model management list (Settings, TASK-034, owner
+ * ask 3): every catalog tier the hardware allows, its approximate size, and a
+ * DOWNLOADED/NOT DOWNLOADED status - with a per-row Delete (frees disk space;
+ * consent stays granted so a later re-download never re-prompts) and a
+ * Download/Re-download control that reuses the SAME consent-gated switch flow
+ * as the picker above. Local LLM model management is a separate, deferred tab
+ * (owner ask: do not block on the pending architecture decision).
+ */
+function SttModelManagementSection({ stt }: { stt: UseSttModelsResult }) {
+  const visible = stt.models.filter((m) => m.allowedByProbe);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  const handleDelete = (modelId: string) => {
+    setDeletingIds((prev) => new Set(prev).add(modelId));
+    void stt.deleteModel(modelId).finally(() => {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(modelId);
+        return next;
+      });
+    });
+  };
+
+  return (
+    <section
+      className="settings-section"
+      aria-labelledby="settings-stt-models-heading"
+    >
+      <h2 id="settings-stt-models-heading">
+        {t("settings.sttModelsListHeading")}
+      </h2>
+      <p className="settings-hint">{t("settings.sttModelsListHint")}</p>
+
+      <ul className="settings-provider-list">
+        {visible.map((m) => {
+          const label = sttModelLabel(m.id, m.label);
+          const download = stt.downloads[m.id];
+          const deleting = deletingIds.has(m.id);
+          return (
+            <li key={m.id} className="settings-provider">
+              <div className="settings-provider-head">
+                <span className="settings-provider-name">{label}</span>
+                <Badge
+                  variant={m.downloaded ? "success" : "default"}
+                  label={
+                    m.downloaded
+                      ? t("settings.sttModelListDownloaded")
+                      : t("settings.sttModelListNotDownloaded")
+                  }
+                >
+                  {m.downloaded ? (
+                    <>
+                      <ShieldCheck size={12} aria-hidden="true" />
+                      {t("settings.sttModelListDownloaded")}
+                    </>
+                  ) : (
+                    t("settings.sttModelListNotDownloaded")
+                  )}
+                </Badge>
+              </div>
+
+              <div className="settings-model-meta">
+                <span className="settings-field-label">
+                  {t("settings.sttSizeLabel")}
+                </span>
+                <span className="settings-model-host">
+                  {formatBytes(m.approxDownloadBytes)}
+                </span>
+              </div>
+
+              {download ? (
+                <div className="settings-field">
+                  <ProgressBar
+                    label={t("settings.sttModelListProgress", { model: label })}
+                    value={
+                      download.progress && download.progress.totalBytes > 0
+                        ? (download.progress.downloadedBytes /
+                            download.progress.totalBytes) *
+                          100
+                        : 0
+                    }
+                  />
+                </div>
+              ) : null}
+
+              <div className="settings-provider-actions">
+                {download ? (
+                  <Button
+                    onClick={() => stt.cancelDownload(m.id)}
+                    disabled={download.cancelling}
+                  >
+                    {download.cancelling
+                      ? t("settings.sttModelListCancelling")
+                      : t("settings.sttModelListCancel")}
+                  </Button>
+                ) : !m.downloaded ? (
+                  <Button onClick={() => stt.selectModel(m.id)}>
+                    <Download size={16} aria-hidden="true" />
+                    {t("settings.sttModelListDownload")}
+                  </Button>
+                ) : null}
+                <IconButton
+                  label={
+                    deleting
+                      ? t("settings.sttModelListDeleting")
+                      : t("settings.sttModelListDelete")
+                  }
+                  onClick={() => handleDelete(m.id)}
+                  disabled={!m.downloaded || Boolean(download) || deleting}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                </IconButton>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {stt.deleteError ? (
+        <p
+          className="settings-message settings-message--danger"
+          role="alert"
+          aria-live="assertive"
+        >
+          {t(STT_DELETE_ERROR_KEYS[stt.deleteError])}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Local LLM tab (Settings, TASK-034 owner ask 3): model download/removal
+ * management is DEFERRED pending an architecture decision - this is a clearly
+ * labelled placeholder rather than a half-built feature. The local
+ * OpenAI-compatible server CONNECTION itself is already configured under the
+ * "Providers and keys" tab (base_url / model id / connection check), so this
+ * tab only covers the still-missing piece.
+ */
+function LocalLlmSection() {
+  return (
+    <section
+      className="settings-section"
+      aria-labelledby="settings-local-llm-heading"
+    >
+      <h2 id="settings-local-llm-heading">
+        {t("settings.localLlmModelsHeading")}
+      </h2>
+      <p className="settings-hint">{t("settings.localLlmModelsPlaceholder")}</p>
     </section>
   );
 }
@@ -331,8 +515,15 @@ function ProviderKeyRow({
     <li className="settings-provider">
       <div className="settings-provider-head">
         <span className="settings-provider-name">{meta.displayName}</span>
+        {/*
+         * A configured key gets a distinct SUCCESS colour (owner ask: "hiển
+         * thị key đã được cấu hình" - a clear configured indicator, never the
+         * key value itself). Uses the semantic --color-success token via the
+         * Badge primitive's `success` variant - not a hardcoded hex
+         * (design-system.md).
+         */}
         <Badge
-          variant={present ? "default" : "warning"}
+          variant={present ? "success" : "warning"}
           label={
             present
               ? t("settings.statusConfigured")
@@ -490,6 +681,12 @@ function ModelConsentRow({
  * default provider + per-provider model, fallback order, and model-download
  * consent revocation (FR-02/BR-08). Built only from UI primitives + tokens
  * (design-system.md); every string is an i18n key.
+ *
+ * Grouped into keyboard-accessible TABS (owner ask, TASK-034): Providers and
+ * keys, Speech-to-text, Local LLM (placeholder, deferred), Hotkeys, History
+ * and general. The STT model-switcher hook is instantiated ONCE here (not per
+ * tab) so an in-flight download's progress survives a TAB switch too, not
+ * just a dropdown change within the Speech-to-text tab.
  */
 export function SettingsView() {
   const keys = useProviderKeys();
@@ -499,6 +696,8 @@ export function SettingsView() {
   const audio = useAudioSession();
   const picker = useProviderPickerMetadata();
   const localConn = useLocalProviderConnection();
+  const stt = useSttModels();
+  const [activeTab, setActiveTab] = useState("providers");
 
   const order = selection.settings.fallbackOrder;
   const grantedModels = consent.statuses.filter((s) => s.granted);
@@ -554,20 +753,8 @@ export function SettingsView() {
       : []),
   ];
 
-  return (
-    <main className="settings">
-      <h1 className="settings-title">{t("settings.title")}</h1>
-
-      {selection.error ? (
-        <p
-          className="settings-message settings-message--danger"
-          role="alert"
-          aria-live="assertive"
-        >
-          {t("settings.error.persist")}
-        </p>
-      ) : null}
-
+  const providersTab = (
+    <>
       <section
         className="settings-section"
         aria-labelledby="settings-providers-heading"
@@ -708,7 +895,53 @@ export function SettingsView() {
         ) : null}
       </section>
 
-      <SttEngineSection />
+      <section
+        className="settings-section"
+        aria-labelledby="settings-fallback-heading"
+      >
+        <h2 id="settings-fallback-heading">{t("settings.fallbackHeading")}</h2>
+        <p className="settings-hint">{t("settings.fallbackHint")}</p>
+        <ol className="settings-fallback-list">
+          {order.map((id, index) => (
+            <li key={id} className="settings-fallback-item">
+              <span className="settings-fallback-rank" aria-hidden="true">
+                {index + 1}
+              </span>
+              <span className="settings-fallback-name">
+                {PROVIDER_META[id].displayName}
+              </span>
+              {keys.statuses[id] ? null : (
+                <Badge variant="warning" label={t("settings.fallbackNoKey")}>
+                  {t("settings.fallbackNoKey")}
+                </Badge>
+              )}
+              <span className="settings-fallback-controls">
+                <IconButton
+                  label={t("settings.moveUp")}
+                  onClick={() => void selection.moveFallback(index, "up")}
+                  disabled={index === 0}
+                >
+                  <ArrowUp size={16} aria-hidden="true" />
+                </IconButton>
+                <IconButton
+                  label={t("settings.moveDown")}
+                  onClick={() => void selection.moveFallback(index, "down")}
+                  disabled={index === order.length - 1}
+                >
+                  <ArrowDown size={16} aria-hidden="true" />
+                </IconButton>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </>
+  );
+
+  const sttTab = (
+    <>
+      <SttEngineSection stt={stt} />
+      <SttModelManagementSection stt={stt} />
 
       <section
         className="settings-section"
@@ -830,48 +1063,11 @@ export function SettingsView() {
           />
         ) : null}
       </section>
+    </>
+  );
 
-      <section
-        className="settings-section"
-        aria-labelledby="settings-fallback-heading"
-      >
-        <h2 id="settings-fallback-heading">{t("settings.fallbackHeading")}</h2>
-        <p className="settings-hint">{t("settings.fallbackHint")}</p>
-        <ol className="settings-fallback-list">
-          {order.map((id, index) => (
-            <li key={id} className="settings-fallback-item">
-              <span className="settings-fallback-rank" aria-hidden="true">
-                {index + 1}
-              </span>
-              <span className="settings-fallback-name">
-                {PROVIDER_META[id].displayName}
-              </span>
-              {keys.statuses[id] ? null : (
-                <Badge variant="warning" label={t("settings.fallbackNoKey")}>
-                  {t("settings.fallbackNoKey")}
-                </Badge>
-              )}
-              <span className="settings-fallback-controls">
-                <IconButton
-                  label={t("settings.moveUp")}
-                  onClick={() => void selection.moveFallback(index, "up")}
-                  disabled={index === 0}
-                >
-                  <ArrowUp size={16} aria-hidden="true" />
-                </IconButton>
-                <IconButton
-                  label={t("settings.moveDown")}
-                  onClick={() => void selection.moveFallback(index, "down")}
-                  disabled={index === order.length - 1}
-                >
-                  <ArrowDown size={16} aria-hidden="true" />
-                </IconButton>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
+  const generalTab = (
+    <>
       <section
         className="settings-section"
         aria-labelledby="settings-models-heading"
@@ -924,8 +1120,49 @@ export function SettingsView() {
           </p>
         ) : null}
       </section>
+    </>
+  );
 
-      <HotkeysSection />
+  const tabs: TabItem[] = [
+    {
+      id: "providers",
+      label: t("settings.tabProviders"),
+      content: providersTab,
+    },
+    { id: "stt", label: t("settings.tabStt"), content: sttTab },
+    {
+      id: "localLlm",
+      label: t("settings.tabLocalLlm"),
+      content: <LocalLlmSection />,
+    },
+    {
+      id: "hotkeys",
+      label: t("settings.tabHotkeys"),
+      content: <HotkeysSection />,
+    },
+    { id: "general", label: t("settings.tabGeneral"), content: generalTab },
+  ];
+
+  return (
+    <main className="settings">
+      <h1 className="settings-title">{t("settings.title")}</h1>
+
+      {selection.error ? (
+        <p
+          className="settings-message settings-message--danger"
+          role="alert"
+          aria-live="assertive"
+        >
+          {t("settings.error.persist")}
+        </p>
+      ) : null}
+
+      <Tabs
+        items={tabs}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        label={t("settings.tablistLabel")}
+      />
     </main>
   );
 }
