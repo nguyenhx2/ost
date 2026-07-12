@@ -35,6 +35,12 @@ import {
   loadRegionLanguageSettings,
   saveRegionLanguageSettings,
 } from "../lib/regionLanguageSettings";
+import {
+  DEFAULT_REGION_PREVIEW_LAYOUT,
+  loadRegionPreviewLayout,
+  saveRegionPreviewLayout,
+  type RegionPreviewLayout,
+} from "../lib/regionLayoutSettings";
 import { useHasAnyProviderKey } from "./useHasAnyProviderKey";
 
 export type PreviewStatus =
@@ -164,6 +170,32 @@ export interface UseRegionPreviewResult {
    * user confirms, this SAME dialog refreshes for the new region (item 2 fix).
    */
   reselect: () => void;
+  /**
+   * Display layout (owner item 1): `stacked` (source over translation, the
+   * original layout) or `columns` (side by side). Persisted so it sticks
+   * across sessions.
+   */
+  layout: RegionPreviewLayout;
+  setLayout: (layout: RegionPreviewLayout) => void;
+  /**
+   * The editable source text shown in the paste/edit field (owner item 2).
+   * Tracks the OCR-provided text but can diverge while the user is actively
+   * typing/pasting a replacement.
+   */
+  sourceDraft: string;
+  /** Updates the draft WITHOUT sending a translate request (plain typing). */
+  setSourceDraft: (text: string) => void;
+  /**
+   * Pasted plain text (untrusted DATA) replaces the source and immediately
+   * requests a translation through the SAME path OCR text uses.
+   */
+  pasteSourceText: (text: string) => void;
+  /**
+   * Commits a manual edit (e.g. on blur) as a new translation request, same
+   * path as OCR/paste - but only when the draft actually differs from the
+   * text already shown, so leaving the field unchanged never re-fires.
+   */
+  commitSourceEdit: () => void;
 }
 
 /**
@@ -189,6 +221,10 @@ export function useRegionPreview(): UseRegionPreviewResult {
   const [targetLanguage, setTargetLanguageState] = useState<string>(
     DEFAULT_TARGET_LANGUAGE,
   );
+  const [layout, setLayoutState] = useState<RegionPreviewLayout>(
+    DEFAULT_REGION_PREVIEW_LAYOUT,
+  );
+  const [sourceDraft, setSourceDraftState] = useState("");
   const { hasKey } = useHasAnyProviderKey();
 
   const optionRef = useRef(option);
@@ -217,6 +253,33 @@ export function useRegionPreview(): UseRegionPreviewResult {
       cancelled = true;
     };
   }, []);
+
+  // Item 1 (layout toggle): load the persisted display layout on mount. An
+  // unreadable store must never break the overlay - fall back to the default
+  // (stacked, the original layout) instead of rejecting into an unhandled
+  // error.
+  useEffect(() => {
+    let cancelled = false;
+    void loadRegionPreviewLayout()
+      .then((saved) => {
+        if (!cancelled) {
+          setLayoutState(saved);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Item 2 (paste/edit source): keep the editable draft in sync with the
+  // OCR-provided source text whenever it changes (new region, re-select,
+  // etc). A manual paste/edit updates `state.sourceText` itself (via
+  // `pasteSourceText`/`commitSourceEdit` below), so this never fights an
+  // in-flight edit with stale OCR output.
+  useEffect(() => {
+    setSourceDraftState(state.sourceText);
+  }, [state.sourceText]);
 
   // AC-03.5: translate with the provider/model the user actually configured in
   // Settings. Without this the preview stayed on the hardcoded catalog default
@@ -296,14 +359,28 @@ export function useRegionPreview(): UseRegionPreviewResult {
     [clearTranslationTimeout],
   );
 
-  useEffect(() => {
-    const unlistens: Array<() => void> = [];
-    let disposed = false;
-
-    const onOcr = (payload: OcrResultPayload) => {
-      const sourceText = payload.sourceText;
+  /**
+   * Shared core of "a source text arrived, (maybe) translate it" - used by
+   * the OCR handler AND the paste/edit path (item 2) so both go through the
+   * EXACT same state transitions and translate request (owner requirement:
+   * pasted text translates "through the same path OCR text uses").
+   */
+  const beginTranslationForSource = useCallback(
+    (
+      sourceText: string,
+      options: {
+        lowConfidence?: boolean;
+        fidelity?: OcrFidelity;
+        detectedLanguage?: string;
+      } = {},
+    ) => {
+      const {
+        lowConfidence = false,
+        fidelity = FULL_FIDELITY,
+        detectedLanguage = "",
+      } = options;
       if (sourceText.trim() === "") {
-        // AC-02.7: empty OCR -> empty state, NO translate request.
+        // AC-02.7: empty source -> empty state, NO translate request.
         clearTranslationTimeout();
         requestIdRef.current = null;
         sourceTextRef.current = "";
@@ -317,7 +394,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
         return;
       }
       sourceTextRef.current = sourceText;
-      sourceLanguageRef.current = payload.detectedLanguage ?? "";
+      sourceLanguageRef.current = detectedLanguage;
       translationRef.current = null;
       // No provider key configured: this is a distinct, actionable state, not
       // a translation failure - never fire the doomed translate request
@@ -326,8 +403,8 @@ export function useRegionPreview(): UseRegionPreviewResult {
         setState((prev) => ({
           status: "failed",
           sourceText,
-          lowConfidence: payload.lowConfidence,
-          fidelity: payload.fidelity ?? FULL_FIDELITY,
+          lowConfidence,
+          fidelity,
           translation: null,
           provider: prev.provider,
           model: prev.model,
@@ -338,16 +415,64 @@ export function useRegionPreview(): UseRegionPreviewResult {
       setState((prev) => ({
         status: "translating",
         sourceText,
-        lowConfidence: payload.lowConfidence,
-        // Contract requires `fidelity`; mocked/legacy payloads without it are
-        // treated as full so the notice only shows on an explicit `degraded`.
-        fidelity: payload.fidelity ?? FULL_FIDELITY,
+        lowConfidence,
+        fidelity,
         translation: null,
         provider: prev.provider,
         model: prev.model,
         failureReason: null,
       }));
       requestTranslation(sourceText);
+    },
+    [clearTranslationTimeout, requestTranslation],
+  );
+
+  /**
+   * Pasted plain text (untrusted DATA) replaces the source and immediately
+   * translates through `beginTranslationForSource` - the SAME path OCR text
+   * uses (owner item 2). No detected-language hint: a pasted string was never
+   * recognized by the OCR engine.
+   */
+  const pasteSourceText = useCallback(
+    (text: string) => {
+      setSourceDraftState(text);
+      beginTranslationForSource(text);
+    },
+    [beginTranslationForSource],
+  );
+
+  /**
+   * Commits a manual edit of the source draft (e.g. on blur) as a new
+   * translation request - but only when the draft actually differs from the
+   * text already shown, so leaving the field untouched never re-fires a
+   * request.
+   */
+  const commitSourceEdit = useCallback(() => {
+    if (sourceDraft === sourceTextRef.current) {
+      return;
+    }
+    beginTranslationForSource(sourceDraft);
+  }, [sourceDraft, beginTranslationForSource]);
+
+  const setSourceDraft = useCallback((text: string) => {
+    setSourceDraftState(text);
+  }, []);
+
+  const setLayout = useCallback((next: RegionPreviewLayout) => {
+    setLayoutState(next);
+    void saveRegionPreviewLayout(next).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const unlistens: Array<() => void> = [];
+    let disposed = false;
+
+    const onOcr = (payload: OcrResultPayload) => {
+      beginTranslationForSource(payload.sourceText, {
+        lowConfidence: payload.lowConfidence,
+        fidelity: payload.fidelity ?? FULL_FIDELITY,
+        detectedLanguage: payload.detectedLanguage ?? "",
+      });
     };
 
     const onOcrError = () => {
@@ -517,7 +642,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
       clearTranslationTimeout();
       unlistens.forEach((un) => un());
     };
-  }, [requestTranslation, clearTranslationTimeout]);
+  }, [beginTranslationForSource, clearTranslationTimeout]);
 
   useEffect(() => {
     if (copied === null) {
@@ -683,5 +808,11 @@ export function useRegionPreview(): UseRegionPreviewResult {
     targetLanguage,
     setTargetLanguage,
     reselect,
+    layout,
+    setLayout,
+    sourceDraft,
+    setSourceDraft,
+    pasteSourceText,
+    commitSourceEdit,
   };
 }

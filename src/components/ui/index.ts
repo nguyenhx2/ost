@@ -18,4 +18,5 @@ export { Slider, type SliderProps } from "./Slider";
 export { Spinner, type SpinnerProps } from "./Spinner";
 export { Switch, type SwitchProps } from "./Switch";
 export { Tabs, type TabItem, type TabsProps } from "./Tabs";
+export { Textarea, type TextareaProps } from "./Textarea";
 export { Tooltip, type TooltipProps } from "./Tooltip";

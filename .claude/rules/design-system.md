@@ -39,6 +39,7 @@ Landed primitives:
 | `ProgressBar` | `src/components/ui/ProgressBar.tsx` | Determinate progress bar (STT model-download progress, TASK-026) |
 | `Spinner` | `src/components/ui/Spinner.tsx` | Indeterminate loading indicator (streaming-translation-in-flight affordance) |
 | `Tabs` | `src/components/ui/Tabs.tsx` | Keyboard-accessible tab group (`role="tablist"`/`tab`/`tabpanel`, arrow-key nav); groups the Settings view |
+| `Textarea` | `src/components/ui/Textarea.tsx` | Multi-line paste/edit text field (region-preview pasteable source text) |
 
 ## Banned outright
 
