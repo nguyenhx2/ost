@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => {
       confirmSelection: vi.fn().mockResolvedValue(undefined),
       previewReady: vi.fn().mockResolvedValue(undefined),
       requestTranslation: vi.fn().mockResolvedValue(undefined),
-      setLiveUpdate: vi.fn().mockResolvedValue(undefined),
       closePreview: vi.fn().mockResolvedValue(undefined),
       nudgePreview: vi.fn().mockResolvedValue(undefined),
     },
@@ -622,16 +621,7 @@ describe("useRegionPreview - pin / dismiss / close (AC-04.3)", () => {
   });
 });
 
-describe("useRegionPreview - live update and reposition", () => {
-  it("forwards the live-update toggle over IPC", async () => {
-    const { result } = await renderPreview();
-
-    act(() => result.current.setLiveUpdate(false));
-
-    expect(result.current.liveUpdate).toBe(false);
-    expect(mocks.regionIpc.setLiveUpdate).toHaveBeenCalledWith(false);
-  });
-
+describe("useRegionPreview - reposition", () => {
   it("nudges the overlay window for keyboard repositioning", async () => {
     const { result } = await renderPreview();
 

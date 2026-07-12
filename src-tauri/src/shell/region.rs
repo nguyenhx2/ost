@@ -287,8 +287,6 @@ pub struct PendingRegion {
 pub struct RegionState {
     /// Region + source language confirmed by the user, pending pipeline pickup.
     pub pending_region: Mutex<Option<PendingRegion>>,
-    /// Live-update toggle from the preview overlay (AC-02.4 UI half).
-    pub live_update: Mutex<bool>,
 }
 
 impl From<RegionRect> for CaptureRegion {
@@ -1020,17 +1018,6 @@ fn monotonic_correlation_id() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(1);
     COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-#[tauri::command]
-pub fn set_region_live_update(
-    state: tauri::State<'_, RegionState>,
-    enabled: bool,
-) -> Result<(), ShellError> {
-    if let Ok(mut live) = state.live_update.lock() {
-        *live = enabled;
-    }
-    Ok(())
 }
 
 #[tauri::command]

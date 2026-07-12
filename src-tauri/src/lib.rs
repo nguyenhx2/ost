@@ -156,7 +156,6 @@ pub fn run() {
             shell::region::confirm_region_selection,
             shell::region::region_preview_ready,
             shell::region::request_region_translation,
-            shell::region::set_region_live_update,
             shell::region::close_region_preview,
             shell::region::nudge_region_preview,
             shell::audio_session::start_audio_session,

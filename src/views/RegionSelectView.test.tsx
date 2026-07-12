@@ -8,7 +8,6 @@ const regionIpcMock = vi.hoisted(() => ({
   confirmSelection: vi.fn().mockResolvedValue(undefined),
   previewReady: vi.fn().mockResolvedValue(undefined),
   requestTranslation: vi.fn().mockResolvedValue(undefined),
-  setLiveUpdate: vi.fn().mockResolvedValue(undefined),
   closePreview: vi.fn().mockResolvedValue(undefined),
   nudgePreview: vi.fn().mockResolvedValue(undefined),
 }));
