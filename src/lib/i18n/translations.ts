@@ -318,10 +318,60 @@ const en = {
   "settings.sttModelDeleteErrorIo":
     "Could not delete the model file - please try again",
 
-  // Settings - Local LLM tab (model management deferred, TASK-034)
-  "settings.localLlmModelsHeading": "Local LLM model management",
-  "settings.localLlmModelsPlaceholder":
-    "Local LLM model download/removal management is not available yet - it is pending an architecture decision. The local OpenAI-compatible server connection is configured under Providers and keys.",
+  // Settings - Local LLM tab: managed engine (ADR-006)
+  "settings.llmServerHeading": "Managed local LLM engine",
+  "settings.llmServerHint":
+    "OST can download a translation GGUF model and manage a local llama-server process for you, on a loopback-only port - no cloud key needed. Start it, then use it for translation below.",
+  "settings.llmServerStatusLabel": "Server status",
+  "settings.llmServerRunning": "Running",
+  "settings.llmServerRunningWithModel": "Running: {model}",
+  "settings.llmServerStopped": "Not running",
+  "settings.llmServerUseAsProvider":
+    "Use for translation (sets this as the active provider)",
+  "settings.llmServerUseAsProviderActive":
+    "This is the active translation provider",
+  "settings.llmBinaryHint":
+    "The llama-server program was not found. Place it at ~/.ost/bin/llama-server(.exe), add it to your PATH, or set the OST_LLAMA_SERVER_PATH environment variable to its full path, then try again.",
+  "settings.llmServerErrorUnknownModel": "Unknown local-LLM model",
+  "settings.llmServerErrorNotDownloaded":
+    "This model must be downloaded before starting the server",
+  "settings.llmServerErrorBinaryNotFound":
+    "The llama-server program was not found",
+  "settings.llmServerErrorSpawnFailed":
+    "Could not start the local server - please try again",
+  "settings.llmServerErrorExitedDuringStartup":
+    "The local server exited unexpectedly while starting - check the GPU/driver setup and try again",
+  "settings.llmServerErrorReadinessTimeout":
+    "The local server did not become ready in time - please try again",
+  "settings.llmServerErrorStopFailed":
+    "Could not stop the local server - please try again",
+
+  "settings.llmModelsHeading": "Local LLM models",
+  "settings.llmModelsHint":
+    "Translation models OST can download and run locally. Download one, then start the server with it - only one model runs at a time.",
+  "settings.llmModelDefault": "Default",
+  "settings.llmModelRunning": "Running",
+  "settings.llmModelSizeLabel": "Download size / RAM",
+  "settings.llmModelListDownloaded": "Downloaded",
+  "settings.llmModelListNotDownloaded": "Not downloaded",
+  "settings.llmModelListDownload": "Download",
+  "settings.llmModelListDelete": "Delete",
+  "settings.llmModelListDeleting": "Deleting...",
+  "settings.llmModelListCancel": "Cancel download",
+  "settings.llmModelListCancelling": "Cancelling...",
+  "settings.llmModelListProgress": "{model} download progress",
+  "settings.llmModelStart": "Start server",
+  "settings.llmModelStarting": "Starting...",
+  "settings.llmModelStop": "Stop server",
+  "settings.llmModelStopping": "Stopping...",
+  "settings.llmModelErrorUnknownModel": "Unknown local-LLM model",
+  "settings.llmModelErrorDownload":
+    "The model download failed - please try again",
+  "settings.llmModelErrorCancelled": "The model download was cancelled",
+  "settings.llmModelErrorSessionActive":
+    "Cannot change this model while the local server is running it - stop the server first",
+  "settings.llmModelErrorIo":
+    "Could not delete the model file - please try again",
 
   // Settings - local OpenAI-compatible translation provider (FR-03.CUSTOM-1..5)
   "settings.localBaseUrlLabel": "Local server address (base_url)",
@@ -354,6 +404,11 @@ const en = {
   "consent.sttSwitchTitle": "Download this speech-to-text tier",
   "consent.sttSwitchIntro":
     "OST needs to download this speech-to-text model before switching to it. The file below is fetched over HTTPS from the host named here. No captured audio or keys are sent - audio never leaves your machine; only the model file is downloaded.",
+
+  // Consent dialog (managed local-LLM GGUF download, ADR-006)
+  "consent.llmDownloadTitle": "Download this local LLM translation model",
+  "consent.llmDownloadIntro":
+    "OST needs to download this GGUF model before it can run the managed local translation server. The file below is fetched over HTTPS from the host named here. No captured content or keys are sent - only the model file is downloaded, and it stays on this machine.",
 
   // Shared primitives
   "ui.select.placeholder": "Choose...",
@@ -658,9 +713,57 @@ const vi: Record<I18nKey, string> = {
   "settings.sttModelDeleteErrorIo":
     "Không xoá được tệp model - vui lòng thử lại",
 
-  "settings.localLlmModelsHeading": "Quản lý model LLM cục bộ",
-  "settings.localLlmModelsPlaceholder":
-    "Quản lý tải/xoá model LLM cục bộ chưa khả dụng - đang chờ quyết định kiến trúc. Kết nối máy chủ local tương thích OpenAI được cấu hình ở mục Provider và key.",
+  "settings.llmServerHeading": "Engine LLM cục bộ có quản lý",
+  "settings.llmServerHint":
+    "OST có thể tự tải model dịch dạng GGUF và tự quản lý một tiến trình llama-server cho bạn, trên một cổng chỉ loopback - không cần key đám mây. Khởi động rồi dùng nó để dịch bên dưới.",
+  "settings.llmServerStatusLabel": "Trạng thái máy chủ",
+  "settings.llmServerRunning": "Đang chạy",
+  "settings.llmServerRunningWithModel": "Đang chạy: {model}",
+  "settings.llmServerStopped": "Chưa chạy",
+  "settings.llmServerUseAsProvider":
+    "Dùng để dịch (đặt làm provider đang hoạt động)",
+  "settings.llmServerUseAsProviderActive":
+    "Đây là provider dịch đang hoạt động",
+  "settings.llmBinaryHint":
+    "Không tìm thấy chương trình llama-server. Hãy đặt tệp tại ~/.ost/bin/llama-server(.exe), thêm vào PATH, hoặc đặt biến môi trường OST_LLAMA_SERVER_PATH trỏ tới đường dẫn đầy đủ của nó, rồi thử lại.",
+  "settings.llmServerErrorUnknownModel": "Model LLM cục bộ không xác định",
+  "settings.llmServerErrorNotDownloaded":
+    "Phải tải model này trước khi khởi động máy chủ",
+  "settings.llmServerErrorBinaryNotFound":
+    "Không tìm thấy chương trình llama-server",
+  "settings.llmServerErrorSpawnFailed":
+    "Không khởi động được máy chủ local - vui lòng thử lại",
+  "settings.llmServerErrorExitedDuringStartup":
+    "Máy chủ local thoát bất ngờ khi đang khởi động - kiểm tra GPU/driver rồi thử lại",
+  "settings.llmServerErrorReadinessTimeout":
+    "Máy chủ local không sẵn sàng kịp thời gian - vui lòng thử lại",
+  "settings.llmServerErrorStopFailed":
+    "Không dừng được máy chủ local - vui lòng thử lại",
+
+  "settings.llmModelsHeading": "Model LLM cục bộ",
+  "settings.llmModelsHint":
+    "Các model dịch OST có thể tải và chạy cục bộ. Tải một model rồi khởi động máy chủ với model đó - chỉ một model chạy tại một thời điểm.",
+  "settings.llmModelDefault": "Mặc định",
+  "settings.llmModelRunning": "Đang chạy",
+  "settings.llmModelSizeLabel": "Dung lượng tải / RAM",
+  "settings.llmModelListDownloaded": "Đã tải",
+  "settings.llmModelListNotDownloaded": "Chưa tải",
+  "settings.llmModelListDownload": "Tải về",
+  "settings.llmModelListDelete": "Xoá",
+  "settings.llmModelListDeleting": "Đang xoá...",
+  "settings.llmModelListCancel": "Huỷ tải",
+  "settings.llmModelListCancelling": "Đang huỷ...",
+  "settings.llmModelListProgress": "Tiến độ tải {model}",
+  "settings.llmModelStart": "Khởi động máy chủ",
+  "settings.llmModelStarting": "Đang khởi động...",
+  "settings.llmModelStop": "Dừng máy chủ",
+  "settings.llmModelStopping": "Đang dừng...",
+  "settings.llmModelErrorUnknownModel": "Model LLM cục bộ không xác định",
+  "settings.llmModelErrorDownload": "Tải model thất bại - vui lòng thử lại",
+  "settings.llmModelErrorCancelled": "Đã huỷ tải model",
+  "settings.llmModelErrorSessionActive":
+    "Không thể đổi model này khi máy chủ local đang chạy nó - hãy dừng máy chủ trước",
+  "settings.llmModelErrorIo": "Không xoá được tệp model - vui lòng thử lại",
 
   "settings.localBaseUrlLabel": "Địa chỉ máy chủ local (base_url)",
   "settings.localBaseUrlPlaceholder": "http://127.0.0.1:1234",
@@ -691,6 +794,10 @@ const vi: Record<I18nKey, string> = {
   "consent.sttSwitchTitle": "Tải tầng model chuyển giọng nói này",
   "consent.sttSwitchIntro":
     "OST cần tải mô hình chuyển giọng nói thành văn bản này trước khi chuyển sang dùng nó. Tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có âm thanh đã chụp hay khoá nào được gửi đi - âm thanh không bao giờ rời khỏi máy của bạn; chỉ tải tệp mô hình.",
+
+  "consent.llmDownloadTitle": "Tải model dịch LLM cục bộ này",
+  "consent.llmDownloadIntro":
+    "OST cần tải tệp GGUF này trước khi có thể chạy máy chủ dịch LLM cục bộ có quản lý. Tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có nội dung đã chụp hay khoá nào được gửi đi - chỉ tải tệp model, và tệp này ở lại trên máy của bạn.",
 
   "ui.select.placeholder": "Chọn...",
 };

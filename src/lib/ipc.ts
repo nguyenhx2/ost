@@ -750,3 +750,138 @@ export const captionIpc = {
   nudgeOverlay: (dx: number, dy: number): Promise<void> =>
     invokeIpc("nudge_caption_overlay", { dx, dy }),
 };
+
+/* ------------------------------------------------------------------ */
+/* Managed local-LLM translation engine (ADR-006, `src-tauri/src/llm/`) */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One row of `list_llm_models` (providers.md): a shipped GGUF preset
+ * (Hunyuan-MT-7B default, Qwen3-14B) plus its download/running state. Mirrors
+ * the Rust `LlmModelInfo` serialization (camelCase).
+ */
+export interface LlmModelInfo {
+  id: string;
+  label: string;
+  approxDownloadBytes: number;
+  approxRamBytes: number;
+  /** Already present on disk. */
+  downloaded: boolean;
+  /** The first-run default preset. */
+  isDefault: boolean;
+  /** The managed server is currently running this model. */
+  running: boolean;
+}
+
+/** Tagged union outcome of `request_llm_model_download` (providers.md). */
+export type LlmModelDownloadOutcome =
+  | { status: "alreadyDownloaded" }
+  | { status: "consentRequired"; disclosure: ConsentDisclosure };
+
+/** Tagged error kind shared by download/cancel/delete (providers.md). */
+export type LlmModelErrorKind =
+  "unknownModel" | "download" | "cancelled" | "sessionActive" | "io";
+
+export interface LlmModelCommandError {
+  kind: LlmModelErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed local-LLM model command error. */
+export function asLlmModelCommandError(err: unknown): LlmModelCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: LlmModelErrorKind }).kind };
+  }
+  return { kind: "download" };
+}
+
+/** Emitted repeatedly while `confirm_llm_model_download` downloads (providers.md). */
+export interface LlmModelDownloadProgressPayload {
+  modelId: string;
+  downloadedBytes: number;
+  totalBytes: number;
+}
+
+export const EVENT_LLM_MODEL_DOWNLOAD_PROGRESS = "llm:model-download-progress";
+
+/** Typed error kind of the managed-server control commands (providers.md). */
+export type LlmServerErrorKind =
+  | "unknownModel"
+  | "notDownloaded"
+  | "binaryNotFound"
+  | "spawnFailed"
+  | "exitedDuringStartup"
+  | "readinessTimeout"
+  | "stopFailed";
+
+export interface LlmServerCommandError {
+  kind: LlmServerErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed local-LLM server command error. */
+export function asLlmServerCommandError(err: unknown): LlmServerCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: LlmServerErrorKind }).kind };
+  }
+  return { kind: "spawnFailed" };
+}
+
+/**
+ * The managed server's status (providers.md). `baseUrl` is the loopback
+ * address the frontend points the `local_openai` provider at once the server
+ * is up - never a secret, never a non-loopback host.
+ */
+export interface LlmServerStatusView {
+  running: boolean;
+  modelId: string | null;
+  baseUrl: string | null;
+  port: number | null;
+}
+
+/**
+ * Typed commands owned by `src-tauri/src/llm/mod.rs` (ADR-006). Model
+ * management mirrors the STT download-consent flow above; server control
+ * starts/stops the managed `llama-server` subprocess. Translation itself never
+ * flows through this module - once `start` resolves, the caller points the
+ * `local_openai` provider at the returned `baseUrl`.
+ */
+export const llmIpc = {
+  /** Every shipped preset with download/running state (Settings picker). */
+  listModels: (): Promise<LlmModelInfo[]> => invokeIpc("list_llm_models"),
+
+  /** Read-only: never triggers a fetch. */
+  requestDownload: (modelId: string): Promise<LlmModelDownloadOutcome> =>
+    invokeIpc("request_llm_model_download", { modelId }),
+
+  /** Grants consent (idempotent) and downloads, emitting progress events. */
+  confirmDownload: (modelId: string): Promise<void> =>
+    invokeIpc("confirm_llm_model_download", { modelId }),
+
+  /** Cancels `modelId`'s in-flight download, if any (no-op otherwise). */
+  cancelDownload: (modelId: string): Promise<void> =>
+    invokeIpc("cancel_llm_model_download", { modelId }),
+
+  /** Deletes a downloaded GGUF from disk. Refused while it is running. */
+  deleteModel: (modelId: string): Promise<void> =>
+    invokeIpc("delete_llm_model", { modelId }),
+
+  /** Starts (or restarts) the managed server for `modelId`. */
+  startServer: (modelId: string): Promise<LlmServerStatusView> =>
+    invokeIpc("start_llm_server", { modelId }),
+
+  /** Stops the managed server (idempotent). */
+  stopServer: (): Promise<void> => invokeIpc("stop_llm_server"),
+
+  /** The managed server's current status. */
+  serverStatus: (): Promise<LlmServerStatusView> =>
+    invokeIpc("llm_server_status"),
+};

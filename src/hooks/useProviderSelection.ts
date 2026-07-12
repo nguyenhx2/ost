@@ -4,6 +4,7 @@ import {
   DEFAULT_PROVIDER_SETTINGS,
   loadProviderSettings,
   saveProviderSettings,
+  type LocalOpenAiSettings,
   type ProviderSettings,
 } from "../lib/settings";
 
@@ -31,6 +32,14 @@ export interface UseProviderSelectionResult {
   setLocalOpenAiBaseUrl: (baseUrl: string) => Promise<void>;
   /** Persist the local OpenAI-compatible provider's free-text model id. */
   setLocalOpenAiModelId: (modelId: string) => Promise<void>;
+  /**
+   * Persist a partial patch of BOTH `baseUrl` and `modelId` in ONE write
+   * (ADR-006 managed-server wiring): calling `setLocalOpenAiBaseUrl` then
+   * `setLocalOpenAiModelId` back-to-back would race against React's stale
+   * closure and only persist the SECOND field - this merges both into a
+   * single `persist` call.
+   */
+  setLocalOpenAi: (patch: Partial<LocalOpenAiSettings>) => Promise<void>;
 }
 
 /**
@@ -133,6 +142,16 @@ export function useProviderSelection(): UseProviderSelectionResult {
     [persist, settings],
   );
 
+  const setLocalOpenAi = useCallback(
+    async (patch: Partial<LocalOpenAiSettings>) => {
+      await persist({
+        ...settings,
+        localOpenAi: { ...settings.localOpenAi, ...patch },
+      });
+    },
+    [persist, settings],
+  );
+
   return {
     settings,
     loading,
@@ -142,5 +161,6 @@ export function useProviderSelection(): UseProviderSelectionResult {
     moveFallback,
     setLocalOpenAiBaseUrl,
     setLocalOpenAiModelId,
+    setLocalOpenAi,
   };
 }
