@@ -16,26 +16,23 @@
 //! `is_qwen3_model`), so a managed Hy-MT2 model gets Tencent's exact translate
 //! template + generation params with no extra wiring.
 //!
-//! ## UNVERIFIED download sources (flagged for the owner / tech-researcher)
+//! ## Download sources and digests (verified 2026-07-12)
 //!
-//! The repo/filename/size fields below are BEST-EFFORT and were NOT verified
-//! against a live Hugging Face repo from the offline dev environment. Before the
-//! owner relies on a preset, its `repo` + `filename` must be confirmed to exist
-//! and host the exact quant. A wrong URL fails CLEANLY (the download surfaces a
-//! network error and writes nothing - `crate::llm::download`), so an unverified
-//! entry is safe, just non-functional until corrected.
+//! The two shipped presets - Hunyuan-MT-7B and Qwen3-14B - have their repo,
+//! filename, size and SHA-256 confirmed against the live Hugging Face repos
+//! (tech-researcher, 2026-07-12), so `sha256` is `Some(...)` and the download
+//! verifies FAIL-CLOSED against the pin (a mismatch rejects the artifact).
 //!
-//! ## Digests: record-on-first-download (trust-on-first-use), NOT pinned
+//! The `Hy-MT2` family (7B/30B-A3B) the owner originally named is deliberately
+//! NOT shipped: it needs the `hy_v3` llama.cpp architecture, which is not merged
+//! upstream (ggml-org/llama.cpp PR #25395 open as of 2026-07-11), so a stock
+//! `llama-server` cannot load it. When that lands upstream, add the real Hy-MT2
+//! presets here with their pinned digests; the prompt/param router already
+//! matches both `hunyuan-mt` and `hy-mt2` ids.
 //!
-//! `sha256` is `None` for every preset because a real per-file digest could not
-//! be verified offline (inventing one would be worse than none). The download
-//! path therefore RECORDS the actual SHA-256 of the first download to a sidecar
-//! file and verifies future loads against it - trust-on-first-use. This is a
-//! DELIBERATE, documented weakening vs. the whisper path (which REFUSES an
-//! unpinned native binary): a GGUF is loaded by the crash-isolated subprocess,
-//! not in-process, and the honest options offline were TOFU or a fake pin. Once
-//! the owner captures the real digests (surfaced by the first download), pin
-//! them here to upgrade to the fail-closed pinned path.
+//! If a future preset's digest cannot be verified, prefer TOFU (record on first
+//! download, verify future loads against the sidecar) over a fabricated pin, and
+//! say so - a GGUF is loaded by the crash-isolated subprocess, not in-process.
 
 use std::path::{Path, PathBuf};
 
