@@ -73,7 +73,7 @@ describe("loadProviderSettings", () => {
       DEFAULT_PROVIDER_SETTINGS.defaultProvider,
     );
     // Unknown model type is dropped; provider defaults its first model.
-    expect(settings.models.gemini).toBe("gemini-2.5-flash");
+    expect(settings.models.gemini).toBe("gemini-3.5-flash");
     // Unknown ids are dropped from fallback order (completed to full set).
     expect(settings.fallbackOrder).toEqual(
       DEFAULT_PROVIDER_SETTINGS.fallbackOrder,
@@ -152,7 +152,7 @@ describe("normalizeFallbackOrder", () => {
 
 describe("activeModel", () => {
   it("returns the chosen model for the active provider", () => {
-    expect(activeModel(DEFAULT_PROVIDER_SETTINGS)).toBe("gemini-2.5-flash");
+    expect(activeModel(DEFAULT_PROVIDER_SETTINGS)).toBe("gemini-3.5-flash");
   });
 
   it("returns the local provider's free-text model id when it is active", () => {

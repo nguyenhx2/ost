@@ -223,7 +223,7 @@ describe("App (home screen, FR-04 TASK-028)", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText(/Gemini \/ gemini-2\.5-flash/),
+        screen.getByText(/Gemini \/ gemini-3\.5-flash/),
       ).toBeInTheDocument(),
     );
     expect(screen.getByText("Base (recommended)")).toBeInTheDocument();
