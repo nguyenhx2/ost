@@ -166,6 +166,13 @@
   gap: var(--space-2);
 }
 
+/* Loopback-URL hint on the localNotConfigured notice - a muted secondary
+   line, same treatment as the degraded-fidelity reason. */
+.region-preview-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 .region-preview-controls {
   display: flex;
   align-items: center;

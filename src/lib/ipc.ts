@@ -231,6 +231,12 @@ export interface AudioSessionRequest {
   sourceLanguage?: string;
   /** Target language (AC-01.5); empty/absent = default `vi`. */
   targetLanguage?: string;
+  /**
+   * User-configured `base_url` for the local OpenAI-compatible provider
+   * (FR-03.CUSTOM-1..5). Not a secret (security-privacy.md); read only when
+   * `provider` is `local_openai`, ignored otherwise.
+   */
+  baseUrl?: string;
 }
 
 /**
@@ -244,6 +250,12 @@ export type AudioErrorKind =
   | "keychain"
   | "consentRequired"
   | "model"
+  /**
+   * The local OpenAI-compatible provider is active but its `base_url` is
+   * empty or not loopback-valid - a distinct, actionable notice (never the
+   * generic `model` failure, human-in-the-loop.md).
+   */
+  | "localNotConfigured"
   | "capture"
   | "alreadyRunning";
 

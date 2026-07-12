@@ -130,7 +130,25 @@ export function CaptionOverlayView() {
             </div>
           ) : null}
 
-          {state.startError && state.startError.kind !== "noProviderKey" ? (
+          {state.startError &&
+          state.startError.kind === "localNotConfigured" ? (
+            // Owner-reported bug: an empty/invalid local server URL used to
+            // surface only as the generic "could not start" copy below.
+            // Distinct, actionable notice instead (human-in-the-loop.md).
+            <div className="caption-overlay-blocked" role="alert">
+              <span>{t("caption.localNotConfigured")}</span>
+              <span className="caption-overlay-hint">
+                {t("caption.localNotConfiguredHint")}
+              </span>
+              <Button onClick={overlay.openSettings}>
+                {t("caption.openSettings")}
+              </Button>
+            </div>
+          ) : null}
+
+          {state.startError &&
+          state.startError.kind !== "noProviderKey" &&
+          state.startError.kind !== "localNotConfigured" ? (
             <div className="caption-overlay-blocked" role="alert">
               <span>{t("caption.startError")}</span>
               <Button onClick={overlay.retry}>{t("caption.retry")}</Button>

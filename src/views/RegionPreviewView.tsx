@@ -173,7 +173,28 @@ export function RegionPreviewView() {
             </div>
           ) : null}
 
-          {state.status === "failed" && state.failureReason !== "noKey" ? (
+          {state.status === "failed" &&
+          state.failureReason === "localNotConfigured" ? (
+            // Owner-reported bug: an empty/invalid local server URL used to
+            // fall through to the generic failure copy below. Distinct,
+            // actionable notice instead (human-in-the-loop.md).
+            <div className="region-preview-blocked" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <div className="region-preview-blocked-body">
+                <span>{t("preview.localNotConfigured")}</span>
+                <span className="region-preview-hint">
+                  {t("preview.localNotConfiguredHint")}
+                </span>
+                <Button onClick={preview.openSettings}>
+                  {t("preview.openSettings")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {state.status === "failed" &&
+          state.failureReason !== "noKey" &&
+          state.failureReason !== "localNotConfigured" ? (
             <p className="region-preview-error" role="alert">
               <AlertTriangle size={14} aria-hidden="true" />
               {/* Own localized copy only - the raw diagnostic string is DATA. */}

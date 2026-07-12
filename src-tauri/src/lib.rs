@@ -31,8 +31,28 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+/// Installs the stderr `tracing` subscriber, driven by `RUST_LOG` (default
+/// `warn` when unset/invalid). Without this, `RUST_LOG` produced NO output at
+/// all - provider-layer failures already logged via `tracing::warn!`
+/// (status + body) never reached stderr, which is exactly what hid the local
+/// OpenAI-compatible provider's real failure behind the generic UI message
+/// during triage. Never logs secrets: the provider layer redacts keys before
+/// logging (`providers/redact.rs`) and `keys::ApiKey` has no `Display`/
+/// `Serialize` impl, so one could not be printed even by accident.
+fn init_tracing() {
+    use tracing_subscriber::EnvFilter;
+    let filter = EnvFilter::try_from_env("RUST_LOG").unwrap_or_else(|_| EnvFilter::new("warn"));
+    // `try_init` (not `init`): never panics if a subscriber is already set
+    // (e.g. a test harness installed one first).
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())

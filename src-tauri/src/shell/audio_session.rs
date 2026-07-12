@@ -36,7 +36,8 @@ use crate::core::{HeavySessionCoordinator, HeavySessionKind};
 use crate::keys::{ApiKey, KeyStore};
 use crate::models::{ConsentDisclosure, ModelGate};
 use crate::providers::{
-    build_provider, ProviderId, TranslationProvider, TranslationRequest, TranslationResult,
+    build_local_openai_provider, build_provider, ProviderId, TranslationProvider,
+    TranslationRequest, TranslationResult,
 };
 use crate::stt::{
     catalog, decide_switch, ensure_model_available,
@@ -104,6 +105,13 @@ pub enum AudioError {
     /// The whisper model could not be made available (download/verify/io).
     #[error("model unavailable")]
     Model,
+    /// The local OpenAI-compatible provider is selected but its `base_url` is
+    /// empty or not loopback-valid (127.0.0.1 / localhost / [::1]). Distinct
+    /// from [`Self::Model`] so the UI can show an actionable "set the local
+    /// server URL in Settings" notice instead of a generic failure
+    /// (human-in-the-loop.md).
+    #[error("local server not configured")]
+    LocalNotConfigured,
     /// The audio-capture backend could not start (no endpoint / init failure).
     #[error("audio capture unavailable")]
     Capture,
@@ -121,6 +129,7 @@ impl AudioError {
             AudioError::Keychain => "keychain",
             AudioError::ConsentRequired => "consentRequired",
             AudioError::Model => "model",
+            AudioError::LocalNotConfigured => "localNotConfigured",
             AudioError::Capture => "capture",
             AudioError::AlreadyRunning => "alreadyRunning",
         }
@@ -140,7 +149,7 @@ impl Serialize for AudioError {
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioSessionRequest {
-    /// Provider id string (gemini/anthropic/openai/openrouter).
+    /// Provider id string (gemini/anthropic/openai/openrouter/local_openai).
     pub provider: String,
     /// Opaque model id chosen in Settings.
     pub model: String,
@@ -150,6 +159,11 @@ pub struct AudioSessionRequest {
     /// Target language (AC-01.5). Absent / empty = default `vi`.
     #[serde(default)]
     pub target_language: Option<String>,
+    /// User-configured `base_url` for the local OpenAI-compatible provider
+    /// (FR-03.CUSTOM-1..5). Not a secret (security-privacy.md) - only read
+    /// when `provider` is `local_openai`; ignored otherwise.
+    #[serde(default)]
+    pub base_url: Option<String>,
 }
 
 /// The `audio:caption` event payload. Carries source + translated text, the
@@ -544,12 +558,31 @@ impl AudioSessionPipeline {
 }
 
 /// Resolves the provider + key for the request, failing closed with an
-/// actionable error when no key is configured (AC-01.11). Factored out for unit
-/// testing with an injected key store.
+/// actionable error when no key is configured (AC-01.11) or, for the local
+/// OpenAI-compatible provider, when `base_url` is empty/not loopback-valid
+/// (distinct `LocalNotConfigured` kind - human-in-the-loop.md). Factored out
+/// for unit testing with an injected key store.
 async fn resolve_translator(
     keys: &KeyStore,
     provider: ProviderId,
+    base_url: Option<&str>,
 ) -> Result<ProviderCaptionTranslator, AudioError> {
+    if provider == ProviderId::LocalOpenAi {
+        // No key exists for this provider (BR-02): a static placeholder
+        // satisfies the trait signature but is never put on the wire (see
+        // `local_openai.rs`).
+        let key = ApiKey::new("unused-placeholder".to_string()).map_err(|_| AudioError::Model)?;
+        let url = base_url.unwrap_or("").trim();
+        if url.is_empty() {
+            return Err(AudioError::LocalNotConfigured);
+        }
+        let client =
+            build_local_openai_provider(url).map_err(|_| AudioError::LocalNotConfigured)?;
+        return Ok(ProviderCaptionTranslator {
+            provider: client,
+            key,
+        });
+    }
     let key = match keys.retrieve_key(provider).await {
         Ok(Some(key)) => key,
         Ok(None) => return Err(AudioError::NoProviderKey),
@@ -596,8 +629,9 @@ pub async fn start_audio_session(
         .map_err(|_| AudioError::UnknownProvider)?;
 
     // AC-01.11: no key -> actionable error to Settings, no capture, no crash.
+    // Same fail-closed pattern for the local provider's `base_url`.
     let translator: Arc<dyn CaptionTranslator> =
-        Arc::new(resolve_translator(&pipeline.keys, provider).await?);
+        Arc::new(resolve_translator(&pipeline.keys, provider, request.base_url.as_deref()).await?);
 
     // The CURRENTLY SELECTED model (Settings-time switching, TASK-026): read
     // once so the whole session uses one consistent choice even if a switch
@@ -1515,11 +1549,79 @@ mod tests {
         }
 
         let store = KeyStore::with_backend(Arc::new(EmptyBackend));
-        let err = match resolve_translator(&store, ProviderId::Gemini).await {
+        let err = match resolve_translator(&store, ProviderId::Gemini, None).await {
             Err(e) => e,
             Ok(_) => panic!("expected NoProviderKey with an empty keychain"),
         };
         assert!(matches!(err, AudioError::NoProviderKey));
         assert_eq!(err.kind(), "noProviderKey");
+    }
+
+    #[tokio::test]
+    async fn resolve_translator_reports_local_not_configured_when_base_url_is_empty() {
+        // Owner-reported bug: local_openai active with an empty base_url used to
+        // surface only after a doomed capture start, mapped to the generic
+        // `Model` kind. It must fail here, before any capture/model work, with
+        // the distinct actionable kind - never touching the keychain (no key
+        // exists for this provider, BR-02).
+        let store = KeyStore::with_backend(Arc::new(NeverCalledBackend));
+        let err = match resolve_translator(&store, ProviderId::LocalOpenAi, None).await {
+            Err(e) => e,
+            Ok(_) => panic!("expected LocalNotConfigured with an empty base_url"),
+        };
+        assert!(matches!(err, AudioError::LocalNotConfigured));
+        assert_eq!(err.kind(), "localNotConfigured");
+
+        let err = match resolve_translator(&store, ProviderId::LocalOpenAi, Some("   ")).await {
+            Err(e) => e,
+            Ok(_) => panic!("expected LocalNotConfigured with a blank base_url"),
+        };
+        assert!(matches!(err, AudioError::LocalNotConfigured));
+    }
+
+    #[tokio::test]
+    async fn resolve_translator_reports_local_not_configured_for_a_non_loopback_base_url() {
+        let store = KeyStore::with_backend(Arc::new(NeverCalledBackend));
+        let err =
+            match resolve_translator(&store, ProviderId::LocalOpenAi, Some("https://example.com"))
+                .await
+            {
+                Err(e) => e,
+                Ok(_) => panic!("expected LocalNotConfigured for a non-loopback base_url"),
+            };
+        assert!(matches!(err, AudioError::LocalNotConfigured));
+    }
+
+    #[tokio::test]
+    async fn resolve_translator_builds_a_working_client_for_a_valid_loopback_base_url() {
+        let store = KeyStore::with_backend(Arc::new(NeverCalledBackend));
+        let translator = resolve_translator(
+            &store,
+            ProviderId::LocalOpenAi,
+            Some("http://127.0.0.1:1234"),
+        )
+        .await
+        .expect("a valid loopback base_url must build a client");
+        assert_eq!(translator.provider.id(), ProviderId::LocalOpenAi);
+    }
+
+    /// A keychain backend whose methods panic if ever called - proves
+    /// `resolve_translator` never touches the keychain for `local_openai`
+    /// (BR-02: no key exists for this provider).
+    struct NeverCalledBackend;
+    impl crate::keys::KeyBackend for NeverCalledBackend {
+        fn set_secret(&self, _: &str, _: &str, _: &str) -> Result<(), crate::keys::KeyStoreError> {
+            panic!("local_openai must never touch the keychain")
+        }
+        fn get_secret(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<Option<String>, crate::keys::KeyStoreError> {
+            panic!("local_openai must never touch the keychain")
+        }
+        fn delete_secret(&self, _: &str, _: &str) -> Result<(), crate::keys::KeyStoreError> {
+            panic!("local_openai must never touch the keychain")
+        }
     }
 }

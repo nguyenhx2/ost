@@ -101,14 +101,20 @@ dịch qua lớp provider, rồi phát sự kiện `audio:caption`. Âm thanh KH
 
 | Trường           | Kiểu               | Ghi chú                                                                 |
 | ---------------- | ------------------ | ---------------------------------------------------------------------- |
-| `provider`       | `string`           | Provider được chọn (gemini/anthropic/openai/openrouter).               |
+| `provider`       | `string`           | Provider được chọn (gemini/anthropic/openai/openrouter/local_openai).  |
 | `model`          | `string`           | Model được chọn.                                                       |
 | `sourceLanguage` | `string \| null`   | Ghim ngôn ngữ nguồn (AC-01.4); rỗng/`"auto"`/absent = tự phát hiện (AC-01.3). |
 | `targetLanguage` | `string \| null`   | Ngôn ngữ đích (AC-01.5); rỗng/absent = mặc định `vi`.                  |
+| `baseUrl`        | `string \| null`   | `base_url` của provider local OpenAI-compatible (FR-03.CUSTOM-1..5); chỉ đọc khi `provider = local_openai`, không phải bí mật (security-privacy.md). |
 
 `AudioError` tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownProvider | noProviderKey |
-keychain | consentRequired | model | capture | alreadyRunning`; UI ánh xạ `kind` sang thông
-báo i18n (với `noProviderKey` là CTA mở Settings), không render chuỗi backend thô.
+keychain | consentRequired | model | localNotConfigured | capture | alreadyRunning`; UI ánh xạ
+`kind` sang thông báo i18n (với `noProviderKey` và `localNotConfigured` đều là CTA mở
+Settings), không render chuỗi backend thô. `localNotConfigured`: provider đang hoạt động là
+`local_openai` nhưng `baseUrl` rỗng hoặc không hợp lệ (không phải loopback 127.0.0.1 /
+localhost / [::1]) - được phát hiện phía client TRƯỚC khi gửi request (giống `noProviderKey`),
+với `resolve_translator` phía Rust là lớp phòng thủ thứ hai (không bao giờ đọc keychain cho
+provider này, BR-02).
 
 Model whisper dùng lại cổng đồng thuận tải-model dùng chung với `modelSetId` = `"whisper-ggml"`
 (xem mục dưới). Khi chưa có đồng thuận, `start_audio_session` phát `models:consent-required`

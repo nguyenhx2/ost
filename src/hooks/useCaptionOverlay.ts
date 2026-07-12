@@ -21,6 +21,9 @@ import {
 import { recordTranslation } from "../lib/history";
 import { DEFAULT_TARGET_LANGUAGE } from "../lib/languages";
 import { hasAnyProviderKey } from "../lib/providerKeys";
+import { isValidLocalBaseUrl } from "../lib/localProvider";
+import { LOCAL_OPENAI_PROVIDER_ID } from "../lib/providers";
+import { loadProviderSettings } from "../lib/settings";
 
 /**
  * A session-level start failure the overlay surfaces (never a raw backend
@@ -98,6 +101,35 @@ export function useCaptionOverlay(
 
   const startSession = useCallback(async () => {
     setStartError(null);
+    const request = requestRef.current;
+    // The local OpenAI-compatible provider needs no key at all (BR-02): check
+    // it FIRST, independently of the key-status check below, so a doomed
+    // session never spins up capture and the actionable "set the server URL"
+    // notice is never shadowed by a "no key" one (owner-reported bug -
+    // human-in-the-loop.md). Falls through to the backend's own mapping if
+    // the settings read itself fails - best-effort fast path only.
+    if (request.provider === LOCAL_OPENAI_PROVIDER_ID) {
+      try {
+        const settings = await loadProviderSettings();
+        const baseUrl = settings.localOpenAi.baseUrl;
+        if (!isValidLocalBaseUrl(baseUrl)) {
+          setStartError({ kind: "localNotConfigured" });
+          return;
+        }
+        try {
+          await audioIpc.start({ ...request, baseUrl });
+        } catch (err) {
+          const typed = asAudioCommandError(err);
+          if (typed.kind !== "consentRequired") {
+            setStartError(typed);
+          }
+        }
+        return;
+      } catch {
+        // Ignore - fall through to the ordinary start attempt below, which
+        // still fails closed via the backend's own LocalNotConfigured mapping.
+      }
+    }
     // Detect the zero-key state client-side BEFORE attempting to start the
     // session, so a session with no chance of translating never spins up
     // capture (human-in-the-loop.md). Falls through to the ordinary start
@@ -113,7 +145,7 @@ export function useCaptionOverlay(
       // Ignore - fall back to the backend's own noProviderKey mapping below.
     }
     try {
-      await audioIpc.start(requestRef.current);
+      await audioIpc.start(request);
     } catch (err) {
       const typed = asAudioCommandError(err);
       // consentRequired is handled by the disclosure dialog (via the event),

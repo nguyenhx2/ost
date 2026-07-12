@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => {
     }),
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     recordTranslation: vi.fn().mockResolvedValue(null),
+    loadProviderSettings: vi.fn(),
   };
 });
 
@@ -53,6 +54,14 @@ vi.mock("../lib/ipc", async (importOriginal) => {
 vi.mock("../lib/history", () => ({
   recordTranslation: mocks.recordTranslation,
 }));
+
+vi.mock("../lib/settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/settings")>();
+  return {
+    ...actual,
+    loadProviderSettings: mocks.loadProviderSettings,
+  };
+});
 
 import {
   EVENT_AUDIO_CAPTION,
@@ -140,6 +149,19 @@ beforeEach(() => {
   // Default: a key IS configured, so existing session-start behavior is
   // unaffected; the zero-key describe block below overrides this per test.
   mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
+  // Default persisted selection: not the local provider, so the local-url
+  // gate below never applies to the (default) gemini test request.
+  mocks.loadProviderSettings.mockResolvedValue({
+    defaultProvider: "gemini",
+    models: {
+      gemini: "gemini-2.5-flash",
+      anthropic: "claude-sonnet-4-5",
+      openai: "gpt-5-mini",
+      openrouter: "auto",
+    },
+    fallbackOrder: [],
+    localOpenAi: { baseUrl: "", modelId: "" },
+  });
 });
 
 describe("useCaptionOverlay - session start (AC-01.1)", () => {
@@ -264,6 +286,76 @@ describe("useCaptionOverlay - no provider key configured (TASK-025)", () => {
 
     await waitFor(() =>
       expect(result.current.state.startError?.kind).toBe("noProviderKey"),
+    );
+    act(() => result.current.openSettings());
+
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useCaptionOverlay - local provider not configured (owner-reported bug)", () => {
+  const LOCAL_REQUEST: AudioSessionRequest = {
+    provider: "local_openai",
+    model: "Hy-MT2-7B",
+    sourceLanguage: "ja",
+    targetLanguage: "vi",
+  };
+
+  function withLocalProvider(baseUrl: string) {
+    mocks.loadProviderSettings.mockResolvedValue({
+      defaultProvider: "local_openai",
+      models: {
+        gemini: "gemini-2.5-flash",
+        anthropic: "claude-sonnet-4-5",
+        openai: "gpt-5-mini",
+        openrouter: "auto",
+      },
+      fallbackOrder: [],
+      localOpenAi: { baseUrl, modelId: "Hy-MT2-7B" },
+    });
+  }
+
+  it("shows localNotConfigured (never noKey) for an empty base_url, with zero keys stored", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    withLocalProvider("");
+    const { result } = renderHook(() => useCaptionOverlay(LOCAL_REQUEST));
+
+    await waitFor(() =>
+      expect(result.current.state.startError?.kind).toBe("localNotConfigured"),
+    );
+    expect(mocks.audioIpc.start).not.toHaveBeenCalled();
+    // The key-status path must never even be consulted for this provider.
+    expect(mocks.keysIpc.statuses).not.toHaveBeenCalled();
+  });
+
+  it("shows localNotConfigured for a non-loopback base_url", async () => {
+    withLocalProvider("https://example.com");
+    const { result } = renderHook(() => useCaptionOverlay(LOCAL_REQUEST));
+
+    await waitFor(() =>
+      expect(result.current.state.startError?.kind).toBe("localNotConfigured"),
+    );
+    expect(mocks.audioIpc.start).not.toHaveBeenCalled();
+  });
+
+  it("starts the session with the resolved base_url for a valid loopback URL", async () => {
+    withLocalProvider("http://127.0.0.1:1234");
+    const { result } = renderHook(() => useCaptionOverlay(LOCAL_REQUEST));
+
+    await waitFor(() => expect(mocks.audioIpc.start).toHaveBeenCalled());
+    expect(mocks.audioIpc.start).toHaveBeenCalledWith({
+      ...LOCAL_REQUEST,
+      baseUrl: "http://127.0.0.1:1234",
+    });
+    expect(result.current.state.startError).toBeNull();
+  });
+
+  it("openSettings invokes the Settings-open IPC from the localNotConfigured notice", async () => {
+    withLocalProvider("");
+    const { result } = renderHook(() => useCaptionOverlay(LOCAL_REQUEST));
+
+    await waitFor(() =>
+      expect(result.current.state.startError?.kind).toBe("localNotConfigured"),
     );
     act(() => result.current.openSettings());
 

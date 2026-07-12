@@ -66,6 +66,10 @@ const en = {
     "Could not recognize text - the capture or OCR step failed. Please try selecting the region again",
   "preview.noProviderKey":
     "No provider key is configured - open Settings to add one",
+  "preview.localNotConfigured":
+    "The local server URL is not set up - open Settings to set it",
+  "preview.localNotConfiguredHint":
+    "The URL must be loopback-only, e.g. http://127.0.0.1:1234",
   "preview.openSettings": "Open Settings",
   "preview.emptyOcr": "No text recognized in the selected region",
   "preview.lowConfidence": "Low confidence - the result may be inaccurate",
@@ -104,6 +108,10 @@ const en = {
     "A caption could not be produced - the session is still running",
   "caption.noProviderKey":
     "No provider key is configured - open Settings to add one",
+  "caption.localNotConfigured":
+    "The local server URL is not set up - open Settings to set it",
+  "caption.localNotConfiguredHint":
+    "The URL must be loopback-only, e.g. http://127.0.0.1:1234",
   "caption.startError": "Could not start the audio session - please try again",
   "caption.modelBlocked":
     "The speech model download must be allowed before captions can start.",
@@ -469,6 +477,10 @@ const vi: Record<I18nKey, string> = {
     "Không nhận dạng được văn bản - bước chụp hoặc OCR đã thất bại. Vui lòng chọn lại vùng màn hình",
   "preview.noProviderKey":
     "Chưa cấu hình khoá provider - mở Cài đặt để thêm khoá",
+  "preview.localNotConfigured":
+    "Chưa thiết lập địa chỉ máy chủ cục bộ - mở Cài đặt để thiết lập",
+  "preview.localNotConfiguredHint":
+    "Địa chỉ phải là loopback, ví dụ http://127.0.0.1:1234",
   "preview.openSettings": "Mở Cài đặt",
   "preview.emptyOcr": "Không nhận dạng được văn bản trong vùng đã chọn",
   "preview.lowConfidence": "Độ tin cậy thấp - kết quả có thể không chính xác",
@@ -505,6 +517,10 @@ const vi: Record<I18nKey, string> = {
   "caption.error": "Không tạo được phụ đề - phiên vẫn đang chạy",
   "caption.noProviderKey":
     "Chưa cấu hình khoá provider - mở Cài đặt để thêm khoá",
+  "caption.localNotConfigured":
+    "Chưa thiết lập địa chỉ máy chủ cục bộ - mở Cài đặt để thiết lập",
+  "caption.localNotConfiguredHint":
+    "Địa chỉ phải là loopback, ví dụ http://127.0.0.1:1234",
   "caption.startError": "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
   "caption.modelBlocked":
     "Cần cho phép tải mô hình giọng nói trước khi bắt đầu tạo phụ đề.",

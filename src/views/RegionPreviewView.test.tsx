@@ -506,6 +506,51 @@ describe("RegionPreviewView (SCR-03)", () => {
     expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the distinct local-not-configured notice (not the generic failure) for an empty base_url (owner-reported bug)", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    mocks.loadProviderSettings.mockResolvedValue({
+      defaultProvider: "local_openai",
+      models: {
+        gemini: "gemini-2.5-flash",
+        anthropic: "claude-sonnet-4-5",
+        openai: "gpt-5-mini",
+        openrouter: "auto",
+      },
+      fallbackOrder: [],
+      localOpenAi: { baseUrl: "", modelId: "Hy-MT2-7B" },
+    });
+    await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hallo", lowConfidence: false });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "The local server URL is not set up - open Settings to set it",
+        ),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/loopback-only, e\.g\. http:\/\/127\.0\.0\.1:1234/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Translation failed - please try again or switch provider",
+      ),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "No provider key is configured - open Settings to add one",
+      ),
+    ).toBeNull();
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Settings" }),
+    );
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the generic failure message (not the no-key notice) for a real failure with a key configured", async () => {
     mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
     await renderPreview();

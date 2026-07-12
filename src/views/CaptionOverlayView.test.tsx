@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     }),
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     recordTranslation: vi.fn().mockResolvedValue(null),
+    loadProviderSettings: vi.fn(),
   };
 });
 
@@ -49,6 +50,14 @@ vi.mock("../lib/ipc", async (importOriginal) => {
 vi.mock("../lib/history", () => ({
   recordTranslation: mocks.recordTranslation,
 }));
+
+vi.mock("../lib/settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/settings")>();
+  return {
+    ...actual,
+    loadProviderSettings: mocks.loadProviderSettings,
+  };
+});
 
 import {
   EVENT_AUDIO_CAPTION,
@@ -204,6 +213,50 @@ describe("CaptionOverlayView", () => {
     expect(
       screen.queryByText(
         "Could not start the audio session - please try again",
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Open Settings" }).click();
+    });
+    expect(mocks.settingsIpc.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the distinct local-not-configured notice (not the generic start-failed message) for an empty base_url (owner-reported bug)", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    mocks.loadProviderSettings.mockResolvedValue({
+      defaultProvider: "local_openai",
+      models: {
+        gemini: "gemini-2.5-flash",
+        anthropic: "claude-sonnet-4-5",
+        openai: "gpt-5-mini",
+        openrouter: "auto",
+      },
+      fallbackOrder: [],
+      localOpenAi: { baseUrl: "", modelId: "Hy-MT2-7B" },
+    });
+    window.history.pushState(
+      {},
+      "",
+      "/?view=caption&provider=local_openai&model=Hy-MT2-7B&source=auto&target=vi",
+    );
+    render(<CaptionOverlayView />);
+
+    await screen.findByText(
+      "The local server URL is not set up - open Settings to set it",
+    );
+    expect(
+      screen.getByText(/loopback-only, e\.g\. http:\/\/127\.0\.0\.1:1234/),
+    ).toBeInTheDocument();
+    expect(mocks.audioIpc.start).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(
+        "Could not start the audio session - please try again",
+      ),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "No provider key is configured - open Settings to add one",
       ),
     ).toBeNull();
 

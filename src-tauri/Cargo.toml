@@ -30,6 +30,11 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
 tokio-stream = "0.1.17"
 tracing = "0.1.41"
+# Stderr logging driven by RUST_LOG (fmt-lib.rs installs the subscriber). Kept
+# out of dev-dependencies (unlike before) since production binaries need it too
+# - without a subscriber installed, RUST_LOG produced no output at all and
+# provider errors already logged via tracing::warn! never reached stderr.
+tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
 url = "2.5.8"
 
 # --- TASK-008 region-select overlay (FR-02, FR-04) ---
@@ -122,7 +127,6 @@ required-features = ["stt-live"]
 
 [dev-dependencies]
 # --- TASK-006 provider layer (FR-03) ---
-tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 wiremock = "0.6.3"
 # --- TASK-007 OCR spike latency benchmark (FR-02, ADR-004 R1) ---
 criterion = "=0.5.1"
