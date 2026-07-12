@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => {
     loadProviderSettings: vi.fn(),
     loadRegionLanguageSettings: vi.fn(),
     saveRegionLanguageSettings: vi.fn().mockResolvedValue(undefined),
+    loadRegionPreviewLayout: vi.fn(),
+    saveRegionPreviewLayout: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -66,6 +68,16 @@ vi.mock("../lib/regionLanguageSettings", async (importOriginal) => {
     ...actual,
     loadRegionLanguageSettings: mocks.loadRegionLanguageSettings,
     saveRegionLanguageSettings: mocks.saveRegionLanguageSettings,
+  };
+});
+
+vi.mock("../lib/regionLayoutSettings", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/regionLayoutSettings")>();
+  return {
+    ...actual,
+    loadRegionPreviewLayout: mocks.loadRegionPreviewLayout,
+    saveRegionPreviewLayout: mocks.saveRegionPreviewLayout,
   };
 });
 
@@ -142,6 +154,8 @@ beforeEach(() => {
     targetLanguage: "vi",
   });
   mocks.saveRegionLanguageSettings.mockResolvedValue(undefined);
+  mocks.loadRegionPreviewLayout.mockResolvedValue("stacked");
+  mocks.saveRegionPreviewLayout.mockResolvedValue(undefined);
 });
 
 function emitRegionSelected() {
@@ -812,5 +826,103 @@ describe("useRegionPreview - in-dialog re-select (item 1)", () => {
     result.current.reselect();
 
     expect(mocks.regionIpc.startSelection).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useRegionPreview - display layout (owner item 1)", () => {
+  it("defaults to the stacked layout", async () => {
+    const { result } = await renderPreview();
+    expect(result.current.layout).toBe("stacked");
+  });
+
+  it("loads a persisted columns layout on mount", async () => {
+    mocks.loadRegionPreviewLayout.mockResolvedValue("columns");
+    const { result } = await renderPreview();
+
+    await waitFor(() => expect(result.current.layout).toBe("columns"));
+  });
+
+  it("setLayout updates state and persists the choice", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.setLayout("columns"));
+
+    expect(result.current.layout).toBe("columns");
+    await waitFor(() =>
+      expect(mocks.saveRegionPreviewLayout).toHaveBeenCalledWith("columns"),
+    );
+  });
+});
+
+describe("useRegionPreview - pasteable/editable source (owner item 2)", () => {
+  it("pasting text translates it through the SAME path OCR text uses", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.pasteSourceText("Pasted hello"));
+
+    expect(result.current.state.sourceText).toBe("Pasted hello");
+    expect(result.current.state.status).toBe("translating");
+    expect(mocks.regionIpc.requestTranslation).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceText: "Pasted hello" }),
+    );
+  });
+
+  it("keeps the draft in sync with the pasted text", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.pasteSourceText("Pasted hello"));
+
+    expect(result.current.sourceDraft).toBe("Pasted hello");
+  });
+
+  it("pasting empty text shows the empty state and sends no translate request", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.pasteSourceText("   "));
+
+    expect(result.current.state.status).toBe("empty");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("respects the no-key gate for pasted text (TASK-025 parity)", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    const { result } = await renderPreview();
+
+    act(() => result.current.pasteSourceText("Pasted hello"));
+
+    expect(result.current.state.status).toBe("failed");
+    expect(result.current.state.failureReason).toBe("noKey");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("commitSourceEdit translates a manually edited draft that differs from the current source", async () => {
+    const { result } = await renderPreview();
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    mocks.regionIpc.requestTranslation.mockClear();
+
+    act(() => result.current.setSourceDraft("Hello there"));
+    act(() => result.current.commitSourceEdit());
+
+    expect(mocks.regionIpc.requestTranslation).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceText: "Hello there" }),
+    );
+  });
+
+  it("commitSourceEdit is a no-op when the draft is unchanged", async () => {
+    const { result } = await renderPreview();
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    mocks.regionIpc.requestTranslation.mockClear();
+
+    act(() => result.current.commitSourceEdit());
+
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("setSourceDraft alone (no paste/commit) never fires a translate request", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.setSourceDraft("still typing"));
+
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
   });
 });
