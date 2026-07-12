@@ -12,7 +12,7 @@
 //!
 //! Each preset's [`GgufModel::id`] is ALSO the `model_id` sent to the server on
 //! every translate. It is chosen to contain the substring the provider layer's
-//! prompt/param router keys on (`providers::local_models::is_hy_mt2_model` /
+//! prompt/param router keys on (`providers::local_models::is_hunyuan_mt_model` /
 //! `is_qwen3_model`), so a managed Hy-MT2 model gets Tencent's exact translate
 //! template + generation params with no extra wiring.
 //!
@@ -87,59 +87,50 @@ pub struct GgufModel {
 }
 
 impl GgufModel {
-    /// Tencent Hy-MT2 7B (Q4_K_M) - the translation-only default. ~4.6 GB.
-    /// UNVERIFIED repo/filename (see module docs).
-    pub const HY_MT2_7B: GgufModel = GgufModel {
-        id: "hy-mt2-7b",
-        label: "Hy-MT2 7B (Q4_K_M)",
+    /// Tencent Hunyuan-MT-7B (Q4_K_M) - the translation-only default. ~4.6 GB.
+    /// This is the CURRENT model that loads on stock llama.cpp; the newer
+    /// "Hy-MT2" family needs the unmerged `hy_v3` arch (ggml-org/llama.cpp
+    /// PR #25395) and cannot load on a stock llama-server yet, so it is not
+    /// shipped as a preset (owner decision 2026-07-12). repo/filename/sha256
+    /// verified against Hugging Face 2026-07-12.
+    pub const HUNYUAN_MT_7B: GgufModel = GgufModel {
+        id: "hunyuan-mt-7b",
+        label: "Hunyuan-MT-7B (Q4_K_M)",
         repo: "mradermacher/Hunyuan-MT-7B-GGUF",
         filename: "Hunyuan-MT-7B.Q4_K_M.gguf",
         revision: "main",
-        approx_download_bytes: 4_600_000_000,
+        approx_download_bytes: 4_624_950_272,
         approx_ram_bytes: 6_500_000_000,
-        sha256: None,
+        sha256: Some("08b4dd8f25002592526194defd2481febcc9008fe37e67accde9bbe29d28cecf"),
         recommended_gpu_layers: 99,
         default: true,
     };
 
     /// Qwen3 14B (Q4_K_M) - context/glossary/markdown model. ~9 GB.
-    /// UNVERIFIED repo/filename (see module docs).
+    /// repo/filename/sha256 verified against Hugging Face 2026-07-12.
     pub const QWEN3_14B: GgufModel = GgufModel {
         id: "qwen3-14b",
         label: "Qwen3 14B (Q4_K_M)",
         repo: "Qwen/Qwen3-14B-GGUF",
         filename: "Qwen3-14B-Q4_K_M.gguf",
         revision: "main",
-        approx_download_bytes: 9_000_000_000,
+        approx_download_bytes: 9_001_752_960,
         approx_ram_bytes: 12_000_000_000,
-        sha256: None,
+        sha256: Some("500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"),
         recommended_gpu_layers: 99,
         default: false,
     };
 
-    /// Hy-MT2 30B-A3B (MoE, Q4_K_M) - batch/high-quality tier. ~18 GB.
-    /// UNVERIFIED repo/filename (see module docs); the owner named this preset
-    /// but no confirmed public GGUF was checkable offline.
-    pub const HY_MT2_30B_A3B: GgufModel = GgufModel {
-        id: "hy-mt2-30b-a3b",
-        label: "Hy-MT2 30B-A3B (MoE, Q4_K_M)",
-        repo: "mradermacher/Hunyuan-MT-30B-A3B-GGUF",
-        filename: "Hunyuan-MT-30B-A3B.Q4_K_M.gguf",
-        revision: "main",
-        approx_download_bytes: 18_000_000_000,
-        approx_ram_bytes: 22_000_000_000,
-        sha256: None,
-        recommended_gpu_layers: 99,
-        default: false,
-    };
-
-    /// Every preset in catalog order (default first).
-    pub const CATALOG: [GgufModel; 3] = [Self::HY_MT2_7B, Self::QWEN3_14B, Self::HY_MT2_30B_A3B];
+    /// Every preset in catalog order (default first). The Hy-MT2 30B-A3B tier
+    /// the owner named is intentionally absent: no working public GGUF exists
+    /// (the guessed repo 404s) and even a community requant needs the unmerged
+    /// `hy_v3` llama.cpp arch. Revisit when that lands upstream.
+    pub const CATALOG: [GgufModel; 2] = [Self::HUNYUAN_MT_7B, Self::QWEN3_14B];
 
     /// The default first-run preset.
     #[must_use]
     pub fn default_model() -> GgufModel {
-        Self::HY_MT2_7B
+        Self::HUNYUAN_MT_7B
     }
 
     /// Looks up a preset by its stable id. `None` for an unknown id (untrusted
@@ -225,20 +216,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_has_exactly_one_default_and_it_is_hy_mt2_7b() {
+    fn catalog_has_exactly_one_default_and_it_is_hunyuan_mt_7b() {
         let defaults: Vec<_> = GgufModel::CATALOG.iter().filter(|m| m.default).collect();
         assert_eq!(defaults.len(), 1);
-        assert_eq!(defaults[0].id, "hy-mt2-7b");
-        assert_eq!(GgufModel::default_model().id, "hy-mt2-7b");
+        assert_eq!(defaults[0].id, "hunyuan-mt-7b");
+        assert_eq!(GgufModel::default_model().id, "hunyuan-mt-7b");
     }
 
     #[test]
     fn preset_ids_carry_the_substring_the_prompt_router_keys_on() {
         // The provider prompt/param router keys on these substrings - a preset
-        // whose id lost them would silently drop Hy-MT2/Qwen3 handling.
-        use crate::providers::{is_hy_mt2_model, GenerationParams};
-        assert!(is_hy_mt2_model(GgufModel::HY_MT2_7B.id));
-        assert!(is_hy_mt2_model(GgufModel::HY_MT2_30B_A3B.id));
+        // whose id lost them would silently drop Hunyuan-MT/Qwen3 handling.
+        use crate::providers::{is_hunyuan_mt_model, GenerationParams};
+        assert!(is_hunyuan_mt_model(GgufModel::HUNYUAN_MT_7B.id));
         // Qwen3 preset id contains qwen3 (checked via its generation params).
         assert_ne!(
             crate::providers::generation_params_for_model(GgufModel::QWEN3_14B.id),
@@ -249,14 +239,17 @@ mod tests {
 
     #[test]
     fn for_id_resolves_known_ids_and_rejects_unknown() {
-        assert_eq!(GgufModel::for_id("hy-mt2-7b").unwrap().id, "hy-mt2-7b");
+        assert_eq!(
+            GgufModel::for_id("hunyuan-mt-7b").unwrap().id,
+            "hunyuan-mt-7b"
+        );
         assert_eq!(GgufModel::for_id("qwen3-14b").unwrap().id, "qwen3-14b");
         assert!(GgufModel::for_id("not-a-model").is_none());
     }
 
     #[test]
     fn url_targets_hugging_face_resolve_over_https() {
-        let url = GgufModel::HY_MT2_7B.url();
+        let url = GgufModel::HUNYUAN_MT_7B.url();
         assert!(url.starts_with("https://huggingface.co/"));
         assert!(url.contains("/resolve/main/"));
         assert!(url.ends_with(".gguf"));
@@ -264,13 +257,13 @@ mod tests {
 
     #[test]
     fn descriptor_names_hugging_face_and_the_single_model() {
-        let d = local_llm_model_set_descriptor(GgufModel::HY_MT2_7B, PathBuf::from("/cache"));
+        let d = local_llm_model_set_descriptor(GgufModel::HUNYUAN_MT_7B, PathBuf::from("/cache"));
         assert_eq!(d.id, LOCAL_LLM_MODEL_SET_ID);
         assert_eq!(d.host.domain, "huggingface.co");
         assert_eq!(d.artifacts.len(), 1);
         assert_eq!(
             d.total_approx_size_bytes(),
-            GgufModel::HY_MT2_7B.approx_download_bytes
+            GgufModel::HUNYUAN_MT_7B.approx_download_bytes
         );
     }
 
@@ -288,10 +281,10 @@ mod tests {
     #[test]
     fn paths_join_filename_and_sidecar() {
         let dir = Path::new("/cache");
-        assert!(GgufModel::HY_MT2_7B
+        assert!(GgufModel::HUNYUAN_MT_7B
             .path_in(dir)
             .ends_with("Hunyuan-MT-7B.Q4_K_M.gguf"));
-        assert!(GgufModel::HY_MT2_7B
+        assert!(GgufModel::HUNYUAN_MT_7B
             .digest_sidecar_in(dir)
             .ends_with("Hunyuan-MT-7B.Q4_K_M.gguf.sha256"));
     }

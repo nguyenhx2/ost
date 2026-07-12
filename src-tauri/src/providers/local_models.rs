@@ -43,12 +43,15 @@ impl Default for GenerationParams {
     }
 }
 
-/// True when `model_id` names a Hy-MT2 variant (`Hy-MT2-7B`,
-/// `Hy-MT2-30B-A3B`, ...). Hy-MT2 is a translation-only model - it requires
-/// the exact single-message prompt format in [`super::prompt`], not the
-/// generic chat instruction/data split.
-pub fn is_hy_mt2_model(model_id: &str) -> bool {
-    model_id.to_lowercase().contains("hy-mt2")
+/// True when `model_id` names a Tencent Hunyuan-MT translation model - the
+/// shipped `Hunyuan-MT-7B`, or the future `Hy-MT2-*` family once llama.cpp
+/// gains the `hy_v3` arch. These are translation-only models that require the
+/// exact single-message prompt format in [`super::prompt`], NOT the generic
+/// chat instruction/data split, and share Tencent's recommended params. Both
+/// name families use the same template, so they are matched together.
+pub fn is_hunyuan_mt_model(model_id: &str) -> bool {
+    let id = model_id.to_lowercase();
+    id.contains("hunyuan-mt") || id.contains("hy-mt2")
 }
 
 /// True when `model_id` names a Qwen3 variant - used to disable "thinking"
@@ -62,7 +65,7 @@ pub fn is_qwen3_model(model_id: &str) -> bool {
 /// with reasoning disabled). Every other model id - including the four cloud
 /// providers, which never call this function - gets [`GenerationParams::default`].
 pub fn generation_params_for_model(model_id: &str) -> GenerationParams {
-    if is_hy_mt2_model(model_id) {
+    if is_hunyuan_mt_model(model_id) {
         GenerationParams {
             temperature: 0.7,
             top_p: Some(0.6),
@@ -88,24 +91,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hy_mt2_detection_is_case_insensitive_and_matches_every_preset() {
-        for id in ["Hy-MT2-7B", "hy-mt2-7b", "Hy-MT2-30B-A3B", "HY-MT2-30b-a3b"] {
-            assert!(is_hy_mt2_model(id), "expected '{id}' to be a Hy-MT2 model");
+    fn hunyuan_mt_detection_is_case_insensitive_and_matches_every_preset() {
+        // The shipped preset (Hunyuan-MT-7B) and the future Hy-MT2 family both
+        // use Tencent's translation template, so both name forms match.
+        for id in [
+            "Hunyuan-MT-7B",
+            "hunyuan-mt-7b",
+            "Hy-MT2-7B",
+            "hunyuan-mt-7b",
+            "Hy-MT2-30B-A3B",
+        ] {
+            assert!(
+                is_hunyuan_mt_model(id),
+                "expected '{id}' to be a Hunyuan-MT model"
+            );
         }
-        assert!(!is_hy_mt2_model("Qwen3-14B"));
-        assert!(!is_hy_mt2_model("llama-3-8b-instruct"));
+        assert!(!is_hunyuan_mt_model("Qwen3-14B"));
+        assert!(!is_hunyuan_mt_model("llama-3-8b-instruct"));
     }
 
     #[test]
     fn qwen3_detection_is_case_insensitive() {
         assert!(is_qwen3_model("Qwen3-14B"));
         assert!(is_qwen3_model("qwen3-14b"));
-        assert!(!is_qwen3_model("Hy-MT2-7B"));
+        assert!(!is_qwen3_model("Hunyuan-MT-7B"));
     }
 
     #[test]
-    fn hy_mt2_uses_tencent_recommended_generation_params() {
-        let params = generation_params_for_model("Hy-MT2-7B");
+    fn hunyuan_mt_uses_tencent_recommended_generation_params() {
+        let params = generation_params_for_model("Hunyuan-MT-7B");
         assert_eq!(params.temperature, 0.7);
         assert_eq!(params.top_p, Some(0.6));
         assert_eq!(params.top_k, Some(20));

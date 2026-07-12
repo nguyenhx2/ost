@@ -346,7 +346,7 @@ mod tests {
             port: DEFAULT_PORT,
             gpu_layers: 99,
             ctx_size: DEFAULT_CTX_SIZE,
-            model_id: "hy-mt2-7b".into(),
+            model_id: "hunyuan-mt-7b".into(),
         }
     }
 
@@ -444,7 +444,7 @@ mod tests {
             .any(|w| w[0] == "--n-gpu-layers" && w[1] == "99"));
         assert!(args
             .windows(2)
-            .any(|w| w[0] == "--alias" && w[1] == "hy-mt2-7b"));
+            .any(|w| w[0] == "--alias" && w[1] == "hunyuan-mt-7b"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -475,7 +475,7 @@ mod tests {
         assert_eq!(base, format!("http://127.0.0.1:{DEFAULT_PORT}"));
         let status = mgr.status().await;
         assert!(status.running);
-        assert_eq!(status.model_id.as_deref(), Some("hy-mt2-7b"));
+        assert_eq!(status.model_id.as_deref(), Some("hunyuan-mt-7b"));
         assert_eq!(status.base_url.as_deref(), Some(base.as_str()));
         let _ = std::fs::remove_dir_all(&dir);
     }

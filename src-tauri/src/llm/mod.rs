@@ -441,11 +441,11 @@ mod tests {
     fn model_infos_flag_downloaded_default_and_running() {
         let dir = tmp_dir("infos");
         // Only the default is on disk.
-        std::fs::write(GgufModel::HY_MT2_7B.path_in(&dir), b"x").unwrap();
+        std::fs::write(GgufModel::HUNYUAN_MT_7B.path_in(&dir), b"x").unwrap();
 
         let rows = build_llm_model_infos(&dir, Some("qwen3-14b"));
-        assert_eq!(rows.len(), 3);
-        let default_row = rows.iter().find(|r| r.id == "hy-mt2-7b").unwrap();
+        assert_eq!(rows.len(), 2);
+        let default_row = rows.iter().find(|r| r.id == "hunyuan-mt-7b").unwrap();
         assert!(default_row.downloaded);
         assert!(default_row.is_default);
         assert!(!default_row.running);
@@ -489,13 +489,13 @@ mod tests {
     fn status_view_serializes_to_camel_case() {
         let view = LlmServerStatusView::from(ServerStatus {
             running: true,
-            model_id: Some("hy-mt2-7b".into()),
+            model_id: Some("hunyuan-mt-7b".into()),
             base_url: Some("http://127.0.0.1:8177".into()),
             port: Some(8177),
         });
         let json = serde_json::to_value(&view).unwrap();
         assert_eq!(json["running"], true);
-        assert_eq!(json["modelId"], "hy-mt2-7b");
+        assert_eq!(json["modelId"], "hunyuan-mt-7b");
         assert_eq!(json["baseUrl"], "http://127.0.0.1:8177");
     }
 }

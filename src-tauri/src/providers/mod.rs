@@ -40,7 +40,7 @@ pub use config::ProviderHttpConfig;
 pub use error::ProviderError;
 pub use factory::{build_local_openai_provider, build_provider};
 pub use gemini::GeminiClient;
-pub use local_models::{generation_params_for_model, is_hy_mt2_model, GenerationParams};
+pub use local_models::{generation_params_for_model, is_hunyuan_mt_model, GenerationParams};
 pub use local_openai::LocalOpenAiClient;
 pub use openai::OpenAiClient;
 pub use openrouter::OpenRouterClient;

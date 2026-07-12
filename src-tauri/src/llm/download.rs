@@ -279,7 +279,7 @@ mod tests {
     /// the given pin, so the download path is exercised without a real HF repo.
     fn test_model(repo_host_path: &'static str, sha256: Option<&'static str>) -> GgufModel {
         GgufModel {
-            id: "hy-mt2-7b",
+            id: "hunyuan-mt-7b",
             label: "test",
             // `url()` builds https://huggingface.co/... which we can't hit in a
             // test - so tests call the stream engine indirectly by overriding
@@ -300,7 +300,7 @@ mod tests {
     async fn fails_closed_without_consent_and_fetches_nothing() {
         let dir = unique_dir("noconsent");
         let _ = std::fs::remove_dir_all(&dir);
-        let model = GgufModel::HY_MT2_7B;
+        let model = GgufModel::HUNYUAN_MT_7B;
         let gate = gate_with_consent(model, &dir, false);
 
         let result = ensure_gguf_available(model, &dir, &gate).await;
@@ -323,7 +323,7 @@ mod tests {
     async fn existing_file_is_reused_without_a_fetch() {
         let dir = unique_dir("reuse");
         std::fs::create_dir_all(&dir).unwrap();
-        let model = GgufModel::HY_MT2_7B;
+        let model = GgufModel::HUNYUAN_MT_7B;
         // Pre-place the file so the download path returns it directly.
         std::fs::write(model.path_in(&dir), b"already-here").unwrap();
         let gate = gate_with_consent(model, &dir, true);
