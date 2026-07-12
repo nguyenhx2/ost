@@ -537,7 +537,7 @@ describe("SettingsView", () => {
     await waitFor(() =>
       expect(mocks.captionIpc.openOverlay).toHaveBeenCalledWith({
         provider: "gemini",
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         sourceLanguage: "ja",
         targetLanguage: "vi",
       }),
