@@ -679,5 +679,4 @@ describe("RegionPreviewView (SCR-03)", () => {
       screen.getByPlaceholderText("Paste or type text here to translate"),
     ).toBeInTheDocument();
   });
-
 });
