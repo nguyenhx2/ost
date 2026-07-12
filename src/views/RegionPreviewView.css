@@ -45,6 +45,40 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Owner item 1: names this element as a size query container so the
+     side-by-side layout below can degrade back to stacked purely from CSS
+     when the window is too narrow for two legible columns. */
+  container-type: inline-size;
+  container-name: region-preview-body;
+}
+
+/*
+ * Owner item 1: source + translation, stacked (default) or side-by-side
+ * (`--side-by-side`, chosen via the layout toggle and persisted). The
+ * container query below is the graceful-degradation path: even with
+ * side-by-side chosen, a narrow window falls back to stacked so the columns
+ * never get squeezed illegible.
+ */
+.region-preview-columns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/*
+ * design-system.md exception: the CSS Containment Module does not allow a
+ * `var()` token substitution inside an `@container` feature condition (the
+ * threshold must be a literal), so this is the one deliberate, documented
+ * literal in this file - same class of exception already granted to
+ * Tooltip/Select/ProgressBar for computed, non-token values.
+ */
+@container region-preview-body (min-width: 32rem) {
+  .region-preview-columns--side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: var(--space-3);
+  }
 }
 
 .region-preview-title {
