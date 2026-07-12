@@ -83,6 +83,10 @@ impl OpenAiClient {
         WireRequest {
             model: request.model_id.clone(),
             temperature: 0.2,
+            top_p: None,
+            top_k: None,
+            repetition_penalty: None,
+            enable_thinking: None,
             stream,
             messages: vec![
                 WireMessage {
@@ -478,6 +482,19 @@ pub(super) async fn stream_sse_body(
 pub(super) struct WireRequest {
     pub(super) model: String,
     pub(super) temperature: f32,
+    /// Per-model generation params (local provider only, TASK: Hy-MT2/Qwen3
+    /// support) - omitted from the wire entirely when `None`, so the cloud
+    /// clients (which never set these) produce byte-identical request bodies
+    /// to before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) repetition_penalty: Option<f32>,
+    /// Qwen3 "disable reasoning" switch (local provider only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) enable_thinking: Option<bool>,
     pub(super) stream: bool,
     pub(super) messages: Vec<WireMessage>,
 }

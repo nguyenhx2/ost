@@ -299,6 +299,16 @@ const en = {
     "Network error - could not reach the local server",
   "settings.localErrorTimeout": "The local server request timed out",
   "settings.localErrorProvider": "Unexpected response from the local server",
+  "settings.providerGroupCloud": "Cloud LLM",
+  "settings.providerGroupLocal": "Local LLM",
+  "settings.localModelPresetLabel": "Local model preset",
+  "settings.localModelPresetCustom": "Custom (enter model id below)",
+  "settings.localPresetHyMt27b":
+    "Hy-MT2 7B (Q4_K_M, ~4.6GB) - default translation engine",
+  "settings.localPresetQwen314b":
+    "Qwen3 14B (Q4_K_M, ~9GB) - context, glossary, markdown",
+  "settings.localPresetHyMt230b":
+    "Hy-MT2 30B-A3B (Q4, ~18GB) - batch translation only",
 
   // Consent dialog (Settings-time STT model switch, TASK-026 part C)
   "consent.sttSwitchTitle": "Download this speech-to-text tier",
@@ -590,6 +600,16 @@ const vi: Record<I18nKey, string> = {
     "Lỗi mạng - không kết nối được tới máy chủ local",
   "settings.localErrorTimeout": "Yêu cầu tới máy chủ local quá thời gian chờ",
   "settings.localErrorProvider": "Phản hồi bất thường từ máy chủ local",
+  "settings.providerGroupCloud": "LLM đám mây",
+  "settings.providerGroupLocal": "LLM cục bộ",
+  "settings.localModelPresetLabel": "Model cục bộ dựng sẵn",
+  "settings.localModelPresetCustom": "Tuỳ chỉnh (nhập id model bên dưới)",
+  "settings.localPresetHyMt27b":
+    "Hy-MT2 7B (Q4_K_M, ~4.6GB) - công cụ dịch mặc định",
+  "settings.localPresetQwen314b":
+    "Qwen3 14B (Q4_K_M, ~9GB) - ngữ cảnh, thuật ngữ, markdown",
+  "settings.localPresetHyMt230b":
+    "Hy-MT2 30B-A3B (Q4, ~18GB) - chỉ dùng cho dịch hàng loạt",
 
   "consent.sttSwitchTitle": "Tải tầng model chuyển giọng nói này",
   "consent.sttSwitchIntro":

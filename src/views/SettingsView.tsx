@@ -25,7 +25,10 @@ import {
 import { ConsentDialog } from "../components/ConsentDialog";
 import { t } from "../lib/i18n";
 import {
+  isLocalModelPresetId,
   isProviderId,
+  LOCAL_MODEL_PRESET_CUSTOM,
+  LOCAL_MODEL_PRESETS,
   LOCAL_OPENAI_PROVIDER_ID,
   PROVIDER_META,
   PROVIDER_META_LIST,
@@ -515,13 +518,41 @@ export function SettingsView() {
       ? PROVIDER_META[activeProvider].displayName
       : activeProvider);
 
-  const activeProviderOptions: SelectOption[] =
+  /* Cloud LLM vs Local LLM (owner ask: don't bury local under a generic
+   * dropdown row). `Select` has no optgroup concept (design-system.md - no
+   * new primitive needed for this), so the split is rendered with
+   * non-selectable header rows using the EXISTING `disabled` option affordance
+   * (shown, but skipped by keyboard nav / ignored on click, same as the
+   * hardware-gated STT tiers above). */
+  const cloudProviderOptions: SelectOption[] =
     picker.metadata.length > 0
-      ? picker.metadata.map((m) => ({
-          value: m.provider_id,
-          label: m.display_name,
-        }))
+      ? picker.metadata
+          .filter((m) => m.provider_id !== LOCAL_OPENAI_PROVIDER_ID)
+          .map((m) => ({ value: m.provider_id, label: m.display_name }))
       : PROVIDER_META_LIST.map((m) => ({ value: m.id, label: m.displayName }));
+
+  const localProviderOptions: SelectOption[] = picker.metadata
+    .filter((m) => m.provider_id === LOCAL_OPENAI_PROVIDER_ID)
+    .map((m) => ({ value: m.provider_id, label: m.display_name }));
+
+  const activeProviderOptions: SelectOption[] = [
+    {
+      value: "__group_cloud__",
+      label: t("settings.providerGroupCloud"),
+      disabled: true,
+    },
+    ...cloudProviderOptions,
+    ...(localProviderOptions.length > 0
+      ? [
+          {
+            value: "__group_local__",
+            label: t("settings.providerGroupLocal"),
+            disabled: true,
+          },
+          ...localProviderOptions,
+        ]
+      : []),
+  ];
 
   return (
     <main className="settings">
@@ -603,6 +634,37 @@ export function SettingsView() {
               placeholder={t("settings.localBaseUrlPlaceholder")}
               onChange={(v) => void selection.setLocalOpenAiBaseUrl(v)}
             />
+            <div className="settings-field">
+              <span
+                className="settings-field-label"
+                id="local-model-preset-label"
+              >
+                {t("settings.localModelPresetLabel")}
+              </span>
+              <Select
+                label={t("settings.localModelPresetLabel")}
+                value={
+                  isLocalModelPresetId(selection.settings.localOpenAi.modelId)
+                    ? selection.settings.localOpenAi.modelId
+                    : LOCAL_MODEL_PRESET_CUSTOM
+                }
+                options={[
+                  ...LOCAL_MODEL_PRESETS.map((preset) => ({
+                    value: preset.id,
+                    label: `${preset.id} - ${t(preset.hintKey)}`,
+                  })),
+                  {
+                    value: LOCAL_MODEL_PRESET_CUSTOM,
+                    label: t("settings.localModelPresetCustom"),
+                  },
+                ]}
+                onChange={(value) => {
+                  if (value !== LOCAL_MODEL_PRESET_CUSTOM) {
+                    void selection.setLocalOpenAiModelId(value);
+                  }
+                }}
+              />
+            </div>
             <Input
               label={t("settings.localModelLabel")}
               value={selection.settings.localOpenAi.modelId}
