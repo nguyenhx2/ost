@@ -51,6 +51,18 @@ Yêu cầu dịch (lần đầu và khi dịch lại, AC-02.8).
 | `provider`   | `string` | Provider được chọn (gemini/anthropic/openai/...).   |
 | `model`      | `string` | Model được chọn.                                    |
 | `targetLanguage?` | `string` | Ngôn ngữ đích do người dùng chọn (item 3, picker trên màn hình chính và dialog preview). Rỗng/vắng mặt -> mặc định core-side (`vi`). Được ghi lại nguyên trạng vào `HISTORY_ENTRY.target_language`. |
+| `baseUrl?`   | `string` | `base_url` của provider local OpenAI-compatible (FR-03.CUSTOM-1..5); chỉ đọc khi `provider = local_openai`, không phải bí mật (security-privacy.md). Mirror của `AudioSessionRequest.baseUrl`. |
+
+`request_region_translation` định tuyến `provider` qua factory dùng chung
+(`crate::providers::factory::{build_provider, build_local_openai_provider}`) - CẢ 5 provider
+(gemini/anthropic/openai/openrouter/local_openai) đều dựng client thật, không chỉ Gemini
+(sửa lỗi: bản trước hardcode Gemini và trả lỗi chung chung cho 4 provider còn lại). Provider
+khoá-keychain (gemini/anthropic/openai/openrouter) không có khoá -> `region:translation-error`
+với `message: "no API key configured for this provider"`; `local_openai` với `baseUrl` rỗng
+hoặc không phải loopback -> `message: "local server not configured"` (không bao giờ đọc
+keychain cho provider này, BR-02) - cùng ngữ nghĩa với `resolve_translator`/`LocalNotConfigured`
+phía `audio_session.rs`, nhưng `region.rs` tuần tự hoá qua `message` (chuỗi tự do, DATA không
+tin cậy) thay vì `kind` có kiểu.
 
 ### `SourceLanguage` (ngôn ngữ nguồn do người dùng chọn)
 

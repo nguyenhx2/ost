@@ -362,6 +362,12 @@ export function useRegionPreview(): UseRegionPreviewResult {
         provider,
         model,
         targetLanguage: targetLanguageRef.current,
+        // Only meaningful for the local OpenAI-compatible provider; the core
+        // ignores it otherwise (mirrors `AudioSessionRequest.baseUrl`).
+        baseUrl:
+          provider === LOCAL_OPENAI_PROVIDER_ID
+            ? localBaseUrlRef.current
+            : undefined,
       });
     },
     [clearTranslationTimeout],
