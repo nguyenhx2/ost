@@ -15,5 +15,6 @@ export { PlainText, type PlainTextProps } from "./PlainText";
 export { ProgressBar, type ProgressBarProps } from "./ProgressBar";
 export { Select, type SelectOption, type SelectProps } from "./Select";
 export { Slider, type SliderProps } from "./Slider";
+export { Spinner, type SpinnerProps } from "./Spinner";
 export { Switch, type SwitchProps } from "./Switch";
 export { Tooltip, type TooltipProps } from "./Tooltip";

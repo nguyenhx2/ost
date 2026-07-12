@@ -123,6 +123,20 @@ export interface TranslationErrorPayload {
   message?: string;
 }
 
+/**
+ * Emitted after every non-empty streamed chunk with the ACCUMULATED text so
+ * far (not a bare per-chunk delta) - the UI renders `text` directly. The
+ * FIRST delta for a request proves the stream is alive, which is what
+ * actually clears the client-side timeout (owner complaint: a slow-but-live
+ * translation used to trip a false red "timeout" error before the eventual
+ * real result arrived). `text` is untrusted, provider-derived DATA - render
+ * through `PlainText` only, exactly like the final result.
+ */
+export interface TranslationDeltaPayload {
+  requestId: string;
+  text: string;
+}
+
 /** Frontend -> core translation request (initial and re-translate, AC-02.8). */
 export interface RegionTranslationRequest {
   requestId: string;
@@ -138,6 +152,8 @@ export const EVENT_REGION_OCR_RESULT = "region:ocr-result";
 export const EVENT_REGION_OCR_ERROR = "region:ocr-error";
 export const EVENT_REGION_TRANSLATION_RESULT = "region:translation-result";
 export const EVENT_REGION_TRANSLATION_ERROR = "region:translation-error";
+/** Progressive text as a streamed translation arrives (owner complaint 1). */
+export const EVENT_REGION_TRANSLATION_DELTA = "region:translation-delta";
 /** Shared model-download consent gate (OCR now, whisper STT in Phase 2). */
 export const EVENT_MODELS_CONSENT_REQUIRED = "models:consent-required";
 /**

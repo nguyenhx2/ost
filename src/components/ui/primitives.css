@@ -151,15 +151,19 @@
 /* ---------- Tooltip ---------- */
 
 .ost-tooltip-wrapper {
-  position: relative;
   display: inline-flex;
 }
 
+/*
+ * Portaled to <body> (Tooltip.tsx) and positioned in VIEWPORT (fixed)
+ * coordinates computed from the anchor's measured rect - this is what lets
+ * the tooltip escape an `overflow: hidden` ancestor (the overlay panel's
+ * scroll clip) and stay fully on-screen near a window edge (owner
+ * complaint, item 3). Shown/hidden by conditional render, not CSS
+ * hover/focus-within, since visibility now needs the measured position.
+ */
 .ost-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translate(-50%, calc(-1 * var(--space-1)));
+  position: fixed;
   padding: var(--space-1) var(--space-2);
   font-size: var(--font-size-xs);
   color: var(--color-text);
@@ -168,16 +172,7 @@
   border-radius: var(--radius-sm);
   white-space: nowrap;
   pointer-events: none;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity var(--duration-fast) ease;
   z-index: var(--z-toast);
-}
-
-.ost-tooltip-wrapper:hover .ost-tooltip,
-.ost-tooltip-wrapper:focus-within .ost-tooltip {
-  visibility: visible;
-  opacity: 1;
 }
 
 /* ---------- Switch ---------- */
@@ -261,12 +256,16 @@
   cursor: pointer;
 }
 
+/*
+ * Portaled to <body> (Select.tsx) and positioned in VIEWPORT (fixed)
+ * coordinates computed from the trigger's measured rect - this is what stops
+ * the listbox from reflowing/breaking the surrounding overlay layout when it
+ * opens (owner complaint, item 2) and lets it escape an `overflow: hidden`
+ * ancestor instead of being clipped near a window edge (item 3).
+ */
 .ost-select-listbox {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 100%;
-  margin: var(--space-1) 0 0;
+  position: fixed;
+  margin: 0;
   padding: var(--space-1);
   list-style: none;
   background-color: var(--color-surface-raised);
@@ -307,6 +306,27 @@
   background-color: var(--color-surface);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* ---------- Spinner (indeterminate loading indicator) ---------- */
+
+.ost-spinner {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+}
+
+.ost-spinner-icon {
+  animation: ost-spin var(--duration-spin) linear infinite;
+}
+
+@keyframes ost-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---------- ProgressBar ---------- */

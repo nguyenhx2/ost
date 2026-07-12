@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Pin } from "lucide-react";
 import {
@@ -54,7 +54,7 @@ describe("Badge", () => {
 });
 
 describe("Tooltip", () => {
-  it("links the trigger to a role=tooltip element via aria-describedby", () => {
+  it("links the trigger to a role=tooltip element via aria-describedby, shown on hover", async () => {
     render(
       <Tooltip text="Chép bản dịch">
         <IconButton label="Chép bản dịch">
@@ -63,9 +63,92 @@ describe("Tooltip", () => {
       </Tooltip>,
     );
     const trigger = screen.getByRole("button", { name: "Chép bản dịch" });
+    // Portaled and only rendered once shown (position must be measured
+    // first) - not present before any hover/focus.
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    await userEvent.hover(trigger);
+
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("Chép bản dịch");
     expect(trigger).toHaveAttribute("aria-describedby", tooltip.id);
+  });
+
+  it("shows on keyboard focus and hides on blur", async () => {
+    render(
+      <Tooltip text="Ghim overlay">
+        <IconButton label="Ghim overlay">
+          <Pin aria-hidden="true" />
+        </IconButton>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole("button", { name: "Ghim overlay" });
+    act(() => {
+      trigger.focus();
+    });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+
+    act(() => {
+      trigger.blur();
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("flips below the anchor and stays inside the viewport near the top edge", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 300,
+    });
+    render(
+      <Tooltip text="Đóng">
+        <IconButton label="Đóng">
+          <Pin aria-hidden="true" />
+        </IconButton>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole("button", { name: "Đóng" });
+    // The Tooltip measures its wrapping span (the anchor), not the button
+    // itself - anchor pinned right at the TOP edge: there is no room to show
+    // the tooltip above it, so it must flip to render below instead.
+    const anchor = trigger.parentElement as HTMLElement;
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue({
+      top: 2,
+      bottom: 22,
+      left: 100,
+      right: 130,
+      width: 30,
+      height: 20,
+      x: 100,
+      y: 2,
+      toJSON: () => ({}),
+    });
+
+    await userEvent.hover(trigger);
+    const tooltip = screen.getByRole("tooltip");
+    vi.spyOn(tooltip, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 24,
+      left: 0,
+      right: 60,
+      width: 60,
+      height: 24,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    // Re-trigger the layout effect's measurement via a resize event (the
+    // component recomputes position on resize/scroll).
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    const top = parseFloat(tooltip.style.top);
+    // Flipped below the anchor's bottom (22px), not above its top (2px).
+    expect(top).toBeGreaterThanOrEqual(22);
   });
 });
 
