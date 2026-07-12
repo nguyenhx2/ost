@@ -19,7 +19,9 @@
 //! only ever placed in the data slot of the provider prompt (agent-guardrails.md
 //! section 2).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -37,9 +39,10 @@ use crate::providers::{
     build_provider, ProviderId, TranslationProvider, TranslationRequest, TranslationResult,
 };
 use crate::stt::{
-    catalog, decide_switch, ensure_model_available, ensure_model_available_with_progress,
-    probe_hardware, DownloadError, SpeechToText, SttError, SwitchDecision, SwitchError,
-    TranscribeOptions, Transcript, WhisperModel, WhisperStt, WHISPER_MODEL_SET_ID,
+    catalog, decide_switch, ensure_model_available,
+    ensure_model_available_with_progress_and_cancel, probe_hardware, CancelFlag, DownloadError,
+    SpeechToText, SttError, SwitchDecision, SwitchError, TranscribeOptions, Transcript,
+    WhisperModel, WhisperStt, WHISPER_MODEL_SET_ID,
 };
 
 use super::region::EVENT_MODEL_CONSENT_REQUIRED;
@@ -442,6 +445,12 @@ pub struct AudioSessionPipeline {
     /// session drops any resident ORT OCR session, and stopping it drops the
     /// whisper context, so at most one heavy model set is resident.
     coordinator: Arc<HeavySessionCoordinator>,
+    /// Cancel flags for in-flight Settings-time downloads, keyed by catalog
+    /// model id (TASK-034). A download registers its flag here for the
+    /// duration of the fetch; `cancel_stt_model_download` flips it, and the
+    /// entry is removed once the download settles (success, failure, or
+    /// cancel) so a stale flag never lingers.
+    downloads: Mutex<HashMap<String, CancelFlag>>,
 }
 
 impl AudioSessionPipeline {
@@ -464,6 +473,37 @@ impl AudioSessionPipeline {
             model_dir,
             active: Mutex::new(None),
             coordinator,
+            downloads: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Registers a fresh cancel flag for `model_id`'s in-flight download,
+    /// replacing any stale entry (there is at most one Settings-time download
+    /// at a time, but this stays correct even if a prior entry was not
+    /// cleaned up).
+    fn register_download(&self, model_id: &str) -> CancelFlag {
+        let flag: CancelFlag = Arc::new(AtomicBool::new(false));
+        if let Ok(mut guard) = self.downloads.lock() {
+            guard.insert(model_id.to_string(), Arc::clone(&flag));
+        }
+        flag
+    }
+
+    /// Removes `model_id`'s cancel-flag entry once its download has settled.
+    fn clear_download(&self, model_id: &str) {
+        if let Ok(mut guard) = self.downloads.lock() {
+            guard.remove(model_id);
+        }
+    }
+
+    /// Requests cancellation of `model_id`'s in-flight download, if any.
+    /// A no-op (not an error) when nothing is downloading that id - the
+    /// caller may race a completed/failed download harmlessly.
+    fn cancel_download(&self, model_id: &str) {
+        if let Ok(guard) = self.downloads.lock() {
+            if let Some(flag) = guard.get(model_id) {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
         }
     }
 
@@ -679,6 +719,11 @@ pub enum SttModelSwitchError {
     /// The selection could not be persisted to the settings store.
     #[error("could not persist the STT model selection")]
     Store,
+    /// The user cancelled the in-progress download (TASK-034). Not treated as
+    /// a hard failure by the UI - it resets to the idle picker state instead
+    /// of showing a retry-able error.
+    #[error("the STT model download was cancelled")]
+    Cancelled,
 }
 
 impl SttModelSwitchError {
@@ -689,6 +734,7 @@ impl SttModelSwitchError {
             SttModelSwitchError::SessionActive => "sessionActive",
             SttModelSwitchError::Download => "download",
             SttModelSwitchError::Store => "store",
+            SttModelSwitchError::Cancelled => "cancelled",
         }
     }
 }
@@ -825,20 +871,102 @@ pub async fn confirm_stt_model_switch(
     let dir = pipeline.model_dir.clone();
     let progress_app = app.clone();
     let progress_id = model_id.clone();
-    ensure_model_available_with_progress(model, &dir, &pipeline.gate, move |downloaded, total| {
-        let _ = progress_app.emit(
-            EVENT_STT_MODEL_DOWNLOAD_PROGRESS,
-            SttModelDownloadProgressPayload {
-                model_id: progress_id.clone(),
-                downloaded_bytes: downloaded,
-                total_bytes: total,
-            },
-        );
-    })
-    .await
-    .map_err(|_| SttModelSwitchError::Download)?;
+    // Register a fresh cancel flag keyed by model id BEFORE the fetch starts,
+    // so a `cancel_stt_model_download` call racing in right after this command
+    // returns can never target a stale/missing entry (TASK-034). Always
+    // cleared on the way out, success or failure.
+    let cancel = pipeline.register_download(&model_id);
+    let result = ensure_model_available_with_progress_and_cancel(
+        model,
+        &dir,
+        &pipeline.gate,
+        &cancel,
+        move |downloaded, total| {
+            let _ = progress_app.emit(
+                EVENT_STT_MODEL_DOWNLOAD_PROGRESS,
+                SttModelDownloadProgressPayload {
+                    model_id: progress_id.clone(),
+                    downloaded_bytes: downloaded,
+                    total_bytes: total,
+                },
+            );
+        },
+    )
+    .await;
+    pipeline.clear_download(&model_id);
+
+    result.map_err(|err| match err {
+        DownloadError::Cancelled { .. } => SttModelSwitchError::Cancelled,
+        _ => SttModelSwitchError::Download,
+    })?;
 
     apply_model_switch(&app, &pipeline, &model_id, model).await
+}
+
+/// Cancels `model_id`'s in-flight Settings-time download (TASK-034), if any.
+/// A no-op when nothing is downloading that id - the caller may race a
+/// download that just finished/failed harmlessly. The download loop observes
+/// the flag and aborts cleanly (partial file removed, `confirm_stt_model_switch`
+/// resolves with [`SttModelSwitchError::Cancelled`]).
+#[tauri::command]
+pub fn cancel_stt_model_download(pipeline: State<'_, AudioSessionPipeline>, model_id: String) {
+    pipeline.cancel_download(&model_id);
+}
+
+/// Errors from deleting a downloaded STT model (Settings model-management
+/// list, TASK-034). Serializes to `{ kind }`; never a secret or a real path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SttModelDeleteError {
+    /// The requested id does not name a catalog entry.
+    #[error("unknown STT model id")]
+    UnknownModel,
+    /// A live audio session is running; deleting its backing file mid-session
+    /// would corrupt an in-use model, so this mirrors the switch guard.
+    #[error("cannot delete the STT model while a session is active")]
+    SessionActive,
+    /// The filesystem delete failed.
+    #[error("could not delete the STT model file")]
+    Io,
+}
+
+impl SttModelDeleteError {
+    fn kind(&self) -> &'static str {
+        match self {
+            SttModelDeleteError::UnknownModel => "unknownModel",
+            SttModelDeleteError::SessionActive => "sessionActive",
+            SttModelDeleteError::Io => "io",
+        }
+    }
+}
+
+impl Serialize for SttModelDeleteError {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("SttModelDeleteError", 1)?;
+        s.serialize_field("kind", self.kind())?;
+        s.end()
+    }
+}
+
+/// Deletes a downloaded STT model file from disk (Settings model-management
+/// list, TASK-034): the consent grant is untouched (BR-08 revoke is a
+/// SEPARATE, explicit action, TASK-012), so re-selecting the tier later
+/// re-downloads it with no re-prompt - matching the "delete then re-download"
+/// affordance. Idempotent when the file is already absent.
+#[tauri::command]
+pub fn delete_stt_model(
+    pipeline: State<'_, AudioSessionPipeline>,
+    model_id: String,
+) -> Result<(), SttModelDeleteError> {
+    let entry = catalog::entry_for_id(&model_id).ok_or(SttModelDeleteError::UnknownModel)?;
+    if pipeline.is_session_active() {
+        return Err(SttModelDeleteError::SessionActive);
+    }
+    let path = entry.model.path_in(&pipeline.model_dir);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|_| SttModelDeleteError::Io)?;
+    }
+    Ok(())
 }
 
 /// Persists `model_id` to the settings store and swaps the pipeline's current

@@ -131,10 +131,18 @@ hay đường dẫn).
 | `list_stt_models`            | -                  | `SttModelInfo[]`           | Liệt kê 5 tier với dung lượng/RAM ước tính, đã tải chưa, có được phần cứng hiện tại cho phép không, có phải model đang dùng không. |
 | `request_stt_model_switch`   | `modelId: string`  | `SttModelSwitchOutcome`    | Kiểm tra id/phần cứng/phiên đang chạy; nếu model đã có sẵn trên đĩa thì áp dụng NGAY (lưu + đổi); nếu chưa có thì trả `consentRequired` kèm dung lượng CHÍNH XÁC của tier đó (không tải). |
 | `confirm_stt_model_switch`  | `modelId: string`  | `void`                     | Gọi sau khi người dùng xác nhận `consentRequired`: cấp đồng thuận (cùng cờ `whisper-ggml`, idempotent), tải kèm tiến độ (`stt:model-download-progress`), rồi lưu + đổi model đang dùng. |
+| `cancel_stt_model_download` | `modelId: string`  | `void`                     | Huỷ tải đang diễn ra cho `modelId` (TASK-034); không phải lỗi nếu không có tải nào khớp id. Luồng tải quan sát cờ huỷ và dừng sạch (xoá file `.bin.partial`); `confirm_stt_model_switch` đang chờ sẽ trả lỗi `cancelled`. |
+| `delete_stt_model`          | `modelId: string`  | `void`                     | Xoá file model tier `modelId` khỏi đĩa (danh sách quản lý model đã tải, TASK-034). Đồng thuận tải KHÔNG bị thu hồi (khác `revoke_model_consent`) nên chọn lại tier sau đó tải lại mà không hỏi lại. Idempotent nếu file đã vắng mặt. |
 
-Lỗi tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownModel | notAllowed | sessionActive |
-download | store`; `sessionActive` xuất hiện khi một phiên âm thanh đang chạy - đổi model bị
-từ chối cho tới khi phiên dừng (không đổi engine dưới một vòng lặp phiên âm đang chạy).
+Lỗi `request_stt_model_switch` / `confirm_stt_model_switch` tuần tự hoá thành `{ kind }` với
+`kind` ∈ `unknownModel | notAllowed | sessionActive | download | store | cancelled`;
+`sessionActive` xuất hiện khi một phiên âm thanh đang chạy - đổi model bị từ chối cho tới khi
+phiên dừng (không đổi engine dưới một vòng lặp phiên âm đang chạy); `cancelled` là kết quả của
+`cancel_stt_model_download`, KHÔNG hiển thị như một lỗi (không có banner đỏ).
+
+Lỗi `delete_stt_model` tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownModel | sessionActive |
+io`; `sessionActive` từ chối xoá file đang được whisper dùng bởi một phiên đang chạy (cùng lý do
+với việc chặn đổi model giữa phiên).
 
 #### `SttModelInfo`
 

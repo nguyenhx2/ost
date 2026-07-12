@@ -137,6 +137,8 @@ pub fn run() {
             shell::audio_session::list_stt_models,
             shell::audio_session::request_stt_model_switch,
             shell::audio_session::confirm_stt_model_switch,
+            shell::audio_session::cancel_stt_model_download,
+            shell::audio_session::delete_stt_model,
             shell::caption::open_caption_overlay,
             shell::caption::close_caption_overlay,
             shell::caption::nudge_caption_overlay,

@@ -570,10 +570,37 @@ export type SttModelSwitchOutcome =
   | { status: "consentRequired"; disclosure: ConsentDisclosure };
 
 export type SttModelSwitchErrorKind =
-  "unknownModel" | "notAllowed" | "sessionActive" | "download" | "store";
+  | "unknownModel"
+  | "notAllowed"
+  | "sessionActive"
+  | "download"
+  | "store"
+  | "cancelled";
 
 export interface SttModelSwitchCommandError {
   kind: SttModelSwitchErrorKind;
+}
+
+/** Tagged error kind of `delete_stt_model` (Settings model-management list, TASK-034). */
+export type SttModelDeleteErrorKind = "unknownModel" | "sessionActive" | "io";
+
+export interface SttModelDeleteCommandError {
+  kind: SttModelDeleteErrorKind;
+}
+
+/** Narrow an unknown thrown value to a typed STT-delete command error. */
+export function asSttModelDeleteCommandError(
+  err: unknown,
+): SttModelDeleteCommandError {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    typeof (err as { kind: unknown }).kind === "string"
+  ) {
+    return { kind: (err as { kind: SttModelDeleteErrorKind }).kind };
+  }
+  return { kind: "io" };
 }
 
 /** Narrow an unknown thrown value to a typed STT-switch command error. */
@@ -617,6 +644,22 @@ export const sttIpc = {
   /** Confirm a `consentRequired` switch: downloads (progress events), then applies. */
   confirmSwitch: (modelId: string): Promise<void> =>
     invokeIpc("confirm_stt_model_switch", { modelId }),
+
+  /**
+   * Cancels `modelId`'s in-flight download (TASK-034), if any - a no-op
+   * otherwise. The pending `confirmSwitch` call resolves with a `cancelled`
+   * error; the caller resets its downloading state for that model id.
+   */
+  cancelDownload: (modelId: string): Promise<void> =>
+    invokeIpc("cancel_stt_model_download", { modelId }),
+
+  /**
+   * Deletes a downloaded model's file from disk (Settings model-management
+   * list, TASK-034). Consent stays granted, so a later re-select
+   * re-downloads with no re-prompt. Refused while an audio session is active.
+   */
+  deleteModel: (modelId: string): Promise<void> =>
+    invokeIpc("delete_stt_model", { modelId }),
 };
 
 /* ------------------------------------------------------------------ */

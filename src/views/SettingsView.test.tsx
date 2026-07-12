@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
     listModels: vi.fn(),
     requestSwitch: vi.fn(),
     confirmSwitch: vi.fn(),
+    cancelDownload: vi.fn(),
+    deleteModel: vi.fn(),
   },
   providersIpc: {
     pickerMetadata: vi.fn(),
@@ -80,6 +82,13 @@ import {
   type ModelConsentStatus,
 } from "../lib/ipc";
 import { SettingsView } from "./SettingsView";
+
+/** Switches to the Settings tab whose accessible tab name is `name`
+ * (TASK-034: the sections are now grouped under keyboard-accessible tabs). */
+async function openTab(name: string) {
+  const tab = await screen.findByRole("tab", { name });
+  await userEvent.click(tab);
+}
 
 function statusList(present: Partial<Record<string, boolean>> = {}) {
   return [
@@ -239,6 +248,8 @@ beforeEach(() => {
   mocks.sttIpc.listModels.mockReset().mockResolvedValue(defaultSttModels());
   mocks.sttIpc.requestSwitch.mockReset();
   mocks.sttIpc.confirmSwitch.mockReset();
+  mocks.sttIpc.cancelDownload.mockReset().mockResolvedValue(undefined);
+  mocks.sttIpc.deleteModel.mockReset().mockResolvedValue(undefined);
   mocks.providersIpc.pickerMetadata
     .mockReset()
     .mockResolvedValue(providerPickerMetadata());
@@ -382,6 +393,7 @@ describe("SettingsView", () => {
 
   it("lists a consented model set with a revoke control (BR-08)", async () => {
     render(<SettingsView />);
+    await openTab("History and general");
     await waitFor(() =>
       expect(screen.getByText("Model downloads")).toBeInTheDocument(),
     );
@@ -400,6 +412,7 @@ describe("SettingsView", () => {
       ocrGranted = false;
     });
     render(<SettingsView />);
+    await openTab("History and general");
     await waitFor(() =>
       expect(
         screen.getByText("PP-OCRv5 recognition model"),
@@ -436,6 +449,7 @@ describe("SettingsView", () => {
   it("shows the empty state when no model download is consented", async () => {
     ocrGranted = false;
     render(<SettingsView />);
+    await openTab("History and general");
     await waitFor(() =>
       expect(screen.getByText("Model downloads")).toBeInTheDocument(),
     );
@@ -450,6 +464,7 @@ describe("SettingsView", () => {
   it("surfaces a revoke failure and keeps the consent entry", async () => {
     mocks.modelIpc.revokeConsent.mockRejectedValue(new Error("keychain"));
     render(<SettingsView />);
+    await openTab("History and general");
     await waitFor(() =>
       expect(
         screen.getByText("PP-OCRv5 recognition model"),
@@ -473,6 +488,7 @@ describe("SettingsView", () => {
 
   it("shows the history toggle ON by default (BR-06/AC-04.6)", async () => {
     render(<SettingsView />);
+    await openTab("History and general");
     await waitFor(() =>
       expect(screen.getByText("Translation history")).toBeInTheDocument(),
     );
@@ -484,6 +500,7 @@ describe("SettingsView", () => {
 
   it("persists disabling the history toggle (AC-04.6)", async () => {
     render(<SettingsView />);
+    await openTab("History and general");
     const toggle = await screen.findByRole("switch", {
       name: "Record translation history",
     });
@@ -499,6 +516,7 @@ describe("SettingsView", () => {
 
   it("starts a session with the pinned source and vi target (AC-01.4/01.5)", async () => {
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     await waitFor(() =>
       expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
     );
@@ -533,6 +551,7 @@ describe("SettingsView", () => {
 
   it("stops the session and closes the overlay (AC-01.10)", async () => {
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     await waitFor(() =>
       expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
     );
@@ -552,6 +571,7 @@ describe("SettingsView", () => {
   it("shows the whisper first-run consent and grants the download (AC-01.8)", async () => {
     whisperGranted = false;
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     await waitFor(() =>
       expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
     );
@@ -580,6 +600,7 @@ describe("SettingsView", () => {
 
   it("displays the hardware-recommended whisper model (AC-01.8)", async () => {
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     await waitFor(() =>
       expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
     );
@@ -592,6 +613,7 @@ describe("SettingsView", () => {
 
   it("lists the STT engine picker with hardware-gated disabled entries (TASK-026)", async () => {
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     const sttTrigger = await screen.findByRole("button", {
       name: "Speech-to-text engine",
     });
@@ -633,6 +655,7 @@ describe("SettingsView", () => {
       },
     });
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     const sttTrigger = await screen.findByRole("button", {
       name: "Speech-to-text engine",
     });
@@ -671,6 +694,7 @@ describe("SettingsView", () => {
       },
     });
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     const sttTrigger = await screen.findByRole("button", {
       name: "Speech-to-text engine",
     });
@@ -719,6 +743,7 @@ describe("SettingsView", () => {
     );
 
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     const sttTrigger = await screen.findByRole("button", {
       name: "Speech-to-text engine",
     });
@@ -750,6 +775,7 @@ describe("SettingsView", () => {
   it("shows a clear message when switching the STT engine mid-session (sessionActive)", async () => {
     mocks.sttIpc.requestSwitch.mockRejectedValue({ kind: "sessionActive" });
     render(<SettingsView />);
+    await openTab("Speech-to-text");
     const sttTrigger = await screen.findByRole("button", {
       name: "Speech-to-text engine",
     });
@@ -884,5 +910,233 @@ describe("SettingsView", () => {
         ),
       ).toBeInTheDocument(),
     );
+  });
+
+  it("groups the view into keyboard-accessible tabs (TASK-034)", async () => {
+    render(<SettingsView />);
+    const tablist = await screen.findByRole("tablist", {
+      name: "Settings sections",
+    });
+    const providersTab = within(tablist).getByRole("tab", {
+      name: "Providers and keys",
+    });
+    const sttTab = within(tablist).getByRole("tab", {
+      name: "Speech-to-text",
+    });
+    expect(providersTab).toHaveAttribute("aria-selected", "true");
+    expect(sttTab).toHaveAttribute("aria-selected", "false");
+
+    // Only the active tab's panel is present.
+    expect(screen.getByText("Providers and API keys")).toBeInTheDocument();
+    expect(screen.queryByText("Live audio translation")).toBeNull();
+
+    // Arrow-key navigation moves both focus and selection (WAI-ARIA APG).
+    providersTab.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(sttTab).toHaveAttribute("aria-selected", "true");
+    expect(sttTab).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows a distinct success-coloured badge only for a configured provider key", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(statusList({ gemini: true }));
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(screen.getByText("Providers and API keys")).toBeInTheDocument(),
+    );
+
+    const configured = screen.getAllByText("Key configured")[0];
+    expect(configured.closest(".ost-badge")).toHaveClass("ost-badge--success");
+
+    const notConfigured = screen.getAllByText("No key")[0];
+    expect(notConfigured.closest(".ost-badge")).toHaveClass(
+      "ost-badge--warning",
+    );
+  });
+
+  it("lists downloaded STT models with per-item delete and download (TASK-034)", async () => {
+    render(<SettingsView />);
+    await openTab("Speech-to-text");
+    await waitFor(() =>
+      expect(screen.getByText("Downloaded models")).toBeInTheDocument(),
+    );
+
+    // "Tiny" and "Base" are downloaded; "Small" is not (see defaultSttModels).
+    const tinyRow = screen.getByText("Tiny").closest("li") as HTMLElement;
+    expect(within(tinyRow).getByText("Downloaded")).toBeInTheDocument();
+    expect(
+      within(tinyRow).getByRole("button", { name: "Delete" }),
+    ).not.toBeDisabled();
+
+    const smallRow = screen.getByText("Small").closest("li") as HTMLElement;
+    expect(within(smallRow).getByText("Not downloaded")).toBeInTheDocument();
+    expect(
+      within(smallRow).getByRole("button", { name: "Delete" }),
+    ).toBeDisabled();
+
+    await userEvent.click(
+      within(tinyRow).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(mocks.sttIpc.deleteModel).toHaveBeenCalledWith("tiny"),
+    );
+  });
+
+  it("starting a download from the model list keeps its progress visible after picking a different tier (TASK-034)", async () => {
+    let progressHandler: ((payload: unknown) => void) | null = null;
+    mocks.listenIpc.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === "stt:model-download-progress") {
+          progressHandler = handler;
+        }
+        return Promise.resolve(() => {});
+      },
+    );
+    mocks.sttIpc.requestSwitch.mockImplementation((modelId: string) =>
+      Promise.resolve({
+        status: "consentRequired",
+        disclosure: {
+          modelSetId: "whisper-ggml",
+          displayName: `Whisper ${modelId}`,
+          hostName: "Hugging Face",
+          hostDomain: "huggingface.co",
+          artifacts: [{ filename: `ggml-${modelId}.bin`, approxSizeBytes: 1 }],
+          totalApproxSizeBytes: 1,
+          destination: "~/.cache/whisper",
+        },
+      }),
+    );
+    // "small"'s confirm never resolves in this test - it stays "downloading".
+    mocks.sttIpc.confirmSwitch.mockImplementation(
+      () => new Promise<void>(() => {}),
+    );
+
+    render(<SettingsView />);
+    await openTab("Speech-to-text");
+    await waitFor(() =>
+      expect(screen.getByText("Downloaded models")).toBeInTheDocument(),
+    );
+
+    const smallRow = screen.getByText("Small").closest("li") as HTMLElement;
+    await userEvent.click(
+      within(smallRow).getByRole("button", { name: "Download" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download this speech-to-text tier",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Allow download" }),
+    );
+
+    await waitFor(() => expect(progressHandler).not.toBeNull());
+    act(() => {
+      progressHandler?.({
+        modelId: "small",
+        downloadedBytes: 50,
+        totalBytes: 100,
+      });
+    });
+    expect(
+      await screen.findByRole("progressbar", {
+        name: "Small download progress",
+      }),
+    ).toHaveAttribute("aria-valuenow", "50");
+
+    // Now change the picker's selection to a DIFFERENT (allowed) tier - the
+    // Select surfaces its own consent dialog again; decline it so nothing
+    // downloads there, and assert "small"'s progress row survived untouched.
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+    await userEvent.click(sttTrigger);
+    await userEvent.click(screen.getByRole("option", { name: /^Tiny/ }));
+
+    expect(
+      screen.getByRole("progressbar", { name: "Small download progress" }),
+    ).toHaveAttribute("aria-valuenow", "50");
+  });
+
+  it("cancels an in-progress download from the model list (TASK-034)", async () => {
+    mocks.sttIpc.requestSwitch.mockResolvedValue({
+      status: "consentRequired",
+      disclosure: {
+        modelSetId: "whisper-ggml",
+        displayName: "Whisper small",
+        hostName: "Hugging Face",
+        hostDomain: "huggingface.co",
+        artifacts: [
+          { filename: "ggml-small.bin", approxSizeBytes: 466_000_000 },
+        ],
+        totalApproxSizeBytes: 466_000_000,
+        destination: "~/.cache/whisper",
+      },
+    });
+    mocks.sttIpc.confirmSwitch.mockImplementation(
+      () => new Promise<void>(() => {}),
+    );
+
+    render(<SettingsView />);
+    await openTab("Speech-to-text");
+    await waitFor(() =>
+      expect(screen.getByText("Downloaded models")).toBeInTheDocument(),
+    );
+
+    const smallRow = screen.getByText("Small").closest("li") as HTMLElement;
+    await userEvent.click(
+      within(smallRow).getByRole("button", { name: "Download" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download this speech-to-text tier",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Allow download" }),
+    );
+
+    const cancelButton = await within(smallRow).findByRole("button", {
+      name: "Cancel download",
+    });
+    await userEvent.click(cancelButton);
+
+    await waitFor(() =>
+      expect(mocks.sttIpc.cancelDownload).toHaveBeenCalledWith("small"),
+    );
+  });
+
+  it("the download/consent dialog has a visible close button that does not start the download", async () => {
+    mocks.sttIpc.requestSwitch.mockResolvedValue({
+      status: "consentRequired",
+      disclosure: {
+        modelSetId: "whisper-ggml",
+        displayName: "Whisper small",
+        hostName: "Hugging Face",
+        hostDomain: "huggingface.co",
+        artifacts: [
+          { filename: "ggml-small.bin", approxSizeBytes: 466_000_000 },
+        ],
+        totalApproxSizeBytes: 466_000_000,
+        destination: "~/.cache/whisper",
+      },
+    });
+    render(<SettingsView />);
+    await openTab("Speech-to-text");
+    const sttTrigger = await screen.findByRole("button", {
+      name: "Speech-to-text engine",
+    });
+    await userEvent.click(sttTrigger);
+    await userEvent.click(screen.getByRole("option", { name: /^Small/ }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Download this speech-to-text tier",
+    });
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Close (does not start the download)",
+      }),
+    );
+
+    expect(mocks.sttIpc.confirmSwitch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

@@ -38,6 +38,7 @@ Landed primitives:
 | `PlainText` | `src/components/ui/PlainText.tsx` | Sanitizing plain-text renderer for untrusted OCR/transcript/translation output |
 | `ProgressBar` | `src/components/ui/ProgressBar.tsx` | Determinate progress bar (STT model-download progress, TASK-026) |
 | `Spinner` | `src/components/ui/Spinner.tsx` | Indeterminate loading indicator (streaming-translation-in-flight affordance) |
+| `Tabs` | `src/components/ui/Tabs.tsx` | Keyboard-accessible tab group (`role="tablist"`/`tab`/`tabpanel`, arrow-key nav); groups the Settings view |
 
 ## Banned outright
 

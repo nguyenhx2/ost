@@ -134,6 +134,7 @@ export function HistoryView() {
         open={confirmOpen}
         label={t("history.clearAllTitle")}
         onClose={() => setConfirmOpen(false)}
+        closeLabel={t("history.close")}
       >
         <h2 className="history-confirm-title">{t("history.clearAllTitle")}</h2>
         <p className="history-confirm-body">{t("history.clearAllBody")}</p>

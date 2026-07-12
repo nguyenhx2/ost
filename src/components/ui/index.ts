@@ -17,4 +17,5 @@ export { Select, type SelectOption, type SelectProps } from "./Select";
 export { Slider, type SliderProps } from "./Slider";
 export { Spinner, type SpinnerProps } from "./Spinner";
 export { Switch, type SwitchProps } from "./Switch";
+export { Tabs, type TabItem, type TabsProps } from "./Tabs";
 export { Tooltip, type TooltipProps } from "./Tooltip";

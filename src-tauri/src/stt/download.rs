@@ -34,6 +34,8 @@
 //! as they arrive (never buffered whole in memory) and hashed incrementally.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
@@ -43,6 +45,30 @@ use tokio::time::timeout;
 use crate::models::{verify_sha256, ConsentDisclosure, ModelError, ModelGate};
 
 use super::model::{WhisperModel, WHISPER_MODEL_SET_ID};
+
+/// A per-download cancel signal (Settings, TASK-034): `cancel_stt_model_download`
+/// flips it, the streaming loop below observes it within [`CANCEL_POLL_INTERVAL`]
+/// and aborts cleanly (partial file removed by the caller, same as any other
+/// failure). A fresh, never-flipped flag is a no-op cancel source for callers
+/// that do not need cancellation (e.g. the original first-run
+/// [`ensure_model_available`] wrapper).
+pub type CancelFlag = Arc<AtomicBool>;
+
+/// Poll interval for the cancel flag while waiting on network I/O. Bounds how
+/// quickly a user-triggered cancel takes effect without needing a second
+/// notification channel.
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(150);
+
+/// Resolves once `flag` is set - used to race a network wait against a
+/// cancellation request via `tokio::select!`.
+async fn wait_for_cancel(flag: &AtomicBool) {
+    loop {
+        if flag.load(Ordering::SeqCst) {
+            return;
+        }
+        tokio::time::sleep(CANCEL_POLL_INTERVAL).await;
+    }
+}
 
 /// Base URL for the official whisper.cpp ggml models on Hugging Face. The
 /// `resolve/main/<filename>` path serves the raw LFS content (not the pointer).
@@ -116,6 +142,12 @@ pub enum DownloadError {
     /// Writing the verified bytes to the cache dir failed.
     #[error("could not write whisper model to the cache: {0}")]
     Io(String),
+
+    /// The user cancelled the in-progress download (Settings, TASK-034). Not a
+    /// failure - the caller cleans up the partial file and resets state exactly
+    /// as it would for any other aborted transfer.
+    #[error("whisper model download for {filename} was cancelled")]
+    Cancelled { filename: &'static str },
 }
 
 impl DownloadError {
@@ -177,7 +209,15 @@ pub async fn ensure_model_available(
     model_dir: &Path,
     gate: &ModelGate,
 ) -> Result<PathBuf, DownloadError> {
-    ensure_model_available_with_progress(model, model_dir, gate, |_downloaded, _total| {}).await
+    let never_cancelled: CancelFlag = Arc::new(AtomicBool::new(false));
+    ensure_model_available_with_progress_and_cancel(
+        model,
+        model_dir,
+        gate,
+        &never_cancelled,
+        |_downloaded, _total| {},
+    )
+    .await
 }
 
 /// Same fail-closed contract as [`ensure_model_available`], additionally
@@ -191,6 +231,32 @@ pub async fn ensure_model_available_with_progress<F>(
     model: WhisperModel,
     model_dir: &Path,
     gate: &ModelGate,
+    on_progress: F,
+) -> Result<PathBuf, DownloadError>
+where
+    F: FnMut(u64, u64),
+{
+    let never_cancelled: CancelFlag = Arc::new(AtomicBool::new(false));
+    ensure_model_available_with_progress_and_cancel(
+        model,
+        model_dir,
+        gate,
+        &never_cancelled,
+        on_progress,
+    )
+    .await
+}
+
+/// Same fail-closed contract as [`ensure_model_available_with_progress`],
+/// additionally observing `cancel` (Settings, TASK-034): the caller flips it
+/// via `cancel_stt_model_download` to abort the in-progress stream cleanly -
+/// the partial file is removed and no bytes are trusted, exactly like any
+/// other aborted transfer.
+pub async fn ensure_model_available_with_progress_and_cancel<F>(
+    model: WhisperModel,
+    model_dir: &Path,
+    gate: &ModelGate,
+    cancel: &CancelFlag,
     mut on_progress: F,
 ) -> Result<PathBuf, DownloadError>
 where
@@ -237,13 +303,15 @@ where
         oversize_cap,
         IDLE_TIMEOUT,
         OVERALL_TIMEOUT,
+        cancel,
         &mut on_progress,
     )
     .await;
 
     if let Err(err) = result {
         // Fail-closed cleanup: never leave a partial/unverified artifact behind
-        // for a later run to mistake for a verified one.
+        // for a later run to mistake for a verified one (also applies to a
+        // user-triggered cancel).
         let _ = tokio::fs::remove_file(&tmp).await;
         return Err(err);
     }
@@ -278,18 +346,22 @@ async fn download_verified<F>(
     oversize_cap: u64,
     idle_timeout: Duration,
     overall_timeout: Duration,
+    cancel: &CancelFlag,
     on_progress: &mut F,
 ) -> Result<(), DownloadError>
 where
     F: FnMut(u64, u64),
 {
     let fetch = async {
-        let mut response = timeout(idle_timeout, client.get(url).send())
-            .await
-            .map_err(|_| stalled(idle_timeout))?
-            .map_err(|e| DownloadError::Network(e.to_string()))?
-            .error_for_status()
-            .map_err(|e| DownloadError::Network(e.to_string()))?;
+        let mut response = tokio::select! {
+            biased;
+            _ = wait_for_cancel(cancel) => return Err(DownloadError::Cancelled { filename }),
+            result = timeout(idle_timeout, client.get(url).send()) => result
+                .map_err(|_| stalled(idle_timeout))?
+                .map_err(|e| DownloadError::Network(e.to_string()))?
+                .error_for_status()
+                .map_err(|e| DownloadError::Network(e.to_string()))?,
+        };
 
         let total = response.content_length().unwrap_or(approx_total);
         let mut file = tokio::fs::File::create(tmp)
@@ -299,10 +371,13 @@ where
         let mut downloaded: u64 = 0;
 
         loop {
-            let chunk = timeout(idle_timeout, response.chunk())
-                .await
-                .map_err(|_| stalled(idle_timeout))?
-                .map_err(|e| DownloadError::Network(e.to_string()))?;
+            let chunk = tokio::select! {
+                biased;
+                _ = wait_for_cancel(cancel) => return Err(DownloadError::Cancelled { filename }),
+                result = timeout(idle_timeout, response.chunk()) => result
+                    .map_err(|_| stalled(idle_timeout))?
+                    .map_err(|e| DownloadError::Network(e.to_string()))?,
+            };
             let Some(chunk) = chunk else {
                 break;
             };
@@ -368,6 +443,13 @@ mod tests {
     use std::sync::Arc;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// A cancel flag that never fires - the tests below exercise every OTHER
+    /// abort path (integrity/timeout/oversize); the cancellation itself is
+    /// covered by its own dedicated test.
+    fn no_cancel() -> CancelFlag {
+        Arc::new(AtomicBool::new(false))
+    }
 
     fn model_with_digest(digest: &'static str) -> WhisperModel {
         WhisperModel {
@@ -543,6 +625,7 @@ mod tests {
             (payload.len() as u64) * 2,
             Duration::from_secs(5),
             Duration::from_secs(5),
+            &no_cancel(),
             &mut |_downloaded, _total| progress_calls += 1,
         )
         .await;
@@ -581,6 +664,7 @@ mod tests {
             (payload.len() as u64) * 2,
             Duration::from_secs(5),
             Duration::from_secs(5),
+            &no_cancel(),
             &mut |_, _| {},
         )
         .await;
@@ -621,6 +705,7 @@ mod tests {
             1_000,
             Duration::from_millis(50),
             Duration::from_secs(5),
+            &no_cancel(),
             &mut |_, _| {},
         )
         .await;
@@ -663,6 +748,7 @@ mod tests {
             1_000,
             Duration::from_secs(5), // idle timeout would NOT catch this alone
             Duration::from_millis(50),
+            &no_cancel(),
             &mut |_, _| {},
         )
         .await;
@@ -696,11 +782,65 @@ mod tests {
             100, // oversize_cap far below the 4096-byte payload
             Duration::from_secs(5),
             Duration::from_secs(5),
+            &no_cancel(),
             &mut |_, _| {},
         )
         .await;
 
         assert!(matches!(result, Err(DownloadError::Oversize { .. })));
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[tokio::test]
+    async fn download_verified_aborts_cleanly_when_cancelled_mid_stream() {
+        // Settings-time cancel control (TASK-034): flipping the cancel flag
+        // while a chunked response is still delaying must abort with
+        // `Cancelled`, well before the idle/overall timeouts would fire, and
+        // leave nothing for the caller to trust (it removes the temp file).
+        let payload = b"irrelevant-partial-bytes".to_vec();
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/model.bin"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(payload)
+                    .set_delay(Duration::from_secs(5)),
+            )
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::new();
+        let tmp = scratch_tmp("cancelled");
+        let cancel: CancelFlag = Arc::new(AtomicBool::new(false));
+        let cancel_setter = Arc::clone(&cancel);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            cancel_setter.store(true, Ordering::SeqCst);
+        });
+
+        let started = std::time::Instant::now();
+        let result = download_verified(
+            &client,
+            &format!("{}/model.bin", server.uri()),
+            &tmp,
+            "ggml-test.bin",
+            "irrelevant-digest",
+            10,
+            1_000,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            &cancel,
+            &mut |_, _| {},
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(DownloadError::Cancelled { .. })),
+            "expected Cancelled, got {result:?}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "cancel must abort well before the mock's 5s delay"
+        );
     }
 }

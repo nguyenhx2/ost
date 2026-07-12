@@ -122,6 +122,12 @@ const en = {
 
   // SCR-04: Settings - providers and keys (FR-03)
   "settings.title": "Settings",
+  "settings.tablistLabel": "Settings sections",
+  "settings.tabProviders": "Providers and keys",
+  "settings.tabStt": "Speech-to-text",
+  "settings.tabLocalLlm": "Local LLM",
+  "settings.tabHotkeys": "Hotkeys",
+  "settings.tabGeneral": "History and general",
   "settings.providersHeading": "Providers and API keys",
   "settings.providersHint":
     "Keys are stored only in your operating system keychain - never in files, logs, or history.",
@@ -173,6 +179,7 @@ const en = {
   "consent.artifactsLabel": "Files to download",
   "consent.grant": "Allow download",
   "consent.decline": "Not now",
+  "consent.close": "Close (does not start the download)",
 
   // Settings - model downloads (revoke consent, BR-08)
   "settings.modelsHeading": "Model downloads",
@@ -206,6 +213,7 @@ const en = {
     "This permanently deletes every saved translation from this device. This cannot be undone.",
   "history.clearAllConfirm": "Delete everything",
   "history.cancel": "Cancel",
+  "history.close": "Close",
 
   // Settings - translation history (AC-04.6)
   "settings.historyHeading": "Translation history",
@@ -282,6 +290,32 @@ const en = {
   "settings.sttErrorDownload": "The model download failed - please try again",
   "settings.sttErrorStore":
     "Could not save the speech-to-text engine choice - please try again",
+  "settings.sttErrorCancelled": "The model download was cancelled",
+
+  // Settings - STT downloaded-model management list (TASK-034)
+  "settings.sttModelsListHeading": "Downloaded models",
+  "settings.sttModelsListHint":
+    "Speech-to-text models stored on this machine. Delete one to free up disk space, then download it again whenever you need it.",
+  "settings.sttModelListDownloaded": "Downloaded",
+  "settings.sttModelListNotDownloaded": "Not downloaded",
+  "settings.sttModelListDownload": "Download",
+  "settings.sttModelListRedownload": "Re-download",
+  "settings.sttModelListDelete": "Delete",
+  "settings.sttModelListDeleting": "Deleting...",
+  "settings.sttModelListCancel": "Cancel download",
+  "settings.sttModelListCancelling": "Cancelling...",
+  "settings.sttModelListProgress": "{model} download progress",
+  "settings.sttModelDeleteErrorUnknownModel":
+    "Unknown speech-to-text model - please refresh",
+  "settings.sttModelDeleteErrorSessionActive":
+    "Cannot delete a model while an audio session is running - stop the session first",
+  "settings.sttModelDeleteErrorIo":
+    "Could not delete the model file - please try again",
+
+  // Settings - Local LLM tab (model management deferred, TASK-034)
+  "settings.localLlmModelsHeading": "Local LLM model management",
+  "settings.localLlmModelsPlaceholder":
+    "Local LLM model download/removal management is not available yet - it is pending an architecture decision. The local OpenAI-compatible server connection is configured under Providers and keys.",
 
   // Settings - local OpenAI-compatible translation provider (FR-03.CUSTOM-1..5)
   "settings.localBaseUrlLabel": "Local server address (base_url)",
@@ -430,6 +464,12 @@ const vi: Record<I18nKey, string> = {
     "OST cần tải mô hình chuyển giọng nói thành văn bản (whisper) cục bộ trước khi có thể dịch âm thanh trực tiếp. Các tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có âm thanh đã chụp hay khoá nào được gửi đi - âm thanh không bao giờ rời khỏi máy của bạn; chỉ tải các tệp mô hình.",
 
   "settings.title": "Cài đặt",
+  "settings.tablistLabel": "Các mục cài đặt",
+  "settings.tabProviders": "Provider và key",
+  "settings.tabStt": "Chuyển giọng nói thành văn bản",
+  "settings.tabLocalLlm": "LLM cục bộ",
+  "settings.tabHotkeys": "Phím tắt",
+  "settings.tabGeneral": "Lịch sử và chung",
   "settings.providersHeading": "Provider và API key",
   "settings.providersHint":
     "Key chỉ được lưu trong keychain của hệ điều hành - không bao giờ nằm trong tập tin, log hay lịch sử.",
@@ -481,6 +521,7 @@ const vi: Record<I18nKey, string> = {
   "consent.artifactsLabel": "Các tệp sẽ tải",
   "consent.grant": "Cho phép tải",
   "consent.decline": "Để sau",
+  "consent.close": "Đóng (không bắt đầu tải)",
 
   "settings.modelsHeading": "Tải mô hình",
   "settings.modelsHint":
@@ -512,6 +553,7 @@ const vi: Record<I18nKey, string> = {
     "Thao tác này xoá vĩnh viễn mọi lượt dịch đã lưu trên thiết bị này và không thể hoàn tác.",
   "history.clearAllConfirm": "Xoá tất cả",
   "history.cancel": "Huỷ",
+  "history.close": "Đóng",
 
   "settings.historyHeading": "Lịch sử dịch",
   "settings.historyHint":
@@ -584,6 +626,30 @@ const vi: Record<I18nKey, string> = {
   "settings.sttErrorDownload": "Tải mô hình thất bại - vui lòng thử lại",
   "settings.sttErrorStore":
     "Không lưu được lựa chọn engine chuyển giọng nói - vui lòng thử lại",
+  "settings.sttErrorCancelled": "Đã huỷ tải mô hình",
+
+  "settings.sttModelsListHeading": "Các model đã tải",
+  "settings.sttModelsListHint":
+    "Các model chuyển giọng nói thành văn bản đang lưu trên máy này. Xoá một model để giải phóng dung lượng, rồi tải lại bất cứ khi nào cần.",
+  "settings.sttModelListDownloaded": "Đã tải",
+  "settings.sttModelListNotDownloaded": "Chưa tải",
+  "settings.sttModelListDownload": "Tải về",
+  "settings.sttModelListRedownload": "Tải lại",
+  "settings.sttModelListDelete": "Xoá",
+  "settings.sttModelListDeleting": "Đang xoá...",
+  "settings.sttModelListCancel": "Huỷ tải",
+  "settings.sttModelListCancelling": "Đang huỷ...",
+  "settings.sttModelListProgress": "Tiến độ tải {model}",
+  "settings.sttModelDeleteErrorUnknownModel":
+    "Model chuyển giọng nói không xác định - vui lòng tải lại trang",
+  "settings.sttModelDeleteErrorSessionActive":
+    "Không thể xoá model khi phiên âm thanh đang chạy - hãy dừng phiên trước",
+  "settings.sttModelDeleteErrorIo":
+    "Không xoá được tệp model - vui lòng thử lại",
+
+  "settings.localLlmModelsHeading": "Quản lý model LLM cục bộ",
+  "settings.localLlmModelsPlaceholder":
+    "Quản lý tải/xoá model LLM cục bộ chưa khả dụng - đang chờ quyết định kiến trúc. Kết nối máy chủ local tương thích OpenAI được cấu hình ở mục Provider và key.",
 
   "settings.localBaseUrlLabel": "Địa chỉ máy chủ local (base_url)",
   "settings.localBaseUrlPlaceholder": "http://127.0.0.1:1234",
