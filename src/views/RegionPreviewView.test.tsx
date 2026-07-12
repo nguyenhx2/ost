@@ -42,6 +42,8 @@ const mocks = vi.hoisted(() => {
     }),
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     loadProviderSettings: vi.fn(),
+    loadRegionLanguageSettings: vi.fn(),
+    saveRegionLanguageSettings: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -69,10 +71,24 @@ vi.mock("../lib/settings", async (importOriginal) => {
   };
 });
 
+// Item 3: the preview loads/saves the persisted region-language preference on
+// mount and on every picker change; without this the real tauri-plugin-store
+// call runs in jsdom and rejects with an undefined `invoke`.
+vi.mock("../lib/regionLanguageSettings", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/regionLanguageSettings")>();
+  return {
+    ...actual,
+    loadRegionLanguageSettings: mocks.loadRegionLanguageSettings,
+    saveRegionLanguageSettings: mocks.saveRegionLanguageSettings,
+  };
+});
+
 import {
   EVENT_MODELS_CONSENT_REQUIRED,
   EVENT_REGION_OCR_ERROR,
   EVENT_REGION_OCR_RESULT,
+  EVENT_REGION_SELECTED,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
 } from "../lib/ipc";
@@ -157,6 +173,10 @@ beforeEach(() => {
     fallbackOrder: [],
     localOpenAi: { baseUrl: "", modelId: "" },
   });
+  mocks.loadRegionLanguageSettings
+    .mockReset()
+    .mockResolvedValue({ sourceLanguage: "auto", targetLanguage: "vi" });
+  mocks.saveRegionLanguageSettings.mockReset().mockResolvedValue(undefined);
 });
 
 describe("RegionPreviewView (SCR-03)", () => {
@@ -527,5 +547,56 @@ describe("RegionPreviewView (SCR-03)", () => {
     // The source text lives inside the scrollable body, not directly in the
     // panel (so it scrolls instead of shrinking the panel).
     expect(body?.textContent).toContain("Guten Tag");
+  });
+
+  it("the re-select control starts a new region capture without closing the dialog (item 1)", async () => {
+    await renderPreview();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select new region" }),
+    );
+
+    expect(mocks.regionIpc.startSelection).toHaveBeenCalledTimes(1);
+    // The dialog itself is never closed by re-select.
+    expect(mocks.regionIpc.closePreview).not.toHaveBeenCalled();
+  });
+
+  it("refreshes for a new region confirmed while already open (item 2 bug fix)", async () => {
+    await renderPreview();
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    expect(screen.getByText("Hello")).toBeInTheDocument();
+
+    mocks.regionIpc.previewReady.mockClear();
+    act(() => {
+      mocks.handlers.get(EVENT_REGION_SELECTED)?.(undefined);
+    });
+
+    expect(screen.queryByText("Hello")).toBeNull();
+    expect(screen.getByText("Recognizing text...")).toBeInTheDocument();
+    expect(mocks.regionIpc.previewReady).toHaveBeenCalledTimes(1);
+
+    emitOcr({ requestId: "p2", sourceText: "Bonjour", lowConfidence: false });
+    expect(screen.getByText("Bonjour")).toBeInTheDocument();
+  });
+
+  it("offers source and target language pickers (item 3)", async () => {
+    await renderPreview();
+
+    expect(
+      screen.getByRole("button", { name: "Source language" }),
+    ).toBeInTheDocument();
+    const targetPicker = screen.getByRole("button", {
+      name: "Target language",
+    });
+    expect(targetPicker).toBeInTheDocument();
+    // BR-07 target default is Vietnamese.
+    expect(targetPicker).toHaveTextContent("Vietnamese");
+
+    await userEvent.click(targetPicker);
+    await userEvent.click(screen.getByRole("option", { name: "Japanese" }));
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    expect(request.targetLanguage).toBe("ja");
   });
 });

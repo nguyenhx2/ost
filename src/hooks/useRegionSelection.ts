@@ -1,6 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { regionIpc, type RegionRect, type SourceLanguage } from "../lib/ipc";
 import { DEFAULT_SOURCE_LANGUAGE } from "../lib/languages";
+import {
+  loadRegionLanguageSettings,
+  saveRegionLanguageSettings,
+} from "../lib/regionLanguageSettings";
 
 export interface Point {
   x: number;
@@ -81,6 +85,25 @@ export function useRegionSelection(): UseRegionSelectionResult {
   // Read the latest pin inside the memoized confirm without stale closures.
   const sourceLanguageRef = useRef(sourceLanguage);
 
+  // Item 3 (language pickers, BR-07): default this selection to whatever the
+  // user last chose (here or on the home screen), instead of always
+  // restarting at Auto. An unreadable store must never block a selection.
+  useEffect(() => {
+    let cancelled = false;
+    void loadRegionLanguageSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+        sourceLanguageRef.current = settings.sourceLanguage;
+        setSourceLanguageState(settings.sourceLanguage);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const dpr = window.devicePixelRatio || 1;
   const rect = anchor ? normalizeRect(anchor, cursor) : null;
   const physicalRect = rect ? toPhysicalRect(rect, dpr) : null;
@@ -117,6 +140,13 @@ export function useRegionSelection(): UseRegionSelectionResult {
   const setSourceLanguage = useCallback((language: SourceLanguage) => {
     sourceLanguageRef.current = language;
     setSourceLanguageState(language);
+    // Persist so the NEXT selection (here or from the home screen) defaults
+    // to this pin; best-effort, never blocks the in-progress selection.
+    void loadRegionLanguageSettings()
+      .then((settings) =>
+        saveRegionLanguageSettings({ ...settings, sourceLanguage: language }),
+      )
+      .catch(() => undefined);
   }, []);
 
   const cancel = useCallback(() => {

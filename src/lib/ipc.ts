@@ -129,6 +129,9 @@ export interface RegionTranslationRequest {
   sourceText: string;
   provider: string;
   model: string;
+  /** User-selected target language (BR-07 default `vi`); omitted/blank falls
+   * back to the core's default. Recorded verbatim in history. */
+  targetLanguage?: string;
 }
 
 export const EVENT_REGION_OCR_RESULT = "region:ocr-result";
@@ -137,6 +140,14 @@ export const EVENT_REGION_TRANSLATION_RESULT = "region:translation-result";
 export const EVENT_REGION_TRANSLATION_ERROR = "region:translation-error";
 /** Shared model-download consent gate (OCR now, whisper STT in Phase 2). */
 export const EVENT_MODELS_CONSENT_REQUIRED = "models:consent-required";
+/**
+ * Emitted to an ALREADY-OPEN preview window when a NEW region is confirmed
+ * (main screen, tray, hotkey, or the in-dialog re-select button all reach this
+ * the same way - `shell/region.rs::open_preview_window`). The preview must
+ * reset its state and re-call `previewReady()` on receipt so it refreshes for
+ * the new region instead of silently keeping the old one.
+ */
+export const EVENT_REGION_SELECTED = "region:selected";
 
 /* ------------------------------------------------------------------ */
 /* Model-download consent (shared fail-closed facility)                */

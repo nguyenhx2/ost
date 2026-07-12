@@ -18,11 +18,30 @@ vi.mock("../lib/ipc", async (importOriginal) => {
   return { ...actual, regionIpc: regionIpcMock };
 });
 
+const regionLanguageSettingsMock = vi.hoisted(() => ({
+  loadRegionLanguageSettings: vi
+    .fn()
+    .mockResolvedValue({ sourceLanguage: "auto", targetLanguage: "vi" }),
+  saveRegionLanguageSettings: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Item 3: the selection default is loaded from the persisted preference on
+// mount; without this the real tauri-plugin-store call runs in jsdom and
+// rejects with an undefined `invoke`.
+vi.mock("../lib/regionLanguageSettings", () => regionLanguageSettingsMock);
+
 import { setLocale } from "../lib/i18n";
 import { RegionSelectView } from "./RegionSelectView";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  regionLanguageSettingsMock.loadRegionLanguageSettings.mockResolvedValue({
+    sourceLanguage: "auto",
+    targetLanguage: "vi",
+  });
+  regionLanguageSettingsMock.saveRegionLanguageSettings.mockResolvedValue(
+    undefined,
+  );
   setLocale("en");
 });
 

@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => {
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     recordTranslation: vi.fn().mockResolvedValue(null),
     loadProviderSettings: vi.fn(),
+    loadRegionLanguageSettings: vi.fn(),
+    saveRegionLanguageSettings: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -56,7 +58,18 @@ vi.mock("../lib/settings", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/regionLanguageSettings", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/regionLanguageSettings")>();
+  return {
+    ...actual,
+    loadRegionLanguageSettings: mocks.loadRegionLanguageSettings,
+    saveRegionLanguageSettings: mocks.saveRegionLanguageSettings,
+  };
+});
+
 import {
+  EVENT_REGION_SELECTED,
   EVENT_REGION_OCR_RESULT,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
@@ -116,7 +129,18 @@ beforeEach(() => {
     fallbackOrder: [],
     localOpenAi: { baseUrl: "", modelId: "" },
   });
+  mocks.loadRegionLanguageSettings.mockResolvedValue({
+    sourceLanguage: "auto",
+    targetLanguage: "vi",
+  });
+  mocks.saveRegionLanguageSettings.mockResolvedValue(undefined);
 });
+
+function emitRegionSelected() {
+  act(() => {
+    mocks.handlers.get(EVENT_REGION_SELECTED)?.(undefined);
+  });
+}
 
 describe("useRegionPreview - two-phase rendering (AC-02.3)", () => {
   it("shows the source text immediately on the OCR event, before translation", async () => {
@@ -566,5 +590,131 @@ describe("useRegionPreview - configured provider (AC-03.5)", () => {
       expect(result.current.option.provider).toBe("local_openai"),
     );
     expect(result.current.option.model).toBe("gemma-3-12b");
+  });
+});
+
+describe("useRegionPreview - refresh on a new region while already open (item 2 bug fix)", () => {
+  it("resets state and re-runs the OCR handshake on region:selected", async () => {
+    const { result } = await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    emitTranslation({
+      requestId: request.requestId,
+      translatedText: "Xin chào",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+    });
+    expect(result.current.state.status).toBe("translated");
+
+    mocks.regionIpc.previewReady.mockClear();
+    emitRegionSelected();
+
+    // Back to the initial "waiting for OCR" shape - the OLD region's text and
+    // translation are gone, not left stale on screen.
+    expect(result.current.state.status).toBe("waitingOcr");
+    expect(result.current.state.sourceText).toBe("");
+    expect(result.current.state.translation).toBeNull();
+    // Re-arms the pipeline for the NEW region.
+    expect(mocks.regionIpc.previewReady).toHaveBeenCalledTimes(1);
+
+    // The NEW region's OCR result now drives the dialog normally.
+    emitOcr({ requestId: "p2", sourceText: "Bonjour", lowConfidence: false });
+    expect(result.current.state.sourceText).toBe("Bonjour");
+  });
+
+  it("ignores a stale translation response from BEFORE the reset", async () => {
+    const { result } = await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const staleRequest = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+
+    emitRegionSelected();
+    emitOcr({ requestId: "p2", sourceText: "Bonjour", lowConfidence: false });
+
+    // The pre-reset request's response must not clobber the new region.
+    emitTranslation({
+      requestId: staleRequest.requestId,
+      translatedText: "stale",
+      provider: "gemini",
+      model: "m",
+    });
+
+    expect(result.current.state.sourceText).toBe("Bonjour");
+    expect(result.current.state.translation).not.toBe("stale");
+  });
+});
+
+describe("useRegionPreview - language pickers (item 3)", () => {
+  it("loads the persisted source/target language preference on mount", async () => {
+    mocks.loadRegionLanguageSettings.mockResolvedValue({
+      sourceLanguage: "ja",
+      targetLanguage: "ko",
+    });
+    const { result } = await renderPreview();
+
+    await waitFor(() => expect(result.current.sourceLanguage).toBe("ja"));
+    expect(result.current.targetLanguage).toBe("ko");
+  });
+
+  it("defaults the target language to vi (BR-07)", async () => {
+    const { result } = await renderPreview();
+    expect(result.current.targetLanguage).toBe("vi");
+  });
+
+  it("threads the chosen target language into the translate request", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.setTargetLanguage("ja"));
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    expect(request.targetLanguage).toBe("ja");
+  });
+
+  it("threads the chosen target language into recorded history", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.setTargetLanguage("ja"));
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    emitTranslation({
+      requestId: request.requestId,
+      translatedText: "Konnichiwa",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+    });
+
+    const recorded = mocks.recordTranslation.mock.calls[0][0];
+    expect(recorded.targetLanguage).toBe("ja");
+  });
+
+  it("persists a picker change so it survives (settings round-trip)", async () => {
+    const { result } = await renderPreview();
+
+    act(() => result.current.setTargetLanguage("ko"));
+
+    await waitFor(() =>
+      expect(mocks.saveRegionLanguageSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ targetLanguage: "ko" }),
+      ),
+    );
+
+    act(() => result.current.setSourceLanguage("ja"));
+    await waitFor(() =>
+      expect(mocks.saveRegionLanguageSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceLanguage: "ja" }),
+      ),
+    );
+  });
+});
+
+describe("useRegionPreview - in-dialog re-select (item 1)", () => {
+  it("reselect() opens the same fullscreen select overlay", async () => {
+    const { result } = await renderPreview();
+
+    result.current.reselect();
+
+    expect(mocks.regionIpc.startSelection).toHaveBeenCalledTimes(1);
   });
 });
