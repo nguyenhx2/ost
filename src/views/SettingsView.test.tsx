@@ -38,6 +38,16 @@ const mocks = vi.hoisted(() => ({
     pickerMetadata: vi.fn(),
     checkLocalConnection: vi.fn(),
   },
+  llmIpc: {
+    listModels: vi.fn(),
+    requestDownload: vi.fn(),
+    confirmDownload: vi.fn(),
+    cancelDownload: vi.fn(),
+    deleteModel: vi.fn(),
+    startServer: vi.fn(),
+    stopServer: vi.fn(),
+    serverStatus: vi.fn(),
+  },
   listenIpc: vi.fn(),
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
@@ -56,6 +66,7 @@ vi.mock("../lib/ipc", async (importOriginal) => {
     hotkeysIpc: mocks.hotkeysIpc,
     sttIpc: mocks.sttIpc,
     providersIpc: mocks.providersIpc,
+    llmIpc: mocks.llmIpc,
     listenIpc: mocks.listenIpc,
   };
 });
@@ -163,6 +174,39 @@ function defaultSttModels() {
   ];
 }
 
+function llmModel(overrides: Partial<import("../lib/ipc").LlmModelInfo> = {}) {
+  return {
+    id: "hunyuan-mt-7b",
+    label: "Hunyuan-MT-7B (Q4_K_M)",
+    approxDownloadBytes: 4_624_950_272,
+    approxRamBytes: 6_500_000_000,
+    downloaded: false,
+    isDefault: true,
+    running: false,
+    ...overrides,
+  };
+}
+
+function defaultLlmModels() {
+  return [
+    llmModel(),
+    llmModel({
+      id: "qwen3-14b",
+      label: "Qwen3 14B (Q4_K_M)",
+      approxDownloadBytes: 9_001_752_960,
+      approxRamBytes: 12_000_000_000,
+      isDefault: false,
+    }),
+  ];
+}
+
+const idleLlmServerStatus = {
+  running: false,
+  modelId: null,
+  baseUrl: null,
+  port: null,
+};
+
 function providerPickerMetadata() {
   return [
     { provider_id: "gemini", display_name: "Gemini", requires_base_url: false },
@@ -254,6 +298,16 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue(providerPickerMetadata());
   mocks.providersIpc.checkLocalConnection.mockReset();
+  mocks.llmIpc.listModels.mockReset().mockResolvedValue(defaultLlmModels());
+  mocks.llmIpc.requestDownload.mockReset();
+  mocks.llmIpc.confirmDownload.mockReset();
+  mocks.llmIpc.cancelDownload.mockReset().mockResolvedValue(undefined);
+  mocks.llmIpc.deleteModel.mockReset().mockResolvedValue(undefined);
+  mocks.llmIpc.startServer.mockReset();
+  mocks.llmIpc.stopServer.mockReset().mockResolvedValue(undefined);
+  mocks.llmIpc.serverStatus
+    .mockReset()
+    .mockResolvedValue({ ...idleLlmServerStatus });
   // useAudioSession subscribes to `audio:stopped`; the STT picker subscribes
   // to `stt:model-download-progress` - both share this noop unlisten mock.
   mocks.listenIpc.mockReset().mockResolvedValue(() => {});
@@ -1138,5 +1192,216 @@ describe("SettingsView", () => {
 
     expect(mocks.sttIpc.confirmSwitch).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  describe("Local LLM tab (ADR-006)", () => {
+    it("lists the shipped presets with downloaded/running flags", async () => {
+      mocks.llmIpc.listModels.mockResolvedValue([
+        llmModel({ downloaded: true, running: true }),
+        llmModel({ id: "qwen3-14b", label: "Qwen3 14B (Q4_K_M)" }),
+      ]);
+      render(<SettingsView />);
+      await openTab("Local LLM");
+
+      const hunyuanRow = screen
+        .getByText("Hunyuan-MT-7B (Q4_K_M)")
+        .closest("li") as HTMLElement;
+      expect(within(hunyuanRow).getByText("Downloaded")).toBeInTheDocument();
+      expect(within(hunyuanRow).getAllByText("Running").length).toBeGreaterThan(
+        0,
+      );
+
+      const qwenRow = screen
+        .getByText("Qwen3 14B (Q4_K_M)")
+        .closest("li") as HTMLElement;
+      expect(within(qwenRow).getByText("Not downloaded")).toBeInTheDocument();
+    });
+
+    it("requires consent before any download, then tracks progress and supports cancel (human-in-the-loop.md)", async () => {
+      mocks.llmIpc.requestDownload.mockResolvedValue({
+        status: "consentRequired",
+        disclosure: {
+          modelSetId: "local-llm-gguf",
+          displayName: "Local LLM translation model (llama-server)",
+          hostName: "Hugging Face",
+          hostDomain: "huggingface.co",
+          artifacts: [
+            {
+              filename: "Hunyuan-MT-7B.Q4_K_M.gguf",
+              approxSizeBytes: 4_624_950_272,
+            },
+          ],
+          totalApproxSizeBytes: 4_624_950_272,
+          destination: "~/.ost/llm",
+        },
+      });
+      let progressHandler: ((payload: unknown) => void) | null = null;
+      mocks.listenIpc.mockImplementation(
+        (event: string, cb: (p: unknown) => void) => {
+          if (event === "llm:model-download-progress") {
+            progressHandler = cb;
+          }
+          return Promise.resolve(() => {});
+        },
+      );
+      mocks.llmIpc.confirmDownload.mockImplementation(
+        () => new Promise<void>(() => {}),
+      );
+
+      render(<SettingsView />);
+      await openTab("Local LLM");
+
+      const row = screen
+        .getByText("Hunyuan-MT-7B (Q4_K_M)")
+        .closest("li") as HTMLElement;
+      await userEvent.click(
+        within(row).getByRole("button", { name: "Download" }),
+      );
+
+      // Never downloads on its own.
+      expect(mocks.llmIpc.confirmDownload).not.toHaveBeenCalled();
+      const dialog = await screen.findByRole("dialog", {
+        name: "Download this local LLM translation model",
+      });
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Allow download" }),
+      );
+
+      await waitFor(() =>
+        expect(mocks.llmIpc.confirmDownload).toHaveBeenCalledWith(
+          "hunyuan-mt-7b",
+        ),
+      );
+
+      act(() => {
+        progressHandler?.({
+          modelId: "hunyuan-mt-7b",
+          downloadedBytes: 1_000_000_000,
+          totalBytes: 4_624_950_272,
+        });
+      });
+      await waitFor(() =>
+        expect(screen.getByRole("progressbar")).toBeInTheDocument(),
+      );
+
+      const cancelButton = await within(row).findByRole("button", {
+        name: "Cancel download",
+      });
+      await userEvent.click(cancelButton);
+      await waitFor(() =>
+        expect(mocks.llmIpc.cancelDownload).toHaveBeenCalledWith(
+          "hunyuan-mt-7b",
+        ),
+      );
+    });
+
+    it("starts and stops the managed server, reflecting status", async () => {
+      mocks.llmIpc.listModels
+        .mockResolvedValueOnce([llmModel({ downloaded: true })])
+        .mockResolvedValue([llmModel({ downloaded: true, running: true })]);
+      mocks.llmIpc.startServer.mockResolvedValue({
+        running: true,
+        modelId: "hunyuan-mt-7b",
+        baseUrl: "http://127.0.0.1:8177",
+        port: 8177,
+      });
+      render(<SettingsView />);
+      await openTab("Local LLM");
+
+      expect(screen.getByText("Not running")).toBeInTheDocument();
+
+      const row = screen
+        .getByText("Hunyuan-MT-7B (Q4_K_M)")
+        .closest("li") as HTMLElement;
+      await userEvent.click(
+        within(row).getByRole("button", { name: "Start server" }),
+      );
+
+      await waitFor(() =>
+        expect(mocks.llmIpc.startServer).toHaveBeenCalledWith("hunyuan-mt-7b"),
+      );
+      await waitFor(() =>
+        expect(screen.getByText("Running: hunyuan-mt-7b")).toBeInTheDocument(),
+      );
+      const stopButton = await within(row).findByRole("button", {
+        name: "Stop server",
+      });
+
+      await userEvent.click(stopButton);
+      await waitFor(() =>
+        expect(mocks.llmIpc.stopServer).toHaveBeenCalledTimes(1),
+      );
+      await waitFor(() =>
+        expect(screen.getByText("Not running")).toBeInTheDocument(),
+      );
+    });
+
+    it("shows the binary-location hint on a binaryNotFound start failure", async () => {
+      mocks.llmIpc.listModels.mockResolvedValue([
+        llmModel({ downloaded: true }),
+      ]);
+      mocks.llmIpc.startServer.mockRejectedValue({ kind: "binaryNotFound" });
+      render(<SettingsView />);
+      await openTab("Local LLM");
+
+      const row = screen
+        .getByText("Hunyuan-MT-7B (Q4_K_M)")
+        .closest("li") as HTMLElement;
+      await userEvent.click(
+        within(row).getByRole("button", { name: "Start server" }),
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.getByText("The llama-server program was not found"),
+        ).toBeInTheDocument(),
+      );
+      expect(screen.getByText(/OST_LLAMA_SERVER_PATH/)).toBeInTheDocument();
+    });
+
+    it("threads the managed server's base_url and model id into the local_openai provider on start", async () => {
+      mocks.llmIpc.listModels.mockResolvedValue([
+        llmModel({ downloaded: true }),
+      ]);
+      mocks.llmIpc.startServer.mockResolvedValue({
+        running: true,
+        modelId: "hunyuan-mt-7b",
+        baseUrl: "http://127.0.0.1:8177",
+        port: 8177,
+      });
+      render(<SettingsView />);
+      await openTab("Local LLM");
+
+      const row = screen
+        .getByText("Hunyuan-MT-7B (Q4_K_M)")
+        .closest("li") as HTMLElement;
+      await userEvent.click(
+        within(row).getByRole("button", { name: "Start server" }),
+      );
+
+      await waitFor(() =>
+        expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            localOpenAi: expect.objectContaining({
+              baseUrl: "http://127.0.0.1:8177",
+              modelId: "hunyuan-mt-7b",
+            }),
+          }),
+        ),
+      );
+
+      // Translation only actually routes through it once the user explicitly
+      // makes it the active provider (human-in-the-loop.md - never a silent
+      // provider switch).
+      const useButton = await screen.findByRole("button", {
+        name: "Use for translation (sets this as the active provider)",
+      });
+      await userEvent.click(useButton);
+      await waitFor(() =>
+        expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultProvider: "local_openai" }),
+        ),
+      );
+    });
   });
 });

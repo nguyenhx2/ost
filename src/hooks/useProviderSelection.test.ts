@@ -133,6 +133,35 @@ describe("useProviderSelection", () => {
     );
   });
 
+  it("setLocalOpenAi persists a base_url + model id patch in ONE write (ADR-006 wiring)", async () => {
+    const { result } = renderHook(() => useProviderSelection());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setLocalOpenAi({
+        baseUrl: "http://127.0.0.1:8177",
+        modelId: "hunyuan-mt-7b",
+      });
+    });
+
+    expect(result.current.settings.localOpenAi).toEqual({
+      baseUrl: "http://127.0.0.1:8177",
+      modelId: "hunyuan-mt-7b",
+    });
+    // A single saveProviderSettings call carries BOTH fields - calling the two
+    // individual setters back-to-back would race a stale closure and only
+    // persist the second field.
+    expect(mocks.saveProviderSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.saveProviderSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localOpenAi: {
+          baseUrl: "http://127.0.0.1:8177",
+          modelId: "hunyuan-mt-7b",
+        },
+      }),
+    );
+  });
+
   it("ignores an out-of-range move", async () => {
     const { result } = renderHook(() => useProviderSelection());
     await waitFor(() => expect(result.current.loading).toBe(false));

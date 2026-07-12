@@ -6,6 +6,7 @@ import {
   History,
   Keyboard,
   Play,
+  Server,
   ShieldCheck,
   ShieldOff,
   Square,
@@ -20,6 +21,7 @@ import {
   PlainText,
   ProgressBar,
   Select,
+  Spinner,
   Switch,
   Tabs,
   type SelectOption,
@@ -56,12 +58,16 @@ import { useHistorySettings } from "../hooks/useHistorySettings";
 import { useAudioSession } from "../hooks/useAudioSession";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { useSttModels, type UseSttModelsResult } from "../hooks/useSttModels";
+import { useLlmModels, type UseLlmModelsResult } from "../hooks/useLlmModels";
+import { useLlmServer, type UseLlmServerResult } from "../hooks/useLlmServer";
 import { resultMessage } from "./settingsMessages";
 import {
   historyIpc,
   HOTKEY_ACTIONS,
   type HotkeyAction,
   type HotkeyErrorKind,
+  type LlmModelErrorKind,
+  type LlmServerErrorKind,
   type LocalProviderErrorKind,
   type ModelConsentStatus,
   type SttModelDeleteErrorKind,
@@ -119,6 +125,24 @@ const LOCAL_PROVIDER_ERROR_KEYS: Record<LocalProviderErrorKind, I18nKey> = {
   network: "settings.localErrorNetwork",
   timeout: "settings.localErrorTimeout",
   provider: "settings.localErrorProvider",
+};
+
+const LLM_MODEL_ERROR_KEYS: Record<LlmModelErrorKind, I18nKey> = {
+  unknownModel: "settings.llmModelErrorUnknownModel",
+  download: "settings.llmModelErrorDownload",
+  cancelled: "settings.llmModelErrorCancelled",
+  sessionActive: "settings.llmModelErrorSessionActive",
+  io: "settings.llmModelErrorIo",
+};
+
+const LLM_SERVER_ERROR_KEYS: Record<LlmServerErrorKind, I18nKey> = {
+  unknownModel: "settings.llmServerErrorUnknownModel",
+  notDownloaded: "settings.llmServerErrorNotDownloaded",
+  binaryNotFound: "settings.llmServerErrorBinaryNotFound",
+  spawnFailed: "settings.llmServerErrorSpawnFailed",
+  exitedDuringStartup: "settings.llmServerErrorExitedDuringStartup",
+  readinessTimeout: "settings.llmServerErrorReadinessTimeout",
+  stopFailed: "settings.llmServerErrorStopFailed",
 };
 
 /** Resolves a catalog id's display label through the i18n mapping, falling
@@ -389,23 +413,303 @@ function SttModelManagementSection({ stt }: { stt: UseSttModelsResult }) {
 }
 
 /**
- * Local LLM tab (Settings, TASK-034 owner ask 3): model download/removal
- * management is DEFERRED pending an architecture decision - this is a clearly
- * labelled placeholder rather than a half-built feature. The local
- * OpenAI-compatible server CONNECTION itself is already configured under the
- * "Providers and keys" tab (base_url / model id / connection check), so this
- * tab only covers the still-missing piece.
+ * Managed local-LLM engine status + server control (Settings, ADR-006). Shows
+ * whether `llama-server` is running, which model, and its loopback address;
+ * surfaces typed start/stop errors with actionable copy (a `binaryNotFound`
+ * error gets the binary-location hint since there is no file picker yet -
+ * owner ask: a clear message is enough for now). "Use for translation" is the
+ * ONE explicit action that points the `local_openai` provider at the managed
+ * server (human-in-the-loop.md: switching provider is a deliberate step, never
+ * silent) - the base_url/model id themselves are threaded automatically the
+ * moment the server starts (providers.md WIRING note), so this button only
+ * needs to flip the active-provider selection.
  */
-function LocalLlmSection() {
+function LocalLlmServerSection({
+  llmServer,
+  isActiveProvider,
+  onUseAsProvider,
+}: {
+  llmServer: UseLlmServerResult;
+  isActiveProvider: boolean;
+  onUseAsProvider: () => void;
+}) {
+  const { status } = llmServer;
+
   return (
     <section
       className="settings-section"
-      aria-labelledby="settings-local-llm-heading"
+      aria-labelledby="settings-llm-server-heading"
     >
-      <h2 id="settings-local-llm-heading">
-        {t("settings.localLlmModelsHeading")}
-      </h2>
-      <p className="settings-hint">{t("settings.localLlmModelsPlaceholder")}</p>
+      <h2 id="settings-llm-server-heading">{t("settings.llmServerHeading")}</h2>
+      <p className="settings-hint">{t("settings.llmServerHint")}</p>
+
+      {!llmServer.loading ? (
+        <div className="settings-model-meta">
+          <span className="settings-field-label">
+            {t("settings.llmServerStatusLabel")}
+          </span>
+          {status.running ? (
+            <Badge variant="success" label={t("settings.llmServerRunning")}>
+              <Server size={12} aria-hidden="true" />
+              {t("settings.llmServerRunningWithModel", {
+                model: status.modelId ?? "",
+              })}
+            </Badge>
+          ) : (
+            <Badge variant="default" label={t("settings.llmServerStopped")}>
+              {t("settings.llmServerStopped")}
+            </Badge>
+          )}
+          {status.running && status.baseUrl ? (
+            <span className="settings-model-host">
+              <PlainText text={status.baseUrl} />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {status.running ? (
+        <div className="settings-provider-actions">
+          <Button
+            variant={isActiveProvider ? "default" : "primary"}
+            onClick={onUseAsProvider}
+            disabled={isActiveProvider}
+          >
+            {isActiveProvider
+              ? t("settings.llmServerUseAsProviderActive")
+              : t("settings.llmServerUseAsProvider")}
+          </Button>
+        </div>
+      ) : null}
+
+      {llmServer.error ? (
+        <>
+          <p
+            className="settings-message settings-message--danger"
+            role="alert"
+            aria-live="assertive"
+          >
+            {t(LLM_SERVER_ERROR_KEYS[llmServer.error])}
+          </p>
+          {llmServer.error === "binaryNotFound" ? (
+            <p className="settings-hint" role="note">
+              {t("settings.llmBinaryHint")}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Managed local-LLM model list (Settings, ADR-006): the shipped GGUF presets
+ * (Hunyuan-MT-7B default, Qwen3-14B), their approximate size, download state,
+ * and per-row download/cancel/delete/start/stop controls. Mirrors
+ * `SttModelManagementSection` above - the SAME fail-closed consent-download
+ * gate, the SAME per-model-id progress tracking (a download survives picking
+ * a different row).
+ */
+function LocalLlmModelListSection({
+  llmModels,
+  llmServer,
+}: {
+  llmModels: UseLlmModelsResult;
+  llmServer: UseLlmServerResult;
+}) {
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  const handleDelete = (modelId: string) => {
+    setDeletingIds((prev) => new Set(prev).add(modelId));
+    void llmModels.deleteModel(modelId).finally(() => {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(modelId);
+        return next;
+      });
+    });
+  };
+
+  return (
+    <section
+      className="settings-section"
+      aria-labelledby="settings-llm-models-heading"
+    >
+      <h2 id="settings-llm-models-heading">{t("settings.llmModelsHeading")}</h2>
+      <p className="settings-hint">{t("settings.llmModelsHint")}</p>
+
+      <ul className="settings-provider-list">
+        {llmModels.models.map((m) => {
+          const download = llmModels.downloads[m.id];
+          const deleting = deletingIds.has(m.id);
+          const starting = llmServer.busy && llmServer.status.modelId === m.id;
+          const stopping =
+            llmServer.busy && !llmServer.status.running && m.running;
+
+          return (
+            <li key={m.id} className="settings-provider">
+              <div className="settings-provider-head">
+                <span className="settings-provider-name">{m.label}</span>
+                <span className="settings-provider-actions">
+                  {m.isDefault ? (
+                    <Badge
+                      variant="default"
+                      label={t("settings.llmModelDefault")}
+                    >
+                      {t("settings.llmModelDefault")}
+                    </Badge>
+                  ) : null}
+                  {m.running ? (
+                    <Badge
+                      variant="success"
+                      label={t("settings.llmModelRunning")}
+                    >
+                      <Server size={12} aria-hidden="true" />
+                      {t("settings.llmModelRunning")}
+                    </Badge>
+                  ) : null}
+                  <Badge
+                    variant={m.downloaded ? "success" : "default"}
+                    label={
+                      m.downloaded
+                        ? t("settings.llmModelListDownloaded")
+                        : t("settings.llmModelListNotDownloaded")
+                    }
+                  >
+                    {m.downloaded ? (
+                      <>
+                        <ShieldCheck size={12} aria-hidden="true" />
+                        {t("settings.llmModelListDownloaded")}
+                      </>
+                    ) : (
+                      t("settings.llmModelListNotDownloaded")
+                    )}
+                  </Badge>
+                </span>
+              </div>
+
+              <div className="settings-model-meta">
+                <span className="settings-field-label">
+                  {t("settings.llmModelSizeLabel")}
+                </span>
+                <span className="settings-model-host">
+                  {`${formatBytes(m.approxDownloadBytes)} / ${formatBytes(
+                    m.approxRamBytes,
+                  )}`}
+                </span>
+              </div>
+
+              {download ? (
+                <div className="settings-field">
+                  <ProgressBar
+                    label={t("settings.llmModelListProgress", {
+                      model: m.label,
+                    })}
+                    value={
+                      download.progress && download.progress.totalBytes > 0
+                        ? (download.progress.downloadedBytes /
+                            download.progress.totalBytes) *
+                          100
+                        : 0
+                    }
+                  />
+                  {download.progress ? (
+                    <p
+                      className="settings-hint"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {`${formatBytes(
+                        download.progress.downloadedBytes,
+                      )} / ${formatBytes(download.progress.totalBytes)}`}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="settings-provider-actions">
+                {download ? (
+                  <Button
+                    onClick={() => llmModels.cancelDownload(m.id)}
+                    disabled={download.cancelling}
+                  >
+                    {download.cancelling
+                      ? t("settings.llmModelListCancelling")
+                      : t("settings.llmModelListCancel")}
+                  </Button>
+                ) : !m.downloaded ? (
+                  <Button onClick={() => llmModels.requestDownload(m.id)}>
+                    <Download size={16} aria-hidden="true" />
+                    {t("settings.llmModelListDownload")}
+                  </Button>
+                ) : m.running ? (
+                  <Button
+                    variant="primary"
+                    onClick={() =>
+                      void llmServer.stop().then(() => llmModels.refresh())
+                    }
+                    disabled={llmServer.busy}
+                  >
+                    <Square size={16} aria-hidden="true" />
+                    {stopping
+                      ? t("settings.llmModelStopping")
+                      : t("settings.llmModelStop")}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    onClick={() => void llmServer.start(m.id)}
+                    disabled={llmServer.busy}
+                  >
+                    {starting ? (
+                      <Spinner label={t("settings.llmModelStarting")} />
+                    ) : (
+                      <Play size={16} aria-hidden="true" />
+                    )}
+                    {starting
+                      ? t("settings.llmModelStarting")
+                      : t("settings.llmModelStart")}
+                  </Button>
+                )}
+                {!download ? (
+                  <IconButton
+                    label={
+                      deleting
+                        ? t("settings.llmModelListDeleting")
+                        : t("settings.llmModelListDelete")
+                    }
+                    onClick={() => handleDelete(m.id)}
+                    disabled={!m.downloaded || m.running || deleting}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </IconButton>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {llmModels.error ? (
+        <p
+          className="settings-message settings-message--danger"
+          role="alert"
+          aria-live="assertive"
+        >
+          {t(LLM_MODEL_ERROR_KEYS[llmModels.error])}
+        </p>
+      ) : null}
+
+      {llmModels.pendingConsent ? (
+        <ConsentDialog
+          open
+          disclosure={llmModels.pendingConsent.disclosure}
+          onGrant={llmModels.confirmDownload}
+          onDecline={llmModels.cancelConsent}
+          titleKey="consent.llmDownloadTitle"
+          introKey="consent.llmDownloadIntro"
+        />
+      ) : null}
     </section>
   );
 }
@@ -697,6 +1001,19 @@ export function SettingsView() {
   const picker = useProviderPickerMetadata();
   const localConn = useLocalProviderConnection();
   const stt = useSttModels();
+  const llmModels = useLlmModels();
+  const llmServer = useLlmServer((started) => {
+    // Threads the managed server's loopback base_url (and the model it just
+    // started) into the local_openai provider's settings, in ONE write
+    // (providers.md WIRING note) - never the ACTIVE provider selection
+    // itself, which stays an explicit user action ("Use for translation"
+    // below).
+    void selection.setLocalOpenAi({
+      baseUrl: started.baseUrl ?? "",
+      ...(started.modelId ? { modelId: started.modelId } : {}),
+    });
+    void llmModels.refresh();
+  });
   const [activeTab, setActiveTab] = useState("providers");
 
   const order = selection.settings.fallbackOrder;
@@ -1133,7 +1450,21 @@ export function SettingsView() {
     {
       id: "localLlm",
       label: t("settings.tabLocalLlm"),
-      content: <LocalLlmSection />,
+      content: (
+        <>
+          <LocalLlmServerSection
+            llmServer={llmServer}
+            isActiveProvider={isLocalProviderActive}
+            onUseAsProvider={() =>
+              void selection.setDefaultProvider(LOCAL_OPENAI_PROVIDER_ID)
+            }
+          />
+          <LocalLlmModelListSection
+            llmModels={llmModels}
+            llmServer={llmServer}
+          />
+        </>
+      ),
     },
     {
       id: "hotkeys",

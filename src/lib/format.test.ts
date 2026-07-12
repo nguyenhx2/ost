@@ -7,6 +7,11 @@ describe("formatBytes", () => {
     expect(formatBytes(7_700_000)).toBe("7.3 MB");
   });
 
+  it("formats gigabyte-scale sizes with one decimal", () => {
+    expect(formatBytes(4_624_950_272)).toBe("4.3 GB");
+    expect(formatBytes(9_001_752_960)).toBe("8.4 GB");
+  });
+
   it("formats kilobyte-scale sizes", () => {
     expect(formatBytes(2048)).toBe("2.0 KB");
   });
