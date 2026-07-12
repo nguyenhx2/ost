@@ -45,6 +45,8 @@ const mocks = vi.hoisted(() => ({
   listenIpc: vi.fn(),
   loadProviderSettings: vi.fn(),
   saveProviderSettings: vi.fn(),
+  loadRegionLanguageSettings: vi.fn(),
+  saveRegionLanguageSettings: vi.fn(),
 }));
 
 vi.mock("./lib/ipc", async (importOriginal) => {
@@ -71,6 +73,16 @@ vi.mock("./lib/settings", async (importOriginal) => {
     ...actual,
     loadProviderSettings: mocks.loadProviderSettings,
     saveProviderSettings: mocks.saveProviderSettings,
+  };
+});
+
+vi.mock("./lib/regionLanguageSettings", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./lib/regionLanguageSettings")>();
+  return {
+    ...actual,
+    loadRegionLanguageSettings: mocks.loadRegionLanguageSettings,
+    saveRegionLanguageSettings: mocks.saveRegionLanguageSettings,
   };
 });
 
@@ -160,6 +172,10 @@ beforeEach(() => {
   mocks.historyIpc.open.mockReset().mockResolvedValue(undefined);
   mocks.loadProviderSettings.mockReset().mockResolvedValue(providerSettings());
   mocks.saveProviderSettings.mockReset().mockResolvedValue(undefined);
+  mocks.loadRegionLanguageSettings
+    .mockReset()
+    .mockResolvedValue({ sourceLanguage: "auto", targetLanguage: "vi" });
+  mocks.saveRegionLanguageSettings.mockReset().mockResolvedValue(undefined);
   mocks.hotkeysIpc.get.mockReset().mockResolvedValue({
     toggleAudio: "Ctrl+Alt+A",
     regionSelect: "Ctrl+Alt+R",
@@ -255,6 +271,27 @@ describe("App (home screen, FR-04 TASK-028)", () => {
       screen.getByRole("button", { name: "Select region" }),
     );
     expect(mocks.regionIpc.startSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers region source/target language pickers persisted for the next selection (item 3)", async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByText("Translate a screen region")).toBeInTheDocument(),
+    );
+
+    const targetPicker = screen.getByRole("button", {
+      name: "Region target language",
+    });
+    expect(targetPicker).toHaveTextContent("Vietnamese");
+
+    await userEvent.click(targetPicker);
+    await userEvent.click(screen.getByRole("option", { name: "Japanese" }));
+
+    await waitFor(() =>
+      expect(mocks.saveRegionLanguageSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ targetLanguage: "ja" }),
+      ),
+    );
   });
 
   it("wires the Settings and History actions to the typed IPC commands", async () => {

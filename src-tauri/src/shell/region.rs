@@ -36,6 +36,16 @@ pub const EVENT_OCR_ERROR: &str = "region:ocr-error";
 /// been granted; carries the disclosure so the UI can ask (security-privacy.md).
 /// Shared namespace: whisper STT reuses the same consent facility in Phase 2.
 pub const EVENT_MODEL_CONSENT_REQUIRED: &str = "models:consent-required";
+/// Emitted to an ALREADY-OPEN preview window when a NEW region is confirmed
+/// (main window "Select region", tray, hotkey, or the in-dialog re-select
+/// button all reach this - every path arms `pending_region` then closes the
+/// select overlay, and [`open_preview_window`] fires this the moment it finds
+/// the preview window already present instead of building a new one). Without
+/// this signal the preview's mount-time OCR handshake never runs again, so an
+/// already-open dialog silently kept showing the OLD region forever (owner
+/// bug report). The frontend resets its state and re-calls
+/// `region_preview_ready` on receipt.
+pub const EVENT_REGION_SELECTED: &str = "region:selected";
 
 /// Upper bound for sane region dimensions/offsets (physical px).
 const MAX_REGION_PX: u32 = 32_768;
@@ -92,6 +102,22 @@ pub struct RegionTranslationRequest {
     pub source_text: String,
     pub provider: String,
     pub model: String,
+    /// User-selected target language (BR-07 default `vi`, item 3 language
+    /// pickers). Absent or blank falls back to [`DEFAULT_TARGET_LANGUAGE`].
+    #[serde(default)]
+    pub target_language: Option<String>,
+}
+
+/// Resolves the effective target language for a translation request: the
+/// user's non-blank selection, else the product default (`vi`).
+fn resolve_target_language(request: &RegionTranslationRequest) -> String {
+    request
+        .target_language
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_TARGET_LANGUAGE)
+        .to_string()
 }
 
 /// User-selected source language for the region (BR-07: auto-detect PLUS a
@@ -592,7 +618,15 @@ pub fn open_selection_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Shell
 /// DEFERRED off the calling turn (TASK-027 `open_deferred`) so this never
 /// deadlocks when invoked from inside a WebView IPC callback (or, as before
 /// TASK-023, from the select window's own `Destroyed` handler).
+///
+/// When the preview window is ALREADY open (a re-select while the dialog is
+/// showing), [`open_deferred`] only focuses it - no new mount happens, so the
+/// frontend's mount-time OCR handshake never re-runs on its own. This emits
+/// [`EVENT_REGION_SELECTED`] in exactly that case so the already-mounted
+/// frontend resets and re-arms the pipeline for the NEW region (the root cause
+/// fix for the "re-select does not refresh an open preview" bug).
 pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
+    let already_open = app.get_webview_window(PREVIEW_WINDOW_LABEL).is_some();
     open_deferred(
         app,
         PREVIEW_WINDOW_LABEL,
@@ -605,7 +639,10 @@ pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
                 .decorations(false)
                 .always_on_top(true)
                 .skip_taskbar(true)
-                .inner_size(480.0, 320.0)
+                // Comfortable default for reading source + translation +
+                // controls together (owner complaint: the old 480x320 default
+                // was cramped). Kept well above `min_inner_size` below.
+                .inner_size(600.0, 520.0)
                 // Mirrors the caption overlay's floor (`caption.rs`) and the
                 // CSS `--overlay-min-width` token so the panel never gets
                 // squeezed below a usable size (owner complaint, TASK shell).
@@ -613,6 +650,9 @@ pub(crate) fn open_preview_window(app: &AppHandle) -> Result<(), ShellError> {
         },
         |_window| Ok(()),
     );
+    if already_open {
+        let _ = app.emit_to(PREVIEW_WINDOW_LABEL, EVENT_REGION_SELECTED, ());
+    }
     Ok(())
 }
 
@@ -907,7 +947,8 @@ async fn translate_with_provider(
         Err(_) => return Err(fail("could not read the provider key from the keychain")),
     };
     let client = GeminiClient::new().map_err(|e| fail(&e.to_string()))?;
-    run_translation(&client, &key, request, DEFAULT_TARGET_LANGUAGE).await
+    let target_language = resolve_target_language(&request);
+    run_translation(&client, &key, request, &target_language).await
 }
 
 /// Process-monotonic correlation id for core-initiated OCR results.
@@ -1072,6 +1113,47 @@ mod tests {
         .unwrap();
         assert_eq!(request.request_id, "ui-1");
         assert_eq!(request.source_text, "hi");
+        // targetLanguage is optional (older/legacy callers omit it).
+        assert_eq!(request.target_language, None);
+    }
+
+    #[test]
+    fn translation_request_deserializes_the_optional_target_language() {
+        let request: RegionTranslationRequest = serde_json::from_str(
+            r#"{"requestId":"ui-2","sourceText":"hi","provider":"gemini","model":"m","targetLanguage":"ja"}"#,
+        )
+        .unwrap();
+        assert_eq!(request.target_language, Some("ja".into()));
+    }
+
+    fn translation_request_with_target(target: Option<&str>) -> RegionTranslationRequest {
+        RegionTranslationRequest {
+            request_id: "ui-t".into(),
+            source_text: "hi".into(),
+            provider: "gemini".into(),
+            model: "m".into(),
+            target_language: target.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn resolve_target_language_uses_the_selection_when_present() {
+        assert_eq!(
+            resolve_target_language(&translation_request_with_target(Some("ja"))),
+            "ja"
+        );
+    }
+
+    #[test]
+    fn resolve_target_language_falls_back_to_the_default_when_absent_or_blank() {
+        assert_eq!(
+            resolve_target_language(&translation_request_with_target(None)),
+            DEFAULT_TARGET_LANGUAGE
+        );
+        assert_eq!(
+            resolve_target_language(&translation_request_with_target(Some("   "))),
+            DEFAULT_TARGET_LANGUAGE
+        );
     }
 
     #[test]
@@ -1295,6 +1377,7 @@ mod tests {
             source_text: "Hello".into(),
             provider: "gemini".into(),
             model: "gemini-2.5-flash".into(),
+            target_language: None,
         };
 
         let payload = run_translation(&client, &key, request, "vi").await.unwrap();
@@ -1324,6 +1407,7 @@ mod tests {
             source_text: "Hello".into(),
             provider: "gemini".into(),
             model: "gemini-2.5-flash".into(),
+            target_language: None,
         };
 
         let err = run_translation(&client, &key, request, "vi")
@@ -1411,6 +1495,7 @@ mod tests {
             .starts_with("capture failed"));
         assert_eq!(EVENT_OCR_ERROR, "region:ocr-error");
         assert_eq!(EVENT_MODEL_CONSENT_REQUIRED, "models:consent-required");
+        assert_eq!(EVENT_REGION_SELECTED, "region:selected");
 
         // Absent fields are omitted (a bare error still leaves the state).
         let empty = OcrErrorPayload {
@@ -1892,6 +1977,7 @@ mod tests {
                 source_text: text.into(),
                 provider: "gemini".into(),
                 model: "m".into(),
+                target_language: None,
             };
             assert!(
                 request.source_text.trim().is_empty(),

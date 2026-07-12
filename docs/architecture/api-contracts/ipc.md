@@ -50,6 +50,7 @@ Yêu cầu dịch (lần đầu và khi dịch lại, AC-02.8).
 | `sourceText` | `string` | Text nguồn từ OCR; không được rỗng.                 |
 | `provider`   | `string` | Provider được chọn (gemini/anthropic/openai/...).   |
 | `model`      | `string` | Model được chọn.                                    |
+| `targetLanguage?` | `string` | Ngôn ngữ đích do người dùng chọn (item 3, picker trên màn hình chính và dialog preview). Rỗng/vắng mặt -> mặc định core-side (`vi`). Được ghi lại nguyên trạng vào `HISTORY_ENTRY.target_language`. |
 
 ### `SourceLanguage` (ngôn ngữ nguồn do người dùng chọn)
 
@@ -315,9 +316,10 @@ SHA-256 nội bộ. Coi mọi chuỗi là DATA (render plain-text).
 ## Events (core -> WebView)
 
 Phát tới cửa sổ `region-preview` bằng `emit_to`. Tên hằng số nằm ở `region.rs`
-(`EVENT_OCR_RESULT`, `EVENT_TRANSLATION_RESULT`, `EVENT_TRANSLATION_ERROR`) và ở `ipc.ts`
-(`EVENT_REGION_OCR_RESULT`, `EVENT_REGION_TRANSLATION_RESULT`,
-`EVENT_REGION_TRANSLATION_ERROR`).
+(`EVENT_OCR_RESULT`, `EVENT_TRANSLATION_RESULT`, `EVENT_TRANSLATION_ERROR`,
+`EVENT_REGION_SELECTED`) và ở `ipc.ts` (`EVENT_REGION_OCR_RESULT`,
+`EVENT_REGION_TRANSLATION_RESULT`, `EVENT_REGION_TRANSLATION_ERROR`,
+`EVENT_REGION_SELECTED`).
 
 ### `region:ocr-result` -> `OcrResultPayload`
 
@@ -405,6 +407,18 @@ Phát khi OCR bị chặn vì chưa có đồng thuận tải model lần đầu
 Namespace `models:` vì dùng chung (whisper STT tái dùng ở Phase 2). Hằng số:
 `EVENT_MODEL_CONSENT_REQUIRED` (`region.rs`). Sau khi người dùng gọi `grant_model_consent`,
 UI kích hoạt lại luồng preview (`region_preview_ready`) để chạy OCR.
+
+### `region:selected` (không payload)
+
+Phát TỚI cửa sổ `region-preview` khi nó đã đang mở và một vùng MỚI vừa được xác nhận
+(từ màn hình chính, tray, hotkey, hoặc nút "Chọn vùng mới" bên trong chính dialog).
+`open_preview_window` (`region.rs`) chỉ FOCUS cửa sổ preview đã tồn tại (không build lại,
+không remount) nên bắt tay `region_preview_ready` khi mount sẽ KHÔNG tự chạy lại - đây là
+nguyên nhân gốc của lỗi "chọn lại vùng không cập nhật dialog đang mở". Hằng số:
+`EVENT_REGION_SELECTED` (`region.rs`, `ipc.ts`). Khi nhận sự kiện này, frontend RESET toàn bộ
+state về trạng thái ban đầu (source/translation cũ bị xoá khỏi màn hình) và gọi lại
+`region_preview_ready()` để chạy pipeline cho vùng mới. Cửa sổ MỚI được build (chưa từng mở)
+không nhận sự kiện này - nó dùng handshake mount-time bình thường.
 
 ### `audio:caption` -> `AudioCaptionPayload`
 
