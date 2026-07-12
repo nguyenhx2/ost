@@ -27,9 +27,11 @@ import {
 } from "../lib/languages";
 import {
   DEFAULT_PROVIDER_OPTION,
+  LOCAL_OPENAI_PROVIDER_ID,
   type ProviderModelOption,
 } from "../lib/providers";
 import { activeModel, loadProviderSettings } from "../lib/settings";
+import { isValidLocalBaseUrl } from "../lib/localProvider";
 import { recordTranslation } from "../lib/history";
 import {
   loadRegionLanguageSettings,
@@ -72,8 +74,13 @@ export type PreviewStatus =
  * - `noKey`   NO provider has a key configured (detected client-side before
  *   ever sending a translate request) - a distinct, actionable notice, never
  *   the generic failure copy (human-in-the-loop.md).
+ * - `localNotConfigured` the active provider is the local OpenAI-compatible
+ *   one and its `base_url` is empty or not loopback-valid (detected
+ *   client-side, same short-circuit as `noKey` - the local provider needs no
+ *   key at all, so `noKey` never applies to it).
  */
-export type PreviewFailureReason = "error" | "timeout" | "ocr" | "noKey";
+export type PreviewFailureReason =
+  "error" | "timeout" | "ocr" | "noKey" | "localNotConfigured";
 
 const FULL_FIDELITY: OcrFidelity = { kind: "full" };
 
@@ -227,6 +234,9 @@ export function useRegionPreview(): UseRegionPreviewResult {
   const optionRef = useRef(option);
   const hasKeyRef = useRef(hasKey);
   hasKeyRef.current = hasKey;
+  /** Persisted local-provider `base_url` (FR-03.CUSTOM-1..5), or "" until the
+   * provider-settings load below completes. */
+  const localBaseUrlRef = useRef("");
   const sourceLanguagePrefRef = useRef(sourceLanguage);
   const targetLanguageRef = useRef(targetLanguage);
 
@@ -291,6 +301,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
         }
         const provider = settings.defaultProvider;
         const model = activeModel(settings);
+        localBaseUrlRef.current = settings.localOpenAi.baseUrl;
         if (!model) {
           return;
         }
@@ -357,6 +368,20 @@ export function useRegionPreview(): UseRegionPreviewResult {
   );
 
   /**
+   * `true` when the active provider is the local OpenAI-compatible one and
+   * its persisted `base_url` is empty or not loopback-valid (owner-reported
+   * bug: this used to fall through to a doomed request and a generic
+   * failure). Never true for a keyed provider - those go through the
+   * separate `noKey` check instead.
+   */
+  const isLocalProviderNotConfigured = useCallback(() => {
+    return (
+      optionRef.current.provider === LOCAL_OPENAI_PROVIDER_ID &&
+      !isValidLocalBaseUrl(localBaseUrlRef.current)
+    );
+  }, []);
+
+  /**
    * Shared core of "a source text arrived, (maybe) translate it" - used by
    * the OCR handler AND the paste/edit path (item 2) so both go through the
    * EXACT same state transitions and translate request (owner requirement:
@@ -393,6 +418,22 @@ export function useRegionPreview(): UseRegionPreviewResult {
       sourceTextRef.current = sourceText;
       sourceLanguageRef.current = detectedLanguage;
       translationRef.current = null;
+      // The local OpenAI-compatible provider needs no key at all (BR-02) -
+      // check it FIRST and independently of `hasKeyRef` so a zero-key
+      // household never wrongly shows "no key" for a provider that has none.
+      if (isLocalProviderNotConfigured()) {
+        setState((prev) => ({
+          status: "failed",
+          sourceText,
+          lowConfidence,
+          fidelity,
+          translation: null,
+          provider: prev.provider,
+          model: prev.model,
+          failureReason: "localNotConfigured",
+        }));
+        return;
+      }
       // No provider key configured: this is a distinct, actionable state, not
       // a translation failure - never fire the doomed translate request
       // (human-in-the-loop.md, requirement to detect BEFORE attempting).
@@ -421,7 +462,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
       }));
       requestTranslation(sourceText);
     },
-    [clearTranslationTimeout, requestTranslation],
+    [clearTranslationTimeout, requestTranslation, isLocalProviderNotConfigured],
   );
 
   /**
@@ -659,6 +700,18 @@ export function useRegionPreview(): UseRegionPreviewResult {
     if (sourceText.trim() === "") {
       return; // nothing to translate (AC-02.7 guard)
     }
+    if (isLocalProviderNotConfigured()) {
+      // Same local-provider gate as the initial OCR path - never a doomed
+      // request when the local server URL is missing/invalid.
+      translationRef.current = null;
+      setState((prev) => ({
+        ...prev,
+        status: "failed",
+        translation: null,
+        failureReason: "localNotConfigured",
+      }));
+      return;
+    }
     if (!hasKeyRef.current) {
       // Same no-key gate as the initial OCR path - never a doomed request.
       translationRef.current = null;
@@ -678,7 +731,7 @@ export function useRegionPreview(): UseRegionPreviewResult {
       failureReason: null,
     }));
     requestTranslation(sourceText);
-  }, [requestTranslation]);
+  }, [requestTranslation, isLocalProviderNotConfigured]);
 
   const copySource = useCallback(() => {
     if (sourceTextRef.current !== "") {

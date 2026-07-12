@@ -112,6 +112,13 @@
   color: var(--color-text);
 }
 
+/* Loopback-URL hint on the localNotConfigured notice - a muted secondary
+   line, same treatment as the region preview's equivalent hint. */
+.caption-overlay-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 .caption-overlay-controls {
   display: flex;
   align-items: center;

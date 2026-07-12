@@ -342,24 +342,42 @@ fn toggle_overlay<R: Runtime>(app: &AppHandle<R>) {
 fn read_audio_request<R: Runtime>(app: &AppHandle<R>) -> Option<AudioSessionRequest> {
     let store = app.store(SETTINGS_STORE_FILE).ok()?;
     let selection = store.get(PROVIDER_SELECTION_KEY)?;
-    let (provider, model) = provider_model_from_selection(&selection)?;
+    let (provider, model, base_url) = provider_model_from_selection(&selection)?;
     Some(AudioSessionRequest {
         provider,
         model,
         source_language: None,
         target_language: None,
+        base_url,
     })
 }
 
-/// Extract `(defaultProvider, models[defaultProvider])` from the persisted
-/// `providerSelection` value. Factored out for unit testing without a store.
-fn provider_model_from_selection(value: &serde_json::Value) -> Option<(String, String)> {
+/// Extract `(defaultProvider, model, base_url)` from the persisted
+/// `providerSelection` value. The local OpenAI-compatible provider (FR-03.
+/// CUSTOM-1) has no entry in the keyed `models` record - its model id and
+/// `base_url` live under `localOpenAi` instead (`src/lib/settings.ts`).
+/// Factored out for unit testing without a store.
+fn provider_model_from_selection(
+    value: &serde_json::Value,
+) -> Option<(String, String, Option<String>)> {
     let provider = value.get("defaultProvider")?.as_str()?.to_string();
+    if provider == "local_openai" {
+        let local = value.get("localOpenAi")?;
+        let model = local.get("modelId")?.as_str()?.to_string();
+        if model.is_empty() {
+            return None;
+        }
+        let base_url = local
+            .get("baseUrl")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        return Some((provider, model, base_url));
+    }
     let model = value.get("models")?.get(&provider)?.as_str()?.to_string();
     if provider.is_empty() || model.is_empty() {
         return None;
     }
-    Some((provider, model))
+    Some((provider, model, None))
 }
 
 /// Current effective hotkey config (Settings reads this to render the bindings).
@@ -467,7 +485,7 @@ mod tests {
         });
         assert_eq!(
             provider_model_from_selection(&value),
-            Some(("gemini".to_string(), "gemini-2.5-flash".to_string()))
+            Some(("gemini".to_string(), "gemini-2.5-flash".to_string(), None))
         );
     }
 
@@ -476,6 +494,32 @@ mod tests {
         let value = serde_json::json!({
             "defaultProvider": "gemini",
             "models": { "openai": "gpt-5-mini" }
+        });
+        assert_eq!(provider_model_from_selection(&value), None);
+    }
+
+    #[test]
+    fn provider_model_reads_the_local_provider_model_and_base_url() {
+        let value = serde_json::json!({
+            "defaultProvider": "local_openai",
+            "models": { "gemini": "gemini-2.5-flash" },
+            "localOpenAi": { "baseUrl": "http://127.0.0.1:1234", "modelId": "Hy-MT2-7B" }
+        });
+        assert_eq!(
+            provider_model_from_selection(&value),
+            Some((
+                "local_openai".to_string(),
+                "Hy-MT2-7B".to_string(),
+                Some("http://127.0.0.1:1234".to_string())
+            ))
+        );
+    }
+
+    #[test]
+    fn provider_model_is_none_when_the_local_provider_has_no_model_id() {
+        let value = serde_json::json!({
+            "defaultProvider": "local_openai",
+            "localOpenAi": { "baseUrl": "http://127.0.0.1:1234", "modelId": "" }
         });
         assert_eq!(provider_model_from_selection(&value), None);
     }

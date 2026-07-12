@@ -363,6 +363,72 @@ describe("useRegionPreview - no provider key configured (TASK-025)", () => {
   });
 });
 
+describe("useRegionPreview - local provider not configured (owner-reported bug)", () => {
+  function withLocalProvider(baseUrl: string) {
+    mocks.loadProviderSettings.mockResolvedValue({
+      defaultProvider: "local_openai",
+      models: {
+        gemini: "gemini-2.5-flash",
+        anthropic: "claude-sonnet-4-5",
+        openai: "gpt-5-mini",
+        openrouter: "auto",
+      },
+      fallbackOrder: [],
+      localOpenAi: { baseUrl, modelId: "Hy-MT2-7B" },
+    });
+  }
+
+  it("shows localNotConfigured (never noKey) for an empty base_url, with zero keys stored", async () => {
+    // The local provider needs no key at all - a household with zero keys
+    // for the four keyed providers must still get the LOCAL notice, not the
+    // unrelated noKey one.
+    mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({}));
+    withLocalProvider("");
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.loadProviderSettings).toHaveBeenCalled());
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+
+    expect(result.current.state.status).toBe("failed");
+    expect(result.current.state.failureReason).toBe("localNotConfigured");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("shows localNotConfigured for a non-loopback base_url", async () => {
+    withLocalProvider("https://example.com");
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.loadProviderSettings).toHaveBeenCalled());
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+
+    expect(result.current.state.failureReason).toBe("localNotConfigured");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+
+  it("does NOT trigger localNotConfigured for a valid loopback base_url", async () => {
+    withLocalProvider("http://127.0.0.1:1234");
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.loadProviderSettings).toHaveBeenCalled());
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+
+    expect(result.current.state.failureReason).not.toBe("localNotConfigured");
+    expect(mocks.regionIpc.requestTranslation).toHaveBeenCalledTimes(1);
+  });
+
+  it("retranslate stays gated on localNotConfigured (no doomed request)", async () => {
+    withLocalProvider("");
+    const { result } = await renderPreview();
+    await waitFor(() => expect(mocks.loadProviderSettings).toHaveBeenCalled());
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    act(() => result.current.retranslate());
+
+    expect(result.current.state.failureReason).toBe("localNotConfigured");
+    expect(mocks.regionIpc.requestTranslation).not.toHaveBeenCalled();
+  });
+});
+
 describe("useRegionPreview - translation failure (human-in-the-loop, BR-05)", () => {
   it("moves to the failed state on a translation-error event", async () => {
     const { result } = await renderPreview();
