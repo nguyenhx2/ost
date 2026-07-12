@@ -1,6 +1,16 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Info } from "lucide-react";
 import { t } from "../../lib/i18n";
+import { clampToViewport, viewportGutterPx } from "../../lib/floatingPosition";
 import { Tooltip } from "./Tooltip";
 
 export interface SelectOption {
@@ -21,6 +31,26 @@ export interface SelectProps {
   onChange: (value: string) => void;
   /** Accessible name for the trigger and listbox (i18n'd by the caller). */
   label: string;
+}
+
+interface ListboxPositionStyle {
+  top: number;
+  left: number;
+  minWidth: number;
+}
+
+/** Inline style for the portaled listbox: hidden until the layout effect has
+ * measured a position, then pinned to viewport coordinates (`position:
+ * fixed`, set in CSS) so it never reflows the panel it opened from. */
+function listboxStyle(position: ListboxPositionStyle | null): CSSProperties {
+  if (!position) {
+    return { visibility: "hidden" };
+  }
+  return {
+    top: `${position.top}px`,
+    left: `${position.left}px`,
+    minWidth: `${position.minWidth}px`,
+  };
 }
 
 function isEnabled(options: SelectOption[], index: number): boolean {
@@ -51,6 +81,7 @@ function nearestEnabled(
 export function Select({ options, value, onChange, label }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [position, setPosition] = useState<ListboxPositionStyle | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
   const idBase = useId();
@@ -61,6 +92,51 @@ export function Select({ options, value, onChange, label }: SelectProps) {
     if (open) {
       listboxRef.current?.focus();
     }
+  }, [open]);
+
+  // Owner complaint (item 2): the listbox used to render IN-PLACE and could
+  // push/break the surrounding overlay layout instead of overlaying on top.
+  // Portaling to <body> (below) removes it from the panel's flow entirely;
+  // this effect computes its VIEWPORT position from the trigger's measured
+  // rect, flipping above the trigger when there is not enough room below,
+  // and also escapes the overlay panel's `overflow: hidden` scroll clip that
+  // used to cut it off near a window edge (item 3, shared with Tooltip).
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const listbox = listboxRef.current;
+    if (!trigger || !listbox) {
+      return;
+    }
+    const place = () => {
+      const triggerRect = trigger.getBoundingClientRect();
+      const listRect = listbox.getBoundingClientRect();
+      const gutter = viewportGutterPx();
+      let top = triggerRect.bottom + gutter / 2;
+      const overflowsBelow =
+        top + listRect.height > window.innerHeight - gutter;
+      if (overflowsBelow) {
+        const above = triggerRect.top - listRect.height - gutter / 2;
+        if (above >= gutter) {
+          top = above;
+        }
+      }
+      const clamped = clampToViewport(
+        { top, left: triggerRect.left },
+        { width: listRect.width, height: listRect.height },
+      );
+      setPosition({ ...clamped, minWidth: triggerRect.width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
   }, [open]);
 
   const openList = () => {
@@ -146,63 +222,70 @@ export function Select({ options, value, onChange, label }: SelectProps) {
         <span>{selected ? selected.label : t("ui.select.placeholder")}</span>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
-      {open ? (
-        <ul
-          ref={listboxRef}
-          role="listbox"
-          aria-label={label}
-          aria-activedescendant={`${idBase}-opt-${activeIndex}`}
-          tabIndex={-1}
-          className="ost-select-listbox"
-          onKeyDown={onListKeyDown}
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget)) {
-              closeList(false);
-            }
-          }}
-        >
-          {options.map((option, index) => (
-            <li
-              key={option.value}
-              id={`${idBase}-opt-${index}`}
-              role="option"
-              aria-selected={option.value === value}
-              aria-disabled={option.disabled || undefined}
-              // Pins the accessible name to the label alone - without this,
-              // the disabled-reason Tooltip's text (a sibling node) would
-              // otherwise be folded into the computed option name.
-              aria-label={option.label}
-              className={`ost-select-option${
-                index === activeIndex ? " ost-select-option--active" : ""
-              }${option.disabled ? " ost-select-option--disabled" : ""}`}
-              onMouseEnter={() => {
-                if (!option.disabled) {
-                  setActiveIndex(index);
-                }
-              }}
-              onClick={() => {
-                if (!option.disabled) {
-                  commit(index);
+      {open
+        ? createPortal(
+            <ul
+              ref={listboxRef}
+              role="listbox"
+              aria-label={label}
+              aria-activedescendant={`${idBase}-opt-${activeIndex}`}
+              tabIndex={-1}
+              className="ost-select-listbox"
+              // Computed viewport coordinates from the measured trigger/listbox
+              // rects (see the layout effect above) - not a design-token
+              // bypass, the same data-driven-position exception as Tooltip.
+              style={listboxStyle(position)}
+              onKeyDown={onListKeyDown}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                  closeList(false);
                 }
               }}
             >
-              <span>{option.label}</span>
-              {option.disabled && option.disabledReason ? (
-                <Tooltip text={option.disabledReason}>
-                  <span
-                    className="ost-select-option-hint"
-                    tabIndex={0}
-                    role="img"
-                    aria-label={option.disabledReason}
-                  >
-                    <Info size={12} aria-hidden="true" />
-                  </span>
-                </Tooltip>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+              {options.map((option, index) => (
+                <li
+                  key={option.value}
+                  id={`${idBase}-opt-${index}`}
+                  role="option"
+                  aria-selected={option.value === value}
+                  aria-disabled={option.disabled || undefined}
+                  // Pins the accessible name to the label alone - without this,
+                  // the disabled-reason Tooltip's text (a sibling node) would
+                  // otherwise be folded into the computed option name.
+                  aria-label={option.label}
+                  className={`ost-select-option${
+                    index === activeIndex ? " ost-select-option--active" : ""
+                  }${option.disabled ? " ost-select-option--disabled" : ""}`}
+                  onMouseEnter={() => {
+                    if (!option.disabled) {
+                      setActiveIndex(index);
+                    }
+                  }}
+                  onClick={() => {
+                    if (!option.disabled) {
+                      commit(index);
+                    }
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {option.disabled && option.disabledReason ? (
+                    <Tooltip text={option.disabledReason}>
+                      <span
+                        className="ost-select-option-hint"
+                        tabIndex={0}
+                        role="img"
+                        aria-label={option.disabledReason}
+                      >
+                        <Info size={12} aria-hidden="true" />
+                      </span>
+                    </Tooltip>
+                  ) : null}
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }

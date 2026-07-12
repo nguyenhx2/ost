@@ -30,6 +30,26 @@ describe("Select (custom - design-system.md bans native <select>)", () => {
     expect(document.querySelector("select")).toBeNull();
   });
 
+  it("portals the open listbox to document.body instead of reflowing its parent (item 2)", async () => {
+    const { container } = render(
+      <Select
+        label="Provider và model"
+        options={OPTIONS}
+        value={OPTIONS[0].value}
+        onChange={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Provider và model" }),
+    );
+    const listbox = screen.getByRole("listbox", { name: "Provider và model" });
+    // The listbox is NOT a descendant of the trigger's own render tree - it
+    // is portaled straight onto <body>, so it can never push/reflow the
+    // overlay panel that rendered the trigger.
+    expect(container.contains(listbox)).toBe(false);
+    expect(document.body.contains(listbox)).toBe(true);
+  });
+
   it("opens a listbox on click and selects an option with the mouse", async () => {
     const onChange = renderSelect();
     await userEvent.click(
@@ -99,6 +119,10 @@ describe("Select (custom - design-system.md bans native <select>)", () => {
 
     const disabledOption = screen.getByRole("option", { name: "Large v3" });
     expect(disabledOption).toHaveAttribute("aria-disabled", "true");
+    // The reason is a Tooltip (shown on hover/focus), not always in the DOM.
+    await userEvent.hover(
+      screen.getByRole("img", { name: "Requires a compatible CUDA GPU" }),
+    );
     expect(
       screen.getByText("Requires a compatible CUDA GPU"),
     ).toBeInTheDocument();

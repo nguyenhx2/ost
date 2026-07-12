@@ -5,6 +5,7 @@ import {
   EVENT_REGION_OCR_ERROR,
   EVENT_REGION_OCR_RESULT,
   EVENT_REGION_SELECTED,
+  EVENT_REGION_TRANSLATION_DELTA,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
   listenIpc,
@@ -16,6 +17,7 @@ import {
   type OcrFidelity,
   type OcrResultPayload,
   type SourceLanguage,
+  type TranslationDeltaPayload,
   type TranslationErrorPayload,
   type TranslationResultPayload,
 } from "../lib/ipc";
@@ -378,6 +380,25 @@ export function useRegionPreview(): UseRegionPreviewResult {
       }));
     };
 
+    const onTranslationDelta = (payload: TranslationDeltaPayload) => {
+      if (payload.requestId !== requestIdRef.current) {
+        return; // stale delta from a superseded request
+      }
+      // The FIRST delta proves the stream is producing output: clear the
+      // client-side timeout right here (item 1b) - only a stream that
+      // produces NOTHING within the budget is a real timeout/failure. Without
+      // this a slow-but-live translation could still trip the false red
+      // "timeout" error before the accumulated text (and eventual result)
+      // ever renders.
+      clearTranslationTimeout();
+      translationRef.current = payload.text;
+      setState((prev) =>
+        prev.status === "translating"
+          ? { ...prev, translation: payload.text }
+          : prev,
+      );
+    };
+
     const onTranslation = (payload: TranslationResultPayload) => {
       if (payload.requestId !== requestIdRef.current) {
         return; // stale response from a superseded request
@@ -472,6 +493,10 @@ export function useRegionPreview(): UseRegionPreviewResult {
         EVENT_REGION_SELECTED,
         onRegionSelected,
       );
+      const un7 = await listenIpc<TranslationDeltaPayload>(
+        EVENT_REGION_TRANSLATION_DELTA,
+        onTranslationDelta,
+      );
       if (disposed) {
         un1();
         un2();
@@ -479,9 +504,10 @@ export function useRegionPreview(): UseRegionPreviewResult {
         un4();
         un5();
         un6();
+        un7();
         return;
       }
-      unlistens.push(un1, un2, un3, un4, un5, un6);
+      unlistens.push(un1, un2, un3, un4, un5, un6, un7);
       // Handshake: listeners are attached, the pipeline may emit now.
       await regionIpc.previewReady();
     })();

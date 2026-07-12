@@ -17,6 +17,7 @@ import {
   PlainText,
   Select,
   Slider,
+  Spinner,
   Switch,
   Tooltip,
 } from "../components/ui";
@@ -190,8 +191,14 @@ export function RegionPreviewView() {
           ) : null}
 
           {state.status === "translating" ? (
-            <p className="region-preview-status" role="status">
-              {t("preview.translating")}
+            // Owner complaint 1a: a visible loading indicator, not just text -
+            // "translating" must be obvious while a (possibly slow) streaming
+            // response is still in flight. `Spinner` carries the one
+            // role="status" announcement; the label text beside it is purely
+            // visual (not itself an aria-live duplicate).
+            <p className="region-preview-status region-preview-status--loading">
+              <Spinner label={t("preview.translating")} />
+              <span aria-hidden="true">{t("preview.translating")}</span>
             </p>
           ) : null}
 

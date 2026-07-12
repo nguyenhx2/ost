@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type {
   OcrResultPayload,
+  TranslationDeltaPayload,
   TranslationErrorPayload,
   TranslationResultPayload,
 } from "../lib/ipc";
@@ -71,6 +72,7 @@ vi.mock("../lib/regionLanguageSettings", async (importOriginal) => {
 import {
   EVENT_REGION_SELECTED,
   EVENT_REGION_OCR_RESULT,
+  EVENT_REGION_TRANSLATION_DELTA,
   EVENT_REGION_TRANSLATION_ERROR,
   EVENT_REGION_TRANSLATION_RESULT,
 } from "../lib/ipc";
@@ -91,6 +93,12 @@ function emitTranslation(payload: TranslationResultPayload) {
 function emitTranslationError(payload: TranslationErrorPayload) {
   act(() => {
     mocks.handlers.get(EVENT_REGION_TRANSLATION_ERROR)?.(payload);
+  });
+}
+
+function emitTranslationDelta(payload: TranslationDeltaPayload) {
+  act(() => {
+    mocks.handlers.get(EVENT_REGION_TRANSLATION_DELTA)?.(payload);
   });
 }
 
@@ -450,6 +458,94 @@ describe("useRegionPreview - translation timeout (no silent hang)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a slow-but-live stream never trips the false timeout once the FIRST delta arrives (item 1b)", async () => {
+    vi.useFakeTimers();
+    try {
+      const rendered = renderHook(() => useRegionPreview());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+      const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+
+      // A single early delta proves the stream is alive - even though the
+      // FINAL result has not arrived yet.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      emitTranslationDelta({ requestId: request.requestId, text: "Xin " });
+
+      // The OLD 8s budget (measured from the request, not the delta) would
+      // have expired by now under the pre-fix behavior; the first delta must
+      // have cleared it.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+
+      expect(rendered.result.current.state.status).toBe("translating");
+      expect(rendered.result.current.state.translation).toBe("Xin ");
+
+      emitTranslation({
+        requestId: request.requestId,
+        translatedText: "Xin chào",
+        provider: "gemini",
+        model: "m",
+      });
+      expect(rendered.result.current.state.status).toBe("translated");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("useRegionPreview - streaming translation (owner complaint 1)", () => {
+  it("renders progressive deltas as accumulated text while still translating", async () => {
+    const { result } = await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+
+    emitTranslationDelta({ requestId: request.requestId, text: "Xin " });
+    expect(result.current.state.status).toBe("translating");
+    expect(result.current.state.translation).toBe("Xin ");
+
+    emitTranslationDelta({ requestId: request.requestId, text: "Xin chào" });
+    expect(result.current.state.status).toBe("translating");
+    expect(result.current.state.translation).toBe("Xin chào");
+
+    emitTranslation({
+      requestId: request.requestId,
+      translatedText: "Xin chào thế giới",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+    });
+    expect(result.current.state.status).toBe("translated");
+    expect(result.current.state.translation).toBe("Xin chào thế giới");
+  });
+
+  it("ignores a stale delta from a superseded request", async () => {
+    const { result } = await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    emitTranslationDelta({ requestId: "not-the-current-request", text: "x" });
+
+    expect(result.current.state.translation).toBeNull();
+    expect(result.current.state.status).toBe("translating");
+  });
+
+  it("allows copying the in-progress partial translation", async () => {
+    const { result } = await renderPreview();
+
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
+    emitTranslationDelta({ requestId: request.requestId, text: "Xin " });
+
+    act(() => result.current.copyTranslation());
+
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith("Xin ");
   });
 });
 

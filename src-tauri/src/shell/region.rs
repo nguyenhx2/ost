@@ -29,6 +29,12 @@ pub const EVENT_TRANSLATION_RESULT: &str = "region:translation-result";
 /// Emitted by the provider layer when a translation request fails; the UI
 /// leaves the "translating" state instead of hanging (human-in-the-loop.md).
 pub const EVENT_TRANSLATION_ERROR: &str = "region:translation-error";
+/// Emitted after every non-empty streamed chunk, carrying the ACCUMULATED
+/// text so far (not a bare delta) - the preview renders it directly and the
+/// FIRST delta proves the stream is alive, which is what actually clears the
+/// client-side timeout (owner complaint: a slow-but-live translation used to
+/// trip a false "timeout" red error before the eventual real result arrived).
+pub const EVENT_TRANSLATION_DELTA: &str = "region:translation-delta";
 /// Emitted when capture or OCR fails; the preview leaves the "recognizing"
 /// state instead of hanging silently (human-in-the-loop.md: no silent failure).
 pub const EVENT_OCR_ERROR: &str = "region:ocr-error";
@@ -254,6 +260,17 @@ pub struct TranslationErrorPayload {
     pub request_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+}
+
+/// Payload of [`EVENT_TRANSLATION_DELTA`]. `text` is the accumulated
+/// translation so far (untrusted DATA, provider-derived) - the UI renders it
+/// through the sanitizing `PlainText` component only, exactly like the final
+/// `region:translation-result` (agent-guardrails.md section 2).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationDeltaPayload {
+    pub request_id: String,
+    pub text: String,
 }
 
 /// A confirmed region awaiting pipeline pickup, with its selected source
@@ -489,35 +506,68 @@ pub fn build_ocr_payload(
     })
 }
 
-/// Runs one translation through the provider layer and shapes the outcome into
-/// the success/error IPC payloads. The provider is a trait object so tests use
-/// a wiremock-backed client with no real API call (testing.md).
-pub async fn run_translation(
+/// Runs one STREAMING translation through the provider layer, invoking
+/// `on_delta` with the ACCUMULATED text-so-far after every non-empty chunk
+/// (owner complaint: a visible loading indicator PLUS real streaming instead
+/// of a one-shot call that can trip a false client-side timeout on a
+/// slow-but-live response). Shapes the outcome into the same success/error
+/// IPC payload shape either way, so callers get exactly one terminal event.
+/// The provider is a trait object so tests use a wiremock-backed client with
+/// no real API call (testing.md).
+pub async fn run_translation_stream<F>(
     provider: &dyn TranslationProvider,
     key: &ApiKey,
     request: RegionTranslationRequest,
     target_language: &str,
-) -> Result<TranslationResultPayload, TranslationErrorPayload> {
+    mut on_delta: F,
+) -> Result<TranslationResultPayload, TranslationErrorPayload>
+where
+    F: FnMut(&str),
+{
+    use tokio_stream::StreamExt;
+
     let provider_request = ProviderRequest {
         model_id: request.model.clone(),
         source_language: None,
         target_language: target_language.to_string(),
         text: request.source_text.clone(),
     };
-    match provider.translate(&provider_request, key).await {
-        Ok(result) => Ok(TranslationResultPayload {
-            request_id: request.request_id,
-            translated_text: result.translated_text,
-            // Report the provider/model that actually translated (AC-03.5).
-            provider: result.provider_id.to_string(),
-            model: result.model_id,
-        }),
-        Err(err) => Err(TranslationErrorPayload {
-            request_id: request.request_id,
-            // Provider-layer errors are already redacted; treated as DATA by UI.
-            message: Some(err.to_string()),
-        }),
+    let mut stream = match provider.translate_stream(&provider_request, key).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            return Err(TranslationErrorPayload {
+                request_id: request.request_id,
+                message: Some(err.to_string()),
+            });
+        }
+    };
+
+    let mut accumulated = String::new();
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(chunk) => {
+                if chunk.text_delta.is_empty() {
+                    continue; // keep-alive event: no text to append or emit.
+                }
+                accumulated.push_str(&chunk.text_delta);
+                on_delta(&accumulated);
+            }
+            Err(err) => {
+                return Err(TranslationErrorPayload {
+                    request_id: request.request_id,
+                    message: Some(err.to_string()),
+                });
+            }
+        }
     }
+
+    Ok(TranslationResultPayload {
+        request_id: request.request_id,
+        translated_text: accumulated,
+        // Report the provider/model that actually translated (AC-03.5).
+        provider: provider.id().to_string(),
+        model: request.model,
+    })
 }
 
 /// Internal pipeline error for the capture -> OCR stage. Mapped to an IPC event
@@ -909,7 +959,7 @@ pub fn request_region_translation(
 
     let keys = Arc::clone(&pipeline.keys);
     tauri::async_runtime::spawn(async move {
-        let outcome = translate_with_provider(provider_id, &keys, request).await;
+        let outcome = translate_with_provider_stream(&app, provider_id, &keys, request).await;
         match outcome {
             Ok(payload) => {
                 let _ = app.emit_to(PREVIEW_WINDOW_LABEL, EVENT_TRANSLATION_RESULT, payload);
@@ -923,10 +973,13 @@ pub fn request_region_translation(
 }
 
 /// Retrieves the provider key from the keychain, builds the provider client,
-/// and runs the translation. Every failure maps to a redacted
+/// and runs a STREAMING translation, emitting `region:translation-delta` to
+/// the preview window after every chunk (owner complaint 1: progressive text
+/// instead of a silent wait). Every failure maps to a redacted
 /// `TranslationErrorPayload` so the preview always leaves the "translating"
 /// state (human-in-the-loop.md).
-async fn translate_with_provider(
+async fn translate_with_provider_stream(
+    app: &AppHandle,
     provider_id: ProviderId,
     keys: &KeyStore,
     request: RegionTranslationRequest,
@@ -948,7 +1001,18 @@ async fn translate_with_provider(
     };
     let client = GeminiClient::new().map_err(|e| fail(&e.to_string()))?;
     let target_language = resolve_target_language(&request);
-    run_translation(&client, &key, request, &target_language).await
+    let delta_request_id = request_id.clone();
+    run_translation_stream(&client, &key, request, &target_language, |accumulated| {
+        let _ = app.emit_to(
+            PREVIEW_WINDOW_LABEL,
+            EVENT_TRANSLATION_DELTA,
+            TranslationDeltaPayload {
+                request_id: delta_request_id.clone(),
+                text: accumulated.to_string(),
+            },
+        );
+    })
+    .await
 }
 
 /// Process-monotonic correlation id for core-initiated OCR results.
@@ -1356,39 +1420,69 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_translation_success_shapes_the_result_payload() {
-        use wiremock::matchers::method;
+    async fn run_translation_stream_emits_accumulated_deltas_then_the_final_result() {
+        use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
+        const MODEL: &str = "gemini-2.5-flash";
         let server = MockServer::start().await;
+        let sse = format!(
+            "data: {}\r\n\r\ndata: {}\r\n\r\n",
+            serde_json::json!({
+                "candidates": [{"content": {"role": "model", "parts": [{"text": "Xin "}]}}]
+            }),
+            serde_json::json!({
+                "candidates": [{"content": {"role": "model", "parts": [{"text": "chào"}]}, "finishReason": "STOP"}]
+            }),
+        );
         Mock::given(method("POST"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "candidates": [{"content": {"role": "model", "parts": [{"text": "Xin chào"}]}}]
-            })))
+            .and(path(format!(
+                "/v1beta/models/{MODEL}:streamGenerateContent"
+            )))
+            .and(query_param("alt", "sse"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(sse, "text/event-stream"))
             .mount(&server)
             .await;
 
         let mut config = crate::providers::ProviderHttpConfig::with_base_url(server.uri());
         config.max_retries = 0;
         let client = GeminiClient::with_config(config).unwrap();
-        let key = ApiKey::new("FAKE-TEST-KEY-SYNTHETIC-01".into()).unwrap();
+        let key = ApiKey::new("FAKE-TEST-KEY-SYNTHETIC-03".into()).unwrap();
         let request = RegionTranslationRequest {
-            request_id: "ui-9".into(),
+            request_id: "ui-11".into(),
             source_text: "Hello".into(),
             provider: "gemini".into(),
-            model: "gemini-2.5-flash".into(),
+            model: MODEL.into(),
             target_language: None,
         };
 
-        let payload = run_translation(&client, &key, request, "vi").await.unwrap();
-        assert_eq!(payload.request_id, "ui-9");
+        // Collects the ACCUMULATED text passed to every delta callback - this
+        // is the exact contract the frontend timeout fix depends on: the
+        // FIRST callback proves the stream is alive.
+        let mut seen_deltas: Vec<String> = Vec::new();
+        let payload = run_translation_stream(&client, &key, request, "vi", |accumulated| {
+            seen_deltas.push(accumulated.to_string());
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(payload.request_id, "ui-11");
         assert_eq!(payload.translated_text, "Xin chào");
         assert_eq!(payload.provider, "gemini");
-        assert_eq!(payload.model, "gemini-2.5-flash");
+        assert_eq!(payload.model, MODEL);
+        // Deltas arrive progressively and ACCUMULATED (not bare per-chunk text).
+        assert_eq!(
+            seen_deltas,
+            vec!["Xin ".to_string(), "Xin chào".to_string()]
+        );
+        assert!(
+            !seen_deltas.first().unwrap().is_empty(),
+            "the first delta must carry non-empty text so the UI timeout can clear on it"
+        );
     }
 
     #[tokio::test]
-    async fn run_translation_maps_provider_error_to_error_payload() {
+    async fn run_translation_stream_maps_a_transport_level_stream_error() {
         use wiremock::matchers::method;
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -1401,22 +1495,35 @@ mod tests {
         let mut config = crate::providers::ProviderHttpConfig::with_base_url(server.uri());
         config.max_retries = 0;
         let client = GeminiClient::with_config(config).unwrap();
-        let key = ApiKey::new("FAKE-TEST-KEY-SYNTHETIC-02".into()).unwrap();
+        let key = ApiKey::new("FAKE-TEST-KEY-SYNTHETIC-04".into()).unwrap();
         let request = RegionTranslationRequest {
-            request_id: "ui-10".into(),
+            request_id: "ui-12".into(),
             source_text: "Hello".into(),
             provider: "gemini".into(),
             model: "gemini-2.5-flash".into(),
             target_language: None,
         };
 
-        let err = run_translation(&client, &key, request, "vi")
-            .await
-            .unwrap_err();
-        assert_eq!(err.request_id, "ui-10");
-        // A diagnostic message is present and carries no key material.
-        let message = err.message.unwrap();
-        assert!(!message.contains("FAKE-TEST-KEY-SYNTHETIC-02"));
+        let mut delta_count = 0;
+        let err = run_translation_stream(&client, &key, request, "vi", |_| {
+            delta_count += 1;
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(err.request_id, "ui-12");
+        assert_eq!(delta_count, 0, "an upfront auth failure emits no deltas");
+    }
+
+    #[test]
+    fn translation_delta_payload_serializes_to_camel_case() {
+        let payload = TranslationDeltaPayload {
+            request_id: "ui-1".into(),
+            text: "Xin ".into(),
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["requestId"], "ui-1");
+        assert_eq!(json["text"], "Xin ");
+        assert_eq!(EVENT_TRANSLATION_DELTA, "region:translation-delta");
     }
 
     #[test]

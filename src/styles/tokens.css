@@ -59,6 +59,8 @@
 
   /* Motion (zeroed under prefers-reduced-motion, see base.css) */
   --duration-fast: 120ms;
+  /* Indeterminate spinner rotation (Spinner primitive). */
+  --duration-spin: 1.4s;
 
   /* Focus ring (WCAG 2.1 AA visible focus) */
   --focus-ring-width: 2px;
