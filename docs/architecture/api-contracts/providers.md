@@ -256,10 +256,13 @@ CUSTOM-1..5, TASK-026 phần B)
 
 ### Model local Hy-MT2/Qwen3 (`src-tauri/src/providers/local_models.rs`, owner ask 2026-07-12)
 
-GIẢ ĐỊNH (không xây runtime manager): app KHÔNG khởi động/quản lý llama-server hay Ollama.
-Người dùng tự chạy server OpenAI-compatible của họ; app chỉ gọi endpoint (giống hệt
-`local_openai` từ TASK-026 phần B) - phần này CHỈ thêm việc chọn PROMPT/PARAM đúng theo
-`model_id`, không thêm bất kỳ hành vi HTTP mới nào.
+GIẢ ĐỊNH BAN ĐẦU (TASK-026 phần B, KHÔNG xây runtime manager): app chỉ gọi endpoint của
+một server OpenAI-compatible mà NGƯỜI DÙNG tự chạy - phần `local_models.rs` CHỈ thêm việc
+chọn PROMPT/PARAM đúng theo `model_id`, không thêm hành vi HTTP mới nào. Giả định "người
+dùng tự chạy server" nay được BỔ SUNG (không thay thế) bởi ADR-006: app có thể tự tải model
+GGUF và quản lý một tiến trình `llama-server` con - xem mục "Engine LLM local có quản lý
+(ADR-006)" bên dưới. Provider client (`local_openai`) KHÔNG đổi: dù server do người dùng chạy
+hay do app quản lý, đường dịch vẫn đi qua đúng client loopback-only đó với cùng một `base_url`.
 
 - Phát hiện model bằng substring case-insensitive trên `model_id` tự do người dùng nhập/chọn
   preset (`is_hy_mt2_model`: chứa `"hy-mt2"`; `is_qwen3_model`: chứa `"qwen3"`) - KHÔNG có
@@ -308,6 +311,83 @@ Người dùng tự chạy server OpenAI-compatible của họ; app chỉ gọi 
 - Cả hai command KHÔNG đụng tới `keys::KeyStore` và KHÔNG lưu bất kỳ giá trị nào - việc lưu
   `base_url` vào settings store là việc của tầng UI/shell, ngoài phạm vi `providers/` và
   `keys/`.
+
+## Engine LLM local có quản lý (`src-tauri/src/llm/`, ADR-006)
+
+Owner quyết định 2026-07-12 (ADR-006): app TỰ tải model GGUF và quản lý một tiến trình
+`llama-server` con (Option B - subprocess, KHÔNG in-process, vì crash-isolation: sự cố
+GPU/driver chỉ giết tiến trình con thay vì cả app - xem known-issues 2026-07-12). Module
+này KHÔNG nói chuyện HTTP dịch: nó chỉ tải model + quản lý tiến trình; đường dịch vẫn đi qua
+client `local_openai` (loopback-only, redirect tắt) trỏ tới `base_url` của server có quản lý.
+Đây là ngoại lệ least-privilege được owner phê duyệt (backend do llm-integration-dev làm;
+Settings UI do frontend agent riêng làm dựa trên contract này).
+
+### Model preset GGUF (`llm::model`)
+
+| id (`model_id`) | Nhãn | Nguồn (Hugging Face) | Kích thước ~ | Mặc định |
+|-----------------|------|----------------------|--------------|----------|
+| `hy-mt2-7b` | Hy-MT2 7B (Q4_K_M) | `mradermacher/Hunyuan-MT-7B-GGUF` | ~4.6 GB | Có |
+| `qwen3-14b` | Qwen3 14B (Q4_K_M) | `Qwen/Qwen3-14B-GGUF` | ~9 GB | Không |
+| `hy-mt2-30b-a3b` | Hy-MT2 30B-A3B (MoE) | `mradermacher/Hunyuan-MT-30B-A3B-GGUF` | ~18 GB | Không |
+
+- `id` CHÍNH LÀ `model_id` gửi tới server (chứa substring `hy-mt2`/`qwen3` để router prompt
+  trong `local_models.rs` chọn đúng template/param Hy-MT2/Qwen3).
+- CẢNH BÁO: repo/filename/size là BEST-EFFORT, CHƯA verify được từ môi trường dev offline;
+  phải xác nhận trước khi owner dùng. URL sai fail SẠCH (download báo lỗi network, không ghi
+  gì).
+- Digest: `sha256 = None` cho mọi preset (không bịa pin giả). Download RECORD digest thực tế
+  vào sidecar `<file>.sha256` lần đầu (trust-on-first-use) và log ra để owner hard-pin sau -
+  đây là điểm KHÁC có chủ đích so với whisper (whisper TỪ CHỐI binary chưa pin); GGUF chạy
+  trong tiến trình con crash-isolated nên chọn TOFU thay vì pin giả. Follow-up: pin digest
+  thật để nâng lên đường fail-closed.
+- Download reuse TOÀN BỘ facility chung `crate::models`: cùng consent gate fail-closed (id
+  `local-llm-gguf`), engine stream chung `models::download::stream_download_to_file` (bounded
+  idle/overall timeout + oversize cap + cancel), cache dir gitignored (`OST_LLM_MODEL_DIR`
+  hoặc `~/.ost/llm`).
+
+### Process manager (`llm::server` + `llm::process`)
+
+- Bind LOOPBACK-ONLY: `--host 127.0.0.1` luôn được `build_server_args` phát ra; không có
+  trường host trong `ServerSpec`; `start` từ chối nếu base_url không phải loopback (BR-01,
+  NFR-SEC-03). Port mặc định `8177` (khác LM Studio 1234 / llama-server 8080).
+- Cờ launch (khuyến nghị owner): `--flash-attn`, `--cache-type-k q8_0 --cache-type-v q8_0`,
+  `--n-gpu-layers <n>` (99 cho 7B trên RTX 4070; 0 = CPU), `--ctx-size 4096`, `--alias <id>`.
+- MỘT server tại một thời điểm: `start` giết server cũ trước khi spawn cái mới (model switch);
+  kill khi app thoát (RunEvent::Exit - child std::process không tự bị reap trên Windows).
+- Readiness: poll `GET {base}/health` tới khi 200; phát hiện tiến trình con exit sớm (case
+  crash-isolation) trả `ExitedDuringStartup { code }`; timeout trả `ReadinessTimeout` + kill xác.
+- Binary: LOCATE (chưa bundle - Step 2/devops): `OST_LLAMA_SERVER_PATH` -> `~/.ost/bin/llama-server[.exe]`
+  -> PATH. Owner đặt binary một lần; app tự spawn (không hand-run server).
+- Testable: spawn + health-check sau trait `ServerBackend`/`ServerProcess` (inject mock -
+  test KHÔNG bao giờ chạy server thật).
+
+### Command surface engine local có quản lý (`src-tauri/src/llm/mod.rs`)
+
+Quản lý model (mirror shape IPC của STT model-management):
+
+| Command | Chữ ký | Ghi chú |
+|---------|--------|---------|
+| `list_llm_models()` | `-> Vec<LlmModelInfo>` | `{ id, label, approxDownloadBytes, approxRamBytes, downloaded, isDefault, running }` |
+| `request_llm_model_download(model_id)` | `-> LlmModelDownloadOutcome` | `{ status: "alreadyDownloaded" }` hoặc `{ status: "consentRequired", disclosure }` (đọc-only, không fetch) |
+| `confirm_llm_model_download(model_id)` | `-> Result<(), LlmModelError>` | grant consent (idempotent) + tải, phát event tiến độ, quan sát cancel flag |
+| `cancel_llm_model_download(model_id)` | `-> ()` | lật cancel flag (no-op nếu không có download) |
+| `delete_llm_model(model_id)` | `-> Result<(), LlmModelError>` | xoá GGUF + sidecar; từ chối nếu server đang chạy model đó (`sessionActive`) |
+
+Điều khiển server:
+
+| Command | Chữ ký | Ghi chú |
+|---------|--------|---------|
+| `start_llm_server(model_id)` | `-> Result<LlmServerStatusView, LlmServerCommandError>` | model PHẢI đã tải; locate binary; spawn + health-check; trả status kèm `baseUrl` loopback |
+| `stop_llm_server()` | `-> Result<(), LlmServerCommandError>` | idempotent |
+| `llm_server_status()` | `-> LlmServerStatusView` | `{ running, modelId, baseUrl, port }`; phát hiện child chết bất ngờ và báo `running:false` |
+
+- Event `llm:model-download-progress`: `{ modelId, downloadedBytes, totalBytes }` (mirror
+  `stt:model-download-progress`).
+- Lỗi serialize `{ "kind": ... }`: `LlmModelError` kind ∈ `unknownModel|download|cancelled|sessionActive|io`;
+  `LlmServerCommandError` kind ∈ `unknownModel|notDownloaded|binaryNotFound|spawnFailed|exitedDuringStartup|readinessTimeout|stopFailed`.
+- WIRING DỊCH (tầng frontend/shell, NGOÀI phạm vi layer này): sau `start_llm_server`, frontend
+  set `base_url` của provider `local_openai` = `baseUrl` trả về, rồi dịch đi qua đúng client
+  `local_openai` như server người dùng tự chạy. Layer `llm/` KHÔNG tự gọi dịch.
 
 ## Gemini client (`src-tauri/src/providers/gemini.rs`)
 
