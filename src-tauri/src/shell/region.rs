@@ -16,7 +16,8 @@ use crate::keys::{ApiKey, KeyStore};
 use crate::models::{ConsentDisclosure, ModelGate};
 use crate::ocr::{OcrEngine, OcrError, OcrFidelity, PaddleOcrEngine};
 use crate::providers::{
-    GeminiClient, ProviderId, TranslationProvider, TranslationRequest as ProviderRequest,
+    build_local_openai_provider, build_provider, ProviderId, TranslationProvider,
+    TranslationRequest as ProviderRequest,
 };
 
 pub const SELECT_WINDOW_LABEL: &str = "region-select";
@@ -112,6 +113,12 @@ pub struct RegionTranslationRequest {
     /// pickers). Absent or blank falls back to [`DEFAULT_TARGET_LANGUAGE`].
     #[serde(default)]
     pub target_language: Option<String>,
+    /// User-configured `base_url` for the local OpenAI-compatible provider
+    /// (FR-03.CUSTOM-1..5). Not a secret (security-privacy.md) - only read
+    /// when `provider` is `local_openai`; ignored otherwise. Mirrors
+    /// `AudioSessionRequest::base_url` (`shell/audio_session.rs`).
+    #[serde(default)]
+    pub base_url: Option<String>,
 }
 
 /// Resolves the effective target language for a translation request: the
@@ -970,9 +977,67 @@ pub fn request_region_translation(
     Ok(())
 }
 
-/// Retrieves the provider key from the keychain, builds the provider client,
-/// and runs a STREAMING translation, emitting `region:translation-delta` to
-/// the preview window after every chunk (owner complaint 1: progressive text
+/// A resolved provider client + key ready to translate. Never carries the raw
+/// key past construction beyond what [`TranslationProvider::translate_stream`]
+/// needs it for (security-privacy.md).
+struct RegionTranslator {
+    client: Box<dyn TranslationProvider>,
+    key: ApiKey,
+}
+
+impl std::fmt::Debug for RegionTranslator {
+    // Manual impl: `Box<dyn TranslationProvider>` has no `Debug` and `ApiKey`
+    // deliberately redacts (security-privacy.md) - print only the provider id.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegionTranslator")
+            .field("provider", &self.client.id())
+            .finish()
+    }
+}
+
+/// Routes `provider_id` to a real client via the shared FR-03 factory
+/// (`crate::providers::factory`) - the SAME seam the audio path uses
+/// (`shell/audio_session.rs::resolve_translator`) - so every keychain-backed
+/// provider (Gemini/Anthropic/OpenAI/OpenRouter) AND the local OpenAI-
+/// compatible provider build a real client here, not just Gemini. Retrieves
+/// the provider key from the keychain (cloud providers) or validates the
+/// user-supplied loopback-only `base_url` (local provider, no key needed).
+/// Factored out (no `AppHandle`) so the ROUTING is unit-testable with a mock
+/// key backend (testing.md) - `translate_with_provider_stream` is the thin
+/// AppHandle-bound wrapper that additionally streams deltas to the preview
+/// window.
+async fn resolve_region_translator(
+    keys: &KeyStore,
+    provider_id: ProviderId,
+    base_url: Option<&str>,
+) -> Result<RegionTranslator, String> {
+    if provider_id == ProviderId::LocalOpenAi {
+        // No key exists for this provider (BR-02): a static placeholder
+        // satisfies the trait signature but is never put on the wire (see
+        // `local_openai.rs`). `build_local_openai_provider` is the ONLY place
+        // that enforces loopback-only `base_url` (BR-01, NFR-SEC-03) - never
+        // weaken that check here.
+        let url = base_url.unwrap_or("").trim();
+        if url.is_empty() {
+            return Err("local server not configured".into());
+        }
+        let client = build_local_openai_provider(url)
+            .map_err(|_| "local server not configured".to_string())?;
+        let key = ApiKey::new("unused-placeholder".to_string()).map_err(|e| e.to_string())?;
+        return Ok(RegionTranslator { client, key });
+    }
+    let key = match keys.retrieve_key(provider_id).await {
+        Ok(Some(key)) => key,
+        Ok(None) => return Err("no API key configured for this provider".into()),
+        Err(_) => return Err("could not read the provider key from the keychain".into()),
+    };
+    let client = build_provider(provider_id).map_err(|e| e.to_string())?;
+    Ok(RegionTranslator { client, key })
+}
+
+/// Resolves the provider client/key (see [`resolve_region_translator`]) then
+/// runs a STREAMING translation, emitting `region:translation-delta` to the
+/// preview window after every chunk (owner complaint 1: progressive text
 /// instead of a silent wait). Every failure maps to a redacted
 /// `TranslationErrorPayload` so the preview always leaves the "translating"
 /// state (human-in-the-loop.md).
@@ -988,28 +1053,30 @@ async fn translate_with_provider_stream(
         message: Some(message.to_string()),
     };
 
-    // Only Gemini has a client in Phase 1 (NFR-SCA-02: others are drop-in later).
-    if provider_id != ProviderId::Gemini {
-        return Err(fail("selected provider is not available yet"));
-    }
-    let key = match keys.retrieve_key(provider_id).await {
-        Ok(Some(key)) => key,
-        Ok(None) => return Err(fail("no API key configured for this provider")),
-        Err(_) => return Err(fail("could not read the provider key from the keychain")),
-    };
-    let client = GeminiClient::new().map_err(|e| fail(&e.to_string()))?;
+    let RegionTranslator { client, key } =
+        match resolve_region_translator(keys, provider_id, request.base_url.as_deref()).await {
+            Ok(translator) => translator,
+            Err(message) => return Err(fail(&message)),
+        };
+
     let target_language = resolve_target_language(&request);
     let delta_request_id = request_id.clone();
-    run_translation_stream(&client, &key, request, &target_language, |accumulated| {
-        let _ = app.emit_to(
-            PREVIEW_WINDOW_LABEL,
-            EVENT_TRANSLATION_DELTA,
-            TranslationDeltaPayload {
-                request_id: delta_request_id.clone(),
-                text: accumulated.to_string(),
-            },
-        );
-    })
+    run_translation_stream(
+        client.as_ref(),
+        &key,
+        request,
+        &target_language,
+        |accumulated| {
+            let _ = app.emit_to(
+                PREVIEW_WINDOW_LABEL,
+                EVENT_TRANSLATION_DELTA,
+                TranslationDeltaPayload {
+                    request_id: delta_request_id.clone(),
+                    text: accumulated.to_string(),
+                },
+            );
+        },
+    )
     .await
 }
 
@@ -1104,6 +1171,7 @@ pub fn e2e_region_probe(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::GeminiClient;
 
     #[test]
     fn validate_region_accepts_a_normal_rect() {
@@ -1184,6 +1252,7 @@ mod tests {
             provider: "gemini".into(),
             model: "m".into(),
             target_language: target.map(str::to_string),
+            base_url: None,
         }
     }
 
@@ -1441,6 +1510,7 @@ mod tests {
             provider: "gemini".into(),
             model: MODEL.into(),
             target_language: None,
+            base_url: None,
         };
 
         // Collects the ACCUMULATED text passed to every delta callback - this
@@ -1489,6 +1559,7 @@ mod tests {
             provider: "gemini".into(),
             model: "gemini-2.5-flash".into(),
             target_language: None,
+            base_url: None,
         };
 
         let mut delta_count = 0;
@@ -1499,6 +1570,195 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.request_id, "ui-12");
         assert_eq!(delta_count, 0, "an upfront auth failure emits no deltas");
+    }
+
+    /// Minimal in-memory [`crate::keys::KeyBackend`] for routing tests (no
+    /// real keychain touched, testing.md). Region's own key-store tests build
+    /// through `crate::keys::KeyStore::with_backend` the same way.
+    #[derive(Default)]
+    struct RoutingMockBackend {
+        secrets: Mutex<std::collections::HashMap<String, String>>,
+    }
+
+    impl crate::keys::KeyBackend for RoutingMockBackend {
+        fn set_secret(
+            &self,
+            _service: &str,
+            account: &str,
+            value: &str,
+        ) -> Result<(), crate::keys::KeyStoreError> {
+            self.secrets
+                .lock()
+                .unwrap()
+                .insert(account.to_string(), value.to_string());
+            Ok(())
+        }
+
+        fn get_secret(
+            &self,
+            _service: &str,
+            account: &str,
+        ) -> Result<Option<String>, crate::keys::KeyStoreError> {
+            Ok(self.secrets.lock().unwrap().get(account).cloned())
+        }
+
+        fn delete_secret(
+            &self,
+            _service: &str,
+            account: &str,
+        ) -> Result<(), crate::keys::KeyStoreError> {
+            self.secrets.lock().unwrap().remove(account);
+            Ok(())
+        }
+    }
+
+    /// A backend that fails every call - proves the local provider path never
+    /// touches the keychain (BR-02).
+    struct FailingMockBackend;
+
+    impl crate::keys::KeyBackend for FailingMockBackend {
+        fn set_secret(
+            &self,
+            _service: &str,
+            _account: &str,
+            _value: &str,
+        ) -> Result<(), crate::keys::KeyStoreError> {
+            Err(crate::keys::KeyStoreError::Backend("mock failure".into()))
+        }
+
+        fn get_secret(
+            &self,
+            _service: &str,
+            _account: &str,
+        ) -> Result<Option<String>, crate::keys::KeyStoreError> {
+            Err(crate::keys::KeyStoreError::Backend("mock failure".into()))
+        }
+
+        fn delete_secret(
+            &self,
+            _service: &str,
+            _account: &str,
+        ) -> Result<(), crate::keys::KeyStoreError> {
+            Err(crate::keys::KeyStoreError::Backend("mock failure".into()))
+        }
+    }
+
+    fn store_with_mock() -> (KeyStore, Arc<RoutingMockBackend>) {
+        let backend = Arc::new(RoutingMockBackend::default());
+        (KeyStore::with_backend(backend.clone()), backend)
+    }
+
+    /// Regression (root-caused owner bug): region translate used to hardcode
+    /// Gemini and reject every other provider with "selected provider is not
+    /// available yet", even when the caller held a real key for it. Every
+    /// keychain-backed provider must build a REAL client here (routing test -
+    /// the individual clients are wiremock-tested on their own).
+    #[tokio::test]
+    async fn resolve_region_translator_builds_a_real_client_for_every_keychain_provider() {
+        for provider in [
+            ProviderId::Gemini,
+            ProviderId::Anthropic,
+            ProviderId::OpenAI,
+            ProviderId::OpenRouter,
+        ] {
+            let (store, _backend) = store_with_mock();
+            store
+                .store_key(
+                    provider,
+                    ApiKey::new("FAKE-TEST-KEY-SYNTHETIC-99".into()).unwrap(),
+                )
+                .await
+                .unwrap();
+            let translator = resolve_region_translator(&store, provider, None)
+                .await
+                .unwrap_or_else(|e| panic!("{provider} must resolve a client: {e}"));
+            assert_eq!(translator.client.id(), provider);
+        }
+    }
+
+    /// The exact regression this fix targets: a non-Gemini provider id must
+    /// NEVER return the old hardcoded "selected provider is not available
+    /// yet" message.
+    #[tokio::test]
+    async fn resolve_region_translator_never_returns_the_old_not_available_message() {
+        for provider in [
+            ProviderId::Anthropic,
+            ProviderId::OpenAI,
+            ProviderId::OpenRouter,
+        ] {
+            let (store, _backend) = store_with_mock();
+            store
+                .store_key(
+                    provider,
+                    ApiKey::new("FAKE-TEST-KEY-SYNTHETIC-98".into()).unwrap(),
+                )
+                .await
+                .unwrap();
+            let translator = resolve_region_translator(&store, provider, None)
+                .await
+                .unwrap();
+            assert_eq!(translator.client.id(), provider);
+        }
+        // No key configured: a distinct actionable message, never the old
+        // generic "not available yet" placeholder.
+        let (store, _backend) = store_with_mock();
+        let err = resolve_region_translator(&store, ProviderId::Anthropic, None)
+            .await
+            .unwrap_err();
+        assert_ne!(err, "selected provider is not available yet");
+        assert_eq!(err, "no API key configured for this provider");
+    }
+
+    #[tokio::test]
+    async fn resolve_region_translator_builds_a_local_client_for_a_loopback_base_url() {
+        let (store, _backend) = store_with_mock();
+        let translator = resolve_region_translator(
+            &store,
+            ProviderId::LocalOpenAi,
+            Some("http://127.0.0.1:1234"),
+        )
+        .await
+        .expect("a valid loopback base_url must build a client");
+        assert_eq!(translator.client.id(), ProviderId::LocalOpenAi);
+    }
+
+    #[tokio::test]
+    async fn resolve_region_translator_reports_local_not_configured_when_base_url_is_empty() {
+        let (store, _backend) = store_with_mock();
+        let err = resolve_region_translator(&store, ProviderId::LocalOpenAi, None)
+            .await
+            .unwrap_err();
+        assert_eq!(err, "local server not configured");
+
+        let err = resolve_region_translator(&store, ProviderId::LocalOpenAi, Some("   "))
+            .await
+            .unwrap_err();
+        assert_eq!(err, "local server not configured");
+    }
+
+    #[tokio::test]
+    async fn resolve_region_translator_rejects_a_non_loopback_base_url() {
+        let (store, _backend) = store_with_mock();
+        let err =
+            resolve_region_translator(&store, ProviderId::LocalOpenAi, Some("https://example.com"))
+                .await
+                .unwrap_err();
+        assert_eq!(err, "local server not configured");
+    }
+
+    #[tokio::test]
+    async fn resolve_region_translator_never_touches_the_keychain_for_the_local_provider() {
+        // BR-02: the local provider needs no key. A keychain read failure must
+        // never surface here as long as the base_url is valid.
+        let store = KeyStore::with_backend(Arc::new(FailingMockBackend));
+        let translator = resolve_region_translator(
+            &store,
+            ProviderId::LocalOpenAi,
+            Some("http://127.0.0.1:1234"),
+        )
+        .await
+        .expect("local provider must not touch the (failing) keychain");
+        assert_eq!(translator.client.id(), ProviderId::LocalOpenAi);
     }
 
     #[test]
@@ -2072,6 +2332,7 @@ mod tests {
                 provider: "gemini".into(),
                 model: "m".into(),
                 target_language: None,
+                base_url: None,
             };
             assert!(
                 request.source_text.trim().is_empty(),

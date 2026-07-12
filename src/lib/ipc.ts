@@ -146,6 +146,13 @@ export interface RegionTranslationRequest {
   /** User-selected target language (BR-07 default `vi`); omitted/blank falls
    * back to the core's default. Recorded verbatim in history. */
   targetLanguage?: string;
+  /**
+   * User-configured `base_url` for the local OpenAI-compatible provider
+   * (FR-03.CUSTOM-1..5). Not a secret (security-privacy.md); read only when
+   * `provider` is `local_openai`, ignored otherwise. Mirrors
+   * `AudioSessionRequest.baseUrl`.
+   */
+  baseUrl?: string;
 }
 
 export const EVENT_REGION_OCR_RESULT = "region:ocr-result";
