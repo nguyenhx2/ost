@@ -9,3 +9,5 @@ new ADR that supersedes the old one. Create with `/new-adr`. 100% English.
 | ADR-002 | Local speech-to-text with whisper.cpp; translation via user-key LLM providers | Accepted | 2026-07-09 |
 | ADR-003 | API keys stored in the OS keychain via the keyring crate | Accepted | 2026-07-09 |
 | ADR-004 | OCR engine - local PaddleOCR default with pluggable optional cloud backends behind informed consent | Proposed | 2026-07-09 |
+| ADR-005 | Optional cloud speech-to-text backends behind owner-gated informed consent | Proposed | 2026-07-11 |
+| ADR-006 | Local LLM translation engine as a managed llama-server subprocess | Accepted | 2026-07-12 |
