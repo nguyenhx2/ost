@@ -92,6 +92,10 @@ impl OpenRouterClient {
         WireRequest {
             model: request.model_id.clone(),
             temperature: 0.2,
+            top_p: None,
+            top_k: None,
+            repetition_penalty: None,
+            enable_thinking: None,
             stream,
             messages: vec![
                 WireMessage {

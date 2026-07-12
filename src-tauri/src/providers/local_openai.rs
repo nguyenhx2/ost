@@ -29,6 +29,7 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use super::config::ProviderHttpConfig;
 use super::error::ProviderError;
+use super::local_models::{generation_params_for_model, is_qwen3_model};
 use super::openai::{
     error_from_response_impl, extract_text, stream_sse_body, validate_model_id, WireRequest,
     WireResponse,
@@ -90,24 +91,53 @@ impl LocalOpenAiClient {
         format!("{}/v1/models", self.config.base_url.trim_end_matches('/'))
     }
 
+    /// Builds the wire request for `request`, selecting the prompt shape and
+    /// generation params for the chosen local model
+    /// (`local_models::generation_params_for_model`):
+    /// - Hy-MT2 (translation-only model): a SINGLE `user` message containing
+    ///   Tencent's exact required template (`prompt.single_message`) - see
+    ///   the security note on [`super::prompt::TranslationPrompt::single_message`].
+    /// - every other model (Qwen3, generic local models): the standard
+    ///   `system`/`user` instruction/data split (AC-03.8). Qwen3 additionally
+    ///   gets the `/no_think` convention appended to its (trusted) system
+    ///   instruction, on top of the `enable_thinking: false` wire field, since
+    ///   server support for the field varies.
     fn build_wire_request(request: &TranslationRequest, stream: bool) -> WireRequest {
-        // Instruction/data separation (AC-03.8): `system` = trusted
-        // instruction, `user` = untrusted delimited data block.
         let prompt = build_translation_prompt(request);
+        let params = generation_params_for_model(&request.model_id);
+
+        let messages = match prompt.single_message {
+            Some(single) => vec![super::openai::WireMessage {
+                role: "user",
+                content: single,
+            }],
+            None => {
+                let mut instruction = prompt.instruction;
+                if is_qwen3_model(&request.model_id) {
+                    instruction.push_str(" /no_think");
+                }
+                vec![
+                    super::openai::WireMessage {
+                        role: "system",
+                        content: instruction,
+                    },
+                    super::openai::WireMessage {
+                        role: "user",
+                        content: prompt.data_block,
+                    },
+                ]
+            }
+        };
+
         WireRequest {
             model: request.model_id.clone(),
-            temperature: 0.2,
+            temperature: params.temperature,
+            top_p: params.top_p,
+            top_k: params.top_k,
+            repetition_penalty: params.repetition_penalty,
+            enable_thinking: params.enable_thinking,
             stream,
-            messages: vec![
-                super::openai::WireMessage {
-                    role: "system",
-                    content: prompt.instruction,
-                },
-                super::openai::WireMessage {
-                    role: "user",
-                    content: prompt.data_block,
-                },
-            ],
+            messages,
         }
     }
 
@@ -685,5 +715,132 @@ mod tests {
             collected.push_str(&item.unwrap().text_delta);
         }
         assert_eq!(collected, "Xin chào");
+    }
+
+    fn request_for_model(model_id: &str, text: &str) -> TranslationRequest {
+        TranslationRequest {
+            model_id: model_id.into(),
+            source_language: Some("en".into()),
+            target_language: "vi".into(),
+            text: text.into(),
+        }
+    }
+
+    /// Hy-MT2 is a translation-only model - a normal chat prompt yields
+    /// garbage. Proves the exact required wire shape: one `user` message with
+    /// Tencent's template, and Tencent's recommended generation params.
+    #[tokio::test]
+    async fn hy_mt2_sends_exact_required_prompt_and_generation_params() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(success_body("ok")))
+            .mount(&server)
+            .await;
+
+        client(&server.uri())
+            .translate(&request_for_model("Hy-MT2-7B", "Hello world"), &api_key())
+            .await
+            .unwrap();
+
+        let received = server.received_requests().await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&received[0].body).unwrap();
+
+        assert_eq!(body["messages"].as_array().unwrap().len(), 1);
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(
+            body["messages"][0]["content"],
+            "Translate the following segment into vi, without additional explanation.\n\nHello world"
+        );
+        assert_eq!(body["temperature"], 0.7);
+        assert_eq!(body["top_p"], 0.6);
+        assert_eq!(body["top_k"], 20);
+        assert_eq!(body["repetition_penalty"], 1.05);
+        assert!(body.get("enable_thinking").is_none());
+    }
+
+    /// Qwen3 keeps the shared default temperature but disables "thinking":
+    /// both the wire field AND the `/no_think` convention on the system
+    /// instruction, since server-side support for the field varies.
+    #[tokio::test]
+    async fn qwen3_disables_thinking_and_keeps_default_temperature() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(success_body("ok")))
+            .mount(&server)
+            .await;
+
+        client(&server.uri())
+            .translate(&request_for_model("Qwen3-14B", "Hello world"), &api_key())
+            .await
+            .unwrap();
+
+        let received = server.received_requests().await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&received[0].body).unwrap();
+
+        assert_eq!(body["temperature"], 0.2);
+        assert_eq!(body["enable_thinking"], false);
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("top_k").is_none());
+        assert!(body.get("repetition_penalty").is_none());
+        let system = body["messages"][0]["content"].as_str().unwrap();
+        assert!(system.trim_end().ends_with("/no_think"));
+        let user = body["messages"][1]["content"].as_str().unwrap();
+        assert!(user.contains("Hello world"));
+    }
+
+    /// An arbitrary/unknown local model id must be unaffected by the Hy-MT2/
+    /// Qwen3 special-casing: same defaults as before this feature landed.
+    #[tokio::test]
+    async fn unknown_local_model_keeps_the_generic_prompt_and_default_params() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(success_body("ok")))
+            .mount(&server)
+            .await;
+
+        client(&server.uri())
+            .translate(
+                &request_for_model("llama-3-8b-instruct", "Hello world"),
+                &api_key(),
+            )
+            .await
+            .unwrap();
+
+        let received = server.received_requests().await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&received[0].body).unwrap();
+        assert_eq!(body["temperature"], 0.2);
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("enable_thinking").is_none());
+        assert_eq!(body["messages"].as_array().unwrap().len(), 2);
+    }
+
+    /// Owner explicitly asked to verify Vietnamese diacritics survive
+    /// round-trip through the local client after quantization changes -
+    /// proves the response body is decoded as UTF-8 without mangling.
+    #[tokio::test]
+    async fn vietnamese_diacritics_survive_round_trip() {
+        const EXPECTED: &str =
+            "Đây là một câu tiếng Việt có đầy đủ dấu: ường, ẩm, ộ, ẽ, ứ, ữ, ơ, ư.";
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(success_body(EXPECTED)))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let result = client(&server.uri())
+            .translate(
+                &request_for_model("Hy-MT2-7B", "A sentence with diacritics."),
+                &api_key(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.translated_text, EXPECTED);
+        assert_eq!(
+            result.translated_text.chars().count(),
+            EXPECTED.chars().count()
+        );
     }
 }
