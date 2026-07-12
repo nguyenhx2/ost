@@ -58,6 +58,49 @@
   color: var(--color-text-muted);
 }
 
+/* ---------- Textarea ---------- */
+
+.ost-textarea-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.ost-textarea-label {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.ost-textarea {
+  width: 100%;
+  min-height: calc(var(--space-6) + var(--space-5));
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  resize: none;
+}
+
+.ost-textarea:hover:not(:disabled),
+.ost-textarea:focus-visible {
+  border-color: var(--color-border);
+  background-color: var(--color-surface-raised);
+}
+
+.ost-textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ost-textarea:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* ---------- Button ---------- */
 
 .ost-button {

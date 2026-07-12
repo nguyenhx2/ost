@@ -2,11 +2,13 @@ import { useState } from "react";
 import {
   AlertTriangle,
   ClipboardCopy,
+  Columns2,
   Copy,
   Crop,
   Move,
   Pin,
   PinOff,
+  Rows2,
   X,
 } from "lucide-react";
 import {
@@ -19,6 +21,7 @@ import {
   Slider,
   Spinner,
   Switch,
+  Textarea,
   Tooltip,
 } from "../components/ui";
 import { ConsentDialog } from "../components/ConsentDialog";
@@ -56,6 +59,8 @@ export function RegionPreviewView() {
     consentDialogOpen,
     sourceLanguage,
     targetLanguage,
+    layout,
+    sourceDraft,
   } = preview;
 
   const providerBadgeText =
@@ -156,52 +161,6 @@ export function RegionPreviewView() {
             </p>
           ) : null}
 
-          {state.sourceText !== "" ? (
-            <section className="region-preview-section">
-              <span className="region-preview-section-label">
-                {t("preview.sourceLabel")}
-              </span>
-              {state.lowConfidence ? (
-                <Badge variant="warning">
-                  <AlertTriangle size={12} aria-hidden="true" />
-                  {t("preview.lowConfidence")}
-                </Badge>
-              ) : null}
-              {state.fidelity.kind === "degraded" ? (
-                // AC-02.6: STANDING degraded-fidelity notice. Renders whenever
-                // fidelity is degraded, INDEPENDENT of lowConfidence, because the
-                // dropped diacritics are not caught by the confidence flag
-                // (human-in-the-loop.md). The reason is untrusted DATA (PlainText).
-                <div className="region-preview-degraded" role="status">
-                  <AlertTriangle size={14} aria-hidden="true" />
-                  <div className="region-preview-degraded-body">
-                    <span>{t("preview.degradedNotice")}</span>
-                    <span className="region-preview-degraded-reason">
-                      {t("preview.degradedReasonLabel")}
-                      {": "}
-                      <PlainText text={state.fidelity.reason} />
-                    </span>
-                  </div>
-                </div>
-              ) : null}
-              <p className="region-preview-text">
-                <PlainText text={state.sourceText} />
-              </p>
-            </section>
-          ) : null}
-
-          {state.status === "translating" ? (
-            // Owner complaint 1a: a visible loading indicator, not just text -
-            // "translating" must be obvious while a (possibly slow) streaming
-            // response is still in flight. `Spinner` carries the one
-            // role="status" announcement; the label text beside it is purely
-            // visual (not itself an aria-live duplicate).
-            <p className="region-preview-status region-preview-status--loading">
-              <Spinner label={t("preview.translating")} />
-              <span aria-hidden="true">{t("preview.translating")}</span>
-            </p>
-          ) : null}
-
           {state.status === "failed" && state.failureReason === "noKey" ? (
             // Distinct, actionable notice - NEVER the generic failure copy
             // (human-in-the-loop.md, provider transparency).
@@ -240,21 +199,112 @@ export function RegionPreviewView() {
             </div>
           ) : null}
 
-          {state.translation !== null ? (
+          {/*
+           * Owner item 1: the source and translation as two columns
+           * (`layout === "columns"`) or stacked (the original layout). The
+           * `@container` query in RegionPreviewView.css degrades a too-narrow
+           * window back to stacked regardless of the user's choice, so the
+           * columns never get squeezed illegible.
+           */}
+          <div
+            className={
+              layout === "columns"
+                ? "region-preview-columns region-preview-columns--side-by-side"
+                : "region-preview-columns"
+            }
+          >
+            <section className="region-preview-section">
+              {state.lowConfidence ? (
+                <Badge variant="warning">
+                  <AlertTriangle size={12} aria-hidden="true" />
+                  {t("preview.lowConfidence")}
+                </Badge>
+              ) : null}
+              {state.fidelity.kind === "degraded" ? (
+                // AC-02.6: STANDING degraded-fidelity notice. Renders whenever
+                // fidelity is degraded, INDEPENDENT of lowConfidence, because the
+                // dropped diacritics are not caught by the confidence flag
+                // (human-in-the-loop.md). The reason is untrusted DATA (PlainText).
+                <div className="region-preview-degraded" role="status">
+                  <AlertTriangle size={14} aria-hidden="true" />
+                  <div className="region-preview-degraded-body">
+                    <span>{t("preview.degradedNotice")}</span>
+                    <span className="region-preview-degraded-reason">
+                      {t("preview.degradedReasonLabel")}
+                      {": "}
+                      <PlainText text={state.fidelity.reason} />
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+              {/*
+               * Owner item 2: the source is a PASTE/EDIT target, not just an
+               * OCR display - pasting or editing text here translates it
+               * through the exact same path as OCR-captured text
+               * (useRegionPreview.pasteSourceText/commitSourceEdit). Pasted
+               * plain text is untrusted DATA (agent-guardrails.md): the
+               * Textarea intercepts the paste event and inserts ONLY the
+               * text/plain payload, never richly-formatted clipboard content.
+               */}
+              <Textarea
+                label={t("preview.sourceLabel")}
+                value={sourceDraft}
+                onChange={preview.setSourceDraft}
+                onPasteText={preview.pasteSourceText}
+                onBlur={preview.commitSourceEdit}
+                placeholder={t("preview.pasteSourceHint")}
+                rows={4}
+              />
+            </section>
+
             <section className="region-preview-section">
               <span className="region-preview-section-label">
                 {t("preview.translationLabel")}
               </span>
-              <p className="region-preview-text">
-                <PlainText text={state.translation} />
-              </p>
+              {state.status === "translating" ? (
+                // Owner complaint 1a: a visible loading indicator, not just
+                // text - "translating" must be obvious while a (possibly
+                // slow) streaming response is still in flight. `Spinner`
+                // carries the one role="status" announcement; the label text
+                // beside it is purely visual (not itself an aria-live
+                // duplicate).
+                <p className="region-preview-status region-preview-status--loading">
+                  <Spinner label={t("preview.translating")} />
+                  <span aria-hidden="true">{t("preview.translating")}</span>
+                </p>
+              ) : null}
+              {state.translation !== null ? (
+                <p className="region-preview-text">
+                  <PlainText text={state.translation} />
+                </p>
+              ) : null}
             </section>
-          ) : null}
+          </div>
         </div>
 
         {/* Docked control bar (owner complaint: controls must not eat the
             panel) - fixed at the bottom, outside the scrolling body above. */}
         <div className="region-preview-controls">
+          {/* Owner item 1: layout toggle (stacked vs side-by-side), persisted
+              via useRegionPreview/regionLayoutSettings. */}
+          <Tooltip text={t("preview.layoutStacked")}>
+            <IconButton
+              label={t("preview.layoutStacked")}
+              pressed={layout === "stacked"}
+              onClick={() => preview.setLayout("stacked")}
+            >
+              <Rows2 size={16} aria-hidden="true" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip text={t("preview.layoutColumns")}>
+            <IconButton
+              label={t("preview.layoutColumns")}
+              pressed={layout === "columns"}
+              onClick={() => preview.setLayout("columns")}
+            >
+              <Columns2 size={16} aria-hidden="true" />
+            </IconButton>
+          </Tooltip>
           <Select
             label={t("preview.sourceLanguage")}
             options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
@@ -312,11 +362,16 @@ export function RegionPreviewView() {
               <ClipboardCopy size={16} aria-hidden="true" />
             </IconButton>
           </Tooltip>
-          <Switch
-            checked={liveUpdate}
-            onChange={preview.setLiveUpdate}
-            label={t("preview.liveUpdate")}
-          />
+          {/* Owner item 3: the owner did not understand what this toggle
+              does - explain it via a Tooltip (no raw title=) and a clearer
+              label; the behaviour itself is unchanged. */}
+          <Tooltip text={t("preview.liveUpdateHelp")}>
+            <Switch
+              checked={liveUpdate}
+              onChange={preview.setLiveUpdate}
+              label={t("preview.liveUpdate")}
+            />
+          </Tooltip>
           <Slider
             label={t("preview.opacity")}
             value={opacity}

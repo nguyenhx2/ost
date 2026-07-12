@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => {
     loadProviderSettings: vi.fn(),
     loadRegionLanguageSettings: vi.fn(),
     saveRegionLanguageSettings: vi.fn().mockResolvedValue(undefined),
+    loadRegionPreviewLayout: vi.fn(),
+    saveRegionPreviewLayout: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -81,6 +83,20 @@ vi.mock("../lib/regionLanguageSettings", async (importOriginal) => {
     ...actual,
     loadRegionLanguageSettings: mocks.loadRegionLanguageSettings,
     saveRegionLanguageSettings: mocks.saveRegionLanguageSettings,
+  };
+});
+
+// Item 1 (layout toggle): the preview loads/saves the persisted display
+// layout on mount and on every toggle; without this the real
+// tauri-plugin-store call runs in jsdom and rejects with an undefined
+// `invoke`.
+vi.mock("../lib/regionLayoutSettings", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/regionLayoutSettings")>();
+  return {
+    ...actual,
+    loadRegionPreviewLayout: mocks.loadRegionPreviewLayout,
+    saveRegionPreviewLayout: mocks.saveRegionPreviewLayout,
   };
 });
 
@@ -177,6 +193,8 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ sourceLanguage: "auto", targetLanguage: "vi" });
   mocks.saveRegionLanguageSettings.mockReset().mockResolvedValue(undefined);
+  mocks.loadRegionPreviewLayout.mockReset().mockResolvedValue("stacked");
+  mocks.saveRegionPreviewLayout.mockReset().mockResolvedValue(undefined);
 });
 
 describe("RegionPreviewView (SCR-03)", () => {
@@ -598,5 +616,86 @@ describe("RegionPreviewView (SCR-03)", () => {
     emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
     const request = mocks.regionIpc.requestTranslation.mock.calls[0][0];
     expect(request.targetLanguage).toBe("ja");
+  });
+
+  it("offers a stacked/side-by-side layout toggle, persisted (owner item 1)", async () => {
+    await renderPreview();
+
+    const stacked = screen.getByRole("button", {
+      name: "Stacked layout (source above translation)",
+    });
+    const columns = screen.getByRole("button", {
+      name: "Side-by-side layout (source and translation in columns)",
+    });
+    expect(stacked).toHaveAttribute("aria-pressed", "true");
+    expect(columns).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(columns);
+
+    expect(columns).toHaveAttribute("aria-pressed", "true");
+    expect(stacked).toHaveAttribute("aria-pressed", "false");
+    expect(mocks.saveRegionPreviewLayout).toHaveBeenCalledWith("columns");
+  });
+
+  it("loads a persisted side-by-side layout on mount", async () => {
+    mocks.loadRegionPreviewLayout.mockResolvedValue("columns");
+    await renderPreview();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "Side-by-side layout (source and translation in columns)",
+        }),
+      ).toHaveAttribute("aria-pressed", "true"),
+    );
+  });
+
+  it("pasting text into the source field fires a translate request with that text (owner item 2)", async () => {
+    await renderPreview();
+
+    const source = screen.getByLabelText("Source text");
+    fireEvent.paste(source, {
+      clipboardData: { getData: () => "Pasted hello" },
+    });
+
+    expect(mocks.regionIpc.requestTranslation).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceText: "Pasted hello" }),
+    );
+    expect(screen.getByText("Translating...")).toBeInTheDocument();
+  });
+
+  it("the source field is editable and commits a manual edit on blur (owner item 2)", async () => {
+    await renderPreview();
+    emitOcr({ requestId: "p1", sourceText: "Hello", lowConfidence: false });
+    mocks.regionIpc.requestTranslation.mockClear();
+
+    const source = screen.getByLabelText("Source text");
+    fireEvent.change(source, { target: { value: "Hello there" } });
+    fireEvent.blur(source);
+
+    expect(mocks.regionIpc.requestTranslation).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceText: "Hello there" }),
+    );
+  });
+
+  it("the source field carries a paste-to-translate affordance", async () => {
+    await renderPreview();
+
+    expect(
+      screen.getByPlaceholderText("Paste or type text here to translate"),
+    ).toBeInTheDocument();
+  });
+
+  it("explains the Live update toggle via a tooltip (owner item 3)", async () => {
+    await renderPreview();
+
+    const toggle = screen.getByRole("switch", { name: /Live update/ });
+    await userEvent.hover(toggle);
+
+    expect(
+      await screen.findByRole("tooltip", {
+        name: /re-runs recognition and translation/i,
+      }),
+    ).toBeInTheDocument();
   });
 });
