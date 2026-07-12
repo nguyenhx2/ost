@@ -11,6 +11,10 @@ mod commands;
 // idle-budget probe example/harness.
 pub mod core;
 pub mod keys;
+// Managed local-LLM translation engine (ADR-006): consent-gated GGUF download +
+// a llama-server subprocess (loopback, one-at-a-time). Public for the process-
+// manager unit tests and the IPC command wiring below.
+pub mod llm;
 // Shared first-run model-download consent + download facility (TASK-007).
 pub mod models;
 // Public for the OCR spike + capture->OCR benchmark harness (benches/ + tests/).
@@ -77,6 +81,16 @@ pub fn run() {
             let whisper_descriptor =
                 stt::whisper_model_set_descriptor(recommended, whisper_dir.clone());
 
+            // Managed local-LLM engine (ADR-006): register the local-LLM GGUF
+            // consent descriptor (default preset - the disclosure shown per
+            // download is rebuilt for the specific target model) in the SAME
+            // fail-closed gate, not a second one.
+            let llm_dir = llm::resolve_llm_model_dir();
+            let llm_descriptor = llm::local_llm_model_set_descriptor(
+                llm::GgufModel::default_model(),
+                llm_dir.clone(),
+            );
+
             // Settings-time model switcher (TASK-026): honor a persisted
             // selection from a PRIOR Settings switch when it still names a
             // catalog tier the CURRENT hardware profile allows; otherwise fall
@@ -92,10 +106,23 @@ pub fn run() {
             );
             let gate = Arc::new(models::ModelGate::new(
                 consent,
-                vec![ocr_descriptor, whisper_descriptor],
+                vec![ocr_descriptor, whisper_descriptor, llm_descriptor],
             ));
 
             app.manage(models::ModelConsent::new(Arc::clone(&gate)));
+
+            // Managed local-LLM engine state: the process manager over the
+            // production OS spawn+health backend, plus the consent gate + GGUF
+            // cache dir. The llama-server child is killed on app exit (see the
+            // RunEvent handler below).
+            let llm_server = Arc::new(llm::LocalLlmServer::new(Arc::new(
+                llm::process::OsServerBackend::new(),
+            )));
+            app.manage(llm::LocalLlmEngine::new(
+                Arc::clone(&gate),
+                llm_dir,
+                llm_server,
+            ));
 
             // One-heavy-session-at-a-time coordinator (FR-05 / BR-04): at most one
             // heavy model set (ORT OCR OR whisper STT) is resident at a time.
@@ -152,6 +179,14 @@ pub fn run() {
             commands::keys::delete_provider_key,
             commands::providers::provider_picker_metadata,
             commands::providers::check_local_provider_connection,
+            llm::list_llm_models,
+            llm::request_llm_model_download,
+            llm::confirm_llm_model_download,
+            llm::cancel_llm_model_download,
+            llm::delete_llm_model,
+            llm::start_llm_server,
+            llm::stop_llm_server,
+            llm::llm_server_status,
             models::model_consent_status,
             models::grant_model_consent,
             models::revoke_model_consent,
@@ -164,8 +199,23 @@ pub fn run() {
             #[cfg(feature = "e2e")]
             shell::windows::e2e_list_window_labels,
         ])
-        .run(tauri::generate_context!())
+        // build (not run) so the RunEvent loop can kill the managed
+        // llama-server child on exit - a std::process::Child is not reaped when
+        // the parent dies on Windows, so an orphaned server would keep the port
+        // + GPU busy (ADR-006 crash-isolation cleanup).
+        .build(tauri::generate_context!())
         // expect is acceptable here: outermost entry point, failure to start the
         // Tauri runtime is unrecoverable and must abort with a message.
-        .expect("error while running tauri application");
+        .expect("error while running tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                if let Some(engine) = app_handle.try_state::<llm::LocalLlmEngine>() {
+                    let server = engine.server();
+                    // stop() is a quick kill; block briefly so the child is
+                    // reaped before the process exits.
+                    let _ = tauri::async_runtime::block_on(server.stop());
+                }
+            }
+        });
 }

@@ -15,6 +15,7 @@
 
 mod consent;
 mod descriptor;
+pub mod download;
 mod store;
 mod verify;
 
@@ -25,6 +26,7 @@ pub use consent::{ConsentStore, InMemoryConsentStore, ModelConsentStatus, ModelE
 pub use descriptor::{
     ArtifactDisclosure, ConsentDisclosure, ModelArtifact, ModelHost, ModelSetDescriptor,
 };
+pub use download::{stream_download_to_file, CancelFlag, DownloadBounds, StreamDownloadError};
 pub use store::{StoreConsentStore, CONSENT_STORE_FILE};
 pub use verify::{sha256_hex, verify_sha256};
 

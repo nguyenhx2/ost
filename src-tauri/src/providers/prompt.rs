@@ -11,7 +11,7 @@
 //! - EXCEPTION, documented below: [`TranslationPrompt::single_message`], used
 //!   only for Hy-MT2 (a translation-only model, not a chat model).
 
-use super::local_models::is_hy_mt2_model;
+use super::local_models::is_hunyuan_mt_model;
 use super::types::TranslationRequest;
 
 /// Delimiter opening the untrusted data region.
@@ -29,7 +29,7 @@ pub struct TranslationPrompt {
     /// wrapping is skipped for the Hy-MT2 single-message format - see
     /// [`Self::single_message`]).
     pub data_block: String,
-    /// SET ONLY for Hy-MT2 (`local_models::is_hy_mt2_model`): the exact,
+    /// SET ONLY for Hy-MT2 (`local_models::is_hunyuan_mt_model`): the exact,
     /// model-required single-message prompt
     /// (`"Translate the following segment into <target>, without additional
     /// explanation.\n\n<text>"`, Tencent's official template). Hy-MT2 is a
@@ -58,7 +58,7 @@ pub struct TranslationPrompt {
 /// every other model (cloud providers, Qwen3, generic local models) gets the
 /// generic instruction/data-separated template unchanged.
 pub fn build_translation_prompt(request: &TranslationRequest) -> TranslationPrompt {
-    if is_hy_mt2_model(&request.model_id) {
+    if is_hunyuan_mt_model(&request.model_id) {
         return build_hy_mt2_prompt(request);
     }
 
