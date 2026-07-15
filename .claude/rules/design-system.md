@@ -40,6 +40,23 @@ Landed primitives:
 | `Spinner` | `src/components/ui/Spinner.tsx` | Indeterminate loading indicator (streaming-translation-in-flight affordance) |
 | `Tabs` | `src/components/ui/Tabs.tsx` | Keyboard-accessible tab group (`role="tablist"`/`tab`/`tabpanel`, arrow-key nav); groups the Settings view |
 | `Textarea` | `src/components/ui/Textarea.tsx` | Multi-line paste/edit text field (region-preview pasteable source text) |
+| `Flag` | `src/components/ui/Flag.tsx` | Secondary, decorative country-flag visual next to a language name in `Select` options (never flag-only; see the flag-SVG exception below) |
+
+## Flag-SVG exception (owner-approved, TASK-030)
+
+Language pickers show a country flag as a SECONDARY visual next to the language
+name (which stays the primary label and the accessible name - never
+flag-only). This is a narrow, written exception to the lucide-only icon
+policy:
+
+- Self-hosted SVG only, under `src/assets/flags/` (one file per ISO 3166-1
+  alpha-2 country code); see the README there for source/license provenance.
+- No emoji flags, ever. No CDN/external host, no runtime fetch, no npm
+  dependency that pulls flag assets at build/run time - files are copied
+  in-repo.
+- Rendered via the `Flag` primitive (`aria-hidden`, decorative) and passed as
+  the `icon` on a `Select` option; the option's `aria-label` stays pinned to
+  the language name alone.
 
 ## Banned outright
 

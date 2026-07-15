@@ -8,6 +8,7 @@ import "./primitives.css";
 export { Badge, type BadgeProps } from "./Badge";
 export { Button, type ButtonProps } from "./Button";
 export { Dialog, type DialogProps } from "./Dialog";
+export { Flag, type FlagProps } from "./Flag";
 export { IconButton, type IconButtonProps } from "./IconButton";
 export { Input, type InputProps } from "./Input";
 export { OverlayPanel, type OverlayPanelProps } from "./OverlayPanel";

@@ -22,6 +22,7 @@ import {
   SOURCE_LANGUAGE_OPTIONS,
   TARGET_LANGUAGE_OPTIONS,
 } from "./lib/languages";
+import { languageSelectOptions } from "./lib/languageSelectOptions";
 import { isProviderId, PROVIDER_META } from "./lib/providers";
 import { activeModel } from "./lib/settings";
 import { STT_MODEL_LABEL_KEYS } from "./lib/sttModelLabels";
@@ -157,19 +158,13 @@ function App() {
                 same persisted preference, useRegionLanguageSettings). */}
             <Select
               label={t("home.regionSourceLanguage")}
-              options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
-                value: o.value,
-                label: t(o.labelKey),
-              }))}
+              options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
               value={regionLanguage.settings.sourceLanguage}
               onChange={regionLanguage.setSourceLanguage}
             />
             <Select
               label={t("home.regionTargetLanguage")}
-              options={TARGET_LANGUAGE_OPTIONS.map((o) => ({
-                value: o.value,
-                label: t(o.labelKey),
-              }))}
+              options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
               value={regionLanguage.settings.targetLanguage}
               onChange={regionLanguage.setTargetLanguage}
             />

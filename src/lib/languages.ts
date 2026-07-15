@@ -14,15 +14,29 @@ export interface SourceLanguageOption {
   value: SourceLanguage;
   /** i18n key for the human label (no hardcoded user-facing strings). */
   labelKey: I18nKey;
+  /** ISO 3166-1 alpha-2 country code for the secondary flag visual (design-
+   * system.md flag-SVG exception) - absent for Auto-detect, which has no
+   * defensible single country. */
+  flag?: string;
 }
 
 export const SOURCE_LANGUAGE_OPTIONS: SourceLanguageOption[] = [
   { value: SOURCE_LANGUAGE_AUTO, labelKey: "lang.auto" },
-  { value: "vi", labelKey: "lang.vi" },
-  { value: "en", labelKey: "lang.en" },
-  { value: "ja", labelKey: "lang.ja" },
-  { value: "ko", labelKey: "lang.ko" },
-  { value: "zh", labelKey: "lang.zh" },
+  { value: "vi", labelKey: "lang.vi", flag: "VN" },
+  { value: "en", labelKey: "lang.en", flag: "GB" },
+  { value: "ja", labelKey: "lang.ja", flag: "JP" },
+  { value: "ko", labelKey: "lang.ko", flag: "KR" },
+  { value: "zh", labelKey: "lang.zh", flag: "CN" },
+  { value: "es", labelKey: "lang.es", flag: "ES" },
+  { value: "fr", labelKey: "lang.fr", flag: "FR" },
+  { value: "de", labelKey: "lang.de", flag: "DE" },
+  { value: "ru", labelKey: "lang.ru", flag: "RU" },
+  { value: "pt", labelKey: "lang.pt", flag: "PT" },
+  { value: "it", labelKey: "lang.it", flag: "IT" },
+  { value: "th", labelKey: "lang.th", flag: "TH" },
+  { value: "id", labelKey: "lang.id", flag: "ID" },
+  { value: "ar", labelKey: "lang.ar", flag: "SA" },
+  { value: "hi", labelKey: "lang.hi", flag: "IN" },
 ];
 
 export const DEFAULT_SOURCE_LANGUAGE: SourceLanguage = SOURCE_LANGUAGE_AUTO;
@@ -35,14 +49,26 @@ export const DEFAULT_SOURCE_LANGUAGE: SourceLanguage = SOURCE_LANGUAGE_AUTO;
 export interface TargetLanguageOption {
   value: string;
   labelKey: I18nKey;
+  /** ISO 3166-1 alpha-2 country code for the secondary flag visual. */
+  flag?: string;
 }
 
 export const TARGET_LANGUAGE_OPTIONS: TargetLanguageOption[] = [
-  { value: "vi", labelKey: "lang.vi" },
-  { value: "en", labelKey: "lang.en" },
-  { value: "ja", labelKey: "lang.ja" },
-  { value: "ko", labelKey: "lang.ko" },
-  { value: "zh", labelKey: "lang.zh" },
+  { value: "vi", labelKey: "lang.vi", flag: "VN" },
+  { value: "en", labelKey: "lang.en", flag: "GB" },
+  { value: "ja", labelKey: "lang.ja", flag: "JP" },
+  { value: "ko", labelKey: "lang.ko", flag: "KR" },
+  { value: "zh", labelKey: "lang.zh", flag: "CN" },
+  { value: "es", labelKey: "lang.es", flag: "ES" },
+  { value: "fr", labelKey: "lang.fr", flag: "FR" },
+  { value: "de", labelKey: "lang.de", flag: "DE" },
+  { value: "ru", labelKey: "lang.ru", flag: "RU" },
+  { value: "pt", labelKey: "lang.pt", flag: "PT" },
+  { value: "it", labelKey: "lang.it", flag: "IT" },
+  { value: "th", labelKey: "lang.th", flag: "TH" },
+  { value: "id", labelKey: "lang.id", flag: "ID" },
+  { value: "ar", labelKey: "lang.ar", flag: "SA" },
+  { value: "hi", labelKey: "lang.hi", flag: "IN" },
 ];
 
 /** Default target language (AC-01.5): Vietnamese, the product's primary locale. */
@@ -56,6 +82,16 @@ const LANGUAGE_LABEL_KEYS: Record<string, I18nKey> = {
   ja: "lang.ja",
   ko: "lang.ko",
   zh: "lang.zh",
+  es: "lang.es",
+  fr: "lang.fr",
+  de: "lang.de",
+  ru: "lang.ru",
+  pt: "lang.pt",
+  it: "lang.it",
+  th: "lang.th",
+  id: "lang.id",
+  ar: "lang.ar",
+  hi: "lang.hi",
 };
 
 /**

@@ -56,3 +56,4 @@ overlay system.
 | TASK-028 | Build the main-window home screen (primary actions + status at a glance) | frontend-ui-dev | TASK-025 | P0 | 3 | Done |
 | TASK-029 | Tray item + left-click to restore the main window | frontend-ui-dev | TASK-027 | P1 | 3 | Done |
 | TASK-035 | Local LLM managed server engine - backend (ADR-006) | llm-integration-dev | TASK-026 | P1 | 2 | Active |
+| TASK-030 | Flag icons + more languages + copy controls on translation UI | frontend-ui-dev | TASK-008, TASK-016 | P1 | 3 | Active |

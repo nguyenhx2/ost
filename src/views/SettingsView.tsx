@@ -45,6 +45,7 @@ import {
   SOURCE_LANGUAGE_OPTIONS,
   TARGET_LANGUAGE_OPTIONS,
 } from "../lib/languages";
+import { languageSelectOptions } from "../lib/languageSelectOptions";
 import { activeModel } from "../lib/settings";
 import {
   useProviderKeys,
@@ -1274,10 +1275,7 @@ export function SettingsView() {
           <Select
             label={t("settings.audioSourceLanguage")}
             value={audio.sourceLanguage}
-            options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
-              value: o.value,
-              label: t(o.labelKey),
-            }))}
+            options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
             onChange={audio.setSourceLanguage}
           />
         </div>
@@ -1289,10 +1287,7 @@ export function SettingsView() {
           <Select
             label={t("settings.audioTargetLanguage")}
             value={audio.targetLanguage}
-            options={TARGET_LANGUAGE_OPTIONS.map((o) => ({
-              value: o.value,
-              label: t(o.labelKey),
-            }))}
+            options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
             onChange={audio.setTargetLanguage}
           />
         </div>

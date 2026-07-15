@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Select, type SelectOption } from "./index";
+import { Flag, Select, type SelectOption } from "./index";
 
 const OPTIONS: SelectOption[] = [
   { value: "gemini/gemini-2.5-flash", label: "gemini / gemini-2.5-flash" },
@@ -158,5 +158,56 @@ describe("Select (custom - design-system.md bans native <select>)", () => {
     await userEvent.keyboard("{ArrowDown}");
     await userEvent.keyboard("{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenCalledWith("base");
+  });
+
+  it("renders an option's flag icon beside its name (name stays primary, never flag-only)", async () => {
+    const options: SelectOption[] = [
+      { value: "en", label: "English", icon: <Flag country="GB" /> },
+      { value: "vi", label: "Vietnamese", icon: <Flag country="VN" /> },
+    ];
+    render(
+      <Select
+        label="Source language"
+        options={options}
+        value="en"
+        onChange={vi.fn()}
+      />,
+    );
+
+    // Trigger: flag + language name, name is what carries the accessible name.
+    const trigger = screen.getByRole("button", { name: "Source language" });
+    expect(trigger).toHaveTextContent("English");
+    expect(trigger.querySelector("img[aria-hidden='true']")).not.toBeNull();
+
+    await userEvent.click(trigger);
+    const option = screen.getByRole("option", { name: "Vietnamese" });
+    // The flag is decorative (aria-hidden); the accessible name is pinned to
+    // the label text alone via the option's own aria-label.
+    expect(option).toHaveAttribute("aria-label", "Vietnamese");
+    const flagImg = option.querySelector("img");
+    expect(flagImg).not.toBeNull();
+    expect(flagImg).toHaveAttribute("aria-hidden", "true");
+    expect(flagImg).toHaveAttribute("alt", "");
+    expect(option).toHaveTextContent("Vietnamese");
+  });
+
+  it("options without a flag render no icon (Auto-detect has none)", async () => {
+    const options: SelectOption[] = [
+      { value: "auto", label: "Auto-detect" },
+      { value: "en", label: "English", icon: <Flag country="GB" /> },
+    ];
+    render(
+      <Select
+        label="Source language"
+        options={options}
+        value="auto"
+        onChange={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Source language" }),
+    );
+    const autoOption = screen.getByRole("option", { name: "Auto-detect" });
+    expect(autoOption.querySelector("img")).toBeNull();
   });
 });
