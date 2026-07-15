@@ -250,7 +250,11 @@ describe("RegionPreviewView (SCR-03)", () => {
     emitOcr({ requestId: "p1", sourceText: fixture, lowConfidence: false });
 
     expect(document.querySelector("script")).toBeNull();
-    expect(document.querySelector("img")).toBeNull();
+    // No <img> INJECTED FROM the untrusted OCR text (e.g. an onerror handler)
+    // - this is distinct from the legitimate, self-hosted flag <img> the
+    // language-picker Select renders (design-system.md flag-SVG exception).
+    expect(document.querySelector("img[onerror]")).toBeNull();
+    expect(document.querySelector('img[src="x"]')).toBeNull();
     expect(document.querySelector("a")).toBeNull();
     expect(
       (window as unknown as Record<string, unknown>).__pwned,

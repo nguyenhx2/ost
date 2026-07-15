@@ -295,6 +295,23 @@ describe("CaptionOverlayView", () => {
     ).toBeInTheDocument();
   });
 
+  it("copies both the translation and the source text via the clipboard IPC, with aria-live feedback (AC-04.8)", async () => {
+    await renderOverlay();
+    emitCaption(caption());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy caption" }));
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith("Xin chào");
+    await waitFor(() =>
+      expect(screen.getByText("Copied to clipboard")).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Heard" }));
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith("こんにちは");
+    await waitFor(() =>
+      expect(screen.getByText("Copied to clipboard")).toBeInTheDocument(),
+    );
+  });
+
   it("close button visibly closes the overlay and stops the session (owner complaint: no way to close it)", async () => {
     await renderOverlay();
     emitCaption(caption());

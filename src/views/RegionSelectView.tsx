@@ -3,6 +3,7 @@ import { Select } from "../components/ui";
 import { useRegionSelection } from "../hooks/useRegionSelection";
 import { t } from "../lib/i18n";
 import { SOURCE_LANGUAGE_OPTIONS } from "../lib/languages";
+import { languageSelectOptions } from "../lib/languageSelectOptions";
 import "./RegionSelectView.css";
 
 /**
@@ -70,10 +71,7 @@ export function RegionSelectView() {
           </span>
           <Select
             label={t("select.sourceLanguage")}
-            options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
-              value: o.value,
-              label: t(o.labelKey),
-            }))}
+            options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
             value={sourceLanguage}
             onChange={selection.setSourceLanguage}
           />

@@ -30,6 +30,7 @@ import {
   SOURCE_LANGUAGE_OPTIONS,
   TARGET_LANGUAGE_OPTIONS,
 } from "../lib/languages";
+import { languageSelectOptions } from "../lib/languageSelectOptions";
 import { PROVIDER_MODEL_OPTIONS, providerOptionLabel } from "../lib/providers";
 import "./RegionPreviewView.css";
 
@@ -326,19 +327,13 @@ export function RegionPreviewView() {
           </Tooltip>
           <Select
             label={t("preview.sourceLanguage")}
-            options={SOURCE_LANGUAGE_OPTIONS.map((o) => ({
-              value: o.value,
-              label: t(o.labelKey),
-            }))}
+            options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
             value={sourceLanguage}
             onChange={preview.setSourceLanguage}
           />
           <Select
             label={t("preview.targetLanguage")}
-            options={TARGET_LANGUAGE_OPTIONS.map((o) => ({
-              value: o.value,
-              label: t(o.labelKey),
-            }))}
+            options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
             value={targetLanguage}
             onChange={preview.setTargetLanguage}
           />

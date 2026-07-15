@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Info } from "lucide-react";
@@ -16,6 +17,11 @@ import { Tooltip } from "./Tooltip";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Optional leading visual (e.g. a `Flag`) rendered before the label in
+   * both the trigger and the listbox row. Purely decorative - the accessible
+   * name stays pinned to `label` alone (see the `aria-label` on each `<li>`
+   * below), so an icon never pollutes the computed option name. */
+  icon?: ReactNode;
   /** Disabled entries are shown but not selectable (e.g. hardware-gated STT
    * tiers, cloud STT pending ADR-005 sign-off). */
   disabled?: boolean;
@@ -219,7 +225,10 @@ export function Select({ options, value, onChange, label }: SelectProps) {
         onClick={() => (open ? closeList(true) : openList())}
         onKeyDown={onTriggerKeyDown}
       >
-        <span>{selected ? selected.label : t("ui.select.placeholder")}</span>
+        <span className="ost-select-trigger-content">
+          {selected?.icon}
+          <span>{selected ? selected.label : t("ui.select.placeholder")}</span>
+        </span>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open
@@ -267,7 +276,10 @@ export function Select({ options, value, onChange, label }: SelectProps) {
                     }
                   }}
                 >
-                  <span>{option.label}</span>
+                  <span className="ost-select-option-content">
+                    {option.icon}
+                    <span>{option.label}</span>
+                  </span>
                   {option.disabled && option.disabledReason ? (
                     <Tooltip text={option.disabledReason}>
                       <span

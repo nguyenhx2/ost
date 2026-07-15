@@ -396,6 +396,16 @@ describe("useCaptionOverlay - copy / pin / dismiss (AC-04.3/04.8)", () => {
     expect(result.current.copied).toBe("translation");
   });
 
+  it("copies the source text (clipboard is the only outbound action)", async () => {
+    const { result } = await renderOverlay();
+    emitCaption(caption());
+
+    act(() => result.current.copySource());
+
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith("こんにちは");
+    expect(result.current.copied).toBe("source");
+  });
+
   it("Esc-dismiss stops and closes when not pinned; pinned blocks it", async () => {
     const { result } = await renderOverlay();
 

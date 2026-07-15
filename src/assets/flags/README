@@ -1,0 +1,43 @@
+Flag SVG provenance and license
+================================
+
+Source: flag-icons (https://github.com/lipis/flag-icons), the 4x3 aspect-ratio
+SVG set, commit fetched 2026-07-15 from the `main` branch.
+
+License: MIT (Copyright (c) 2013 Panayiotis Lipiridis). Full text below.
+
+These files were copied individually into this directory (no npm dependency,
+no CDN reference, no runtime fetch - design-system.md flag-SVG exception).
+Each file is named by its ISO 3166-1 alpha-2 country code:
+
+cn.svg de.svg es.svg fr.svg gb.svg id.svg in.svg it.svg
+jp.svg kr.svg pt.svg ru.svg sa.svg th.svg vn.svg
+
+Flags represent COUNTRIES, chosen as a defensible per-language mapping (see
+src/lib/languages.ts) - the language name is always the primary label, the
+flag a secondary decorative visual (never flag-only), per design-system.md
+and frontend.md.
+
+---
+
+The MIT License (MIT)
+
+Copyright (c) 2013 Panayiotis Lipiridis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

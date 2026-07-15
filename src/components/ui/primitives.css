@@ -305,6 +305,12 @@
   cursor: pointer;
 }
 
+.ost-select-trigger-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 /*
  * Portaled to <body> (Select.tsx) and positioned in VIEWPORT (fixed)
  * coordinates computed from the trigger's measured rect - this is what stops
@@ -355,6 +361,22 @@
   background-color: var(--color-surface);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.ost-select-option-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ---------- Flag (self-hosted SVG, secondary visual next to a language name) ---------- */
+
+.ost-flag {
+  width: var(--space-4);
+  height: var(--space-3);
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
 
 /* ---------- Spinner (indeterminate loading indicator) ---------- */
