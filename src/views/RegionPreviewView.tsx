@@ -5,6 +5,7 @@ import {
   Columns2,
   Copy,
   Crop,
+  MoreHorizontal,
   Move,
   Pin,
   PinOff,
@@ -17,6 +18,7 @@ import {
   IconButton,
   OverlayPanel,
   PlainText,
+  Popover,
   Select,
   Slider,
   Spinner,
@@ -93,34 +95,117 @@ export function RegionPreviewView() {
             {t("preview.title")}
           </h1>
           <Badge label={t("preview.providerBadge")}>{providerBadgeText}</Badge>
-          <Tooltip text={t("preview.reselect")}>
-            <IconButton
-              label={t("preview.reselect")}
-              onClick={preview.reselect}
-            >
-              <Crop size={16} aria-hidden="true" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip text={t("preview.moveHandle")}>
-            <IconButton
-              label={t("preview.moveHandle")}
-              onKeyDown={(e) => {
-                const steps: Record<string, [number, number]> = {
-                  ArrowLeft: [-NUDGE_STEP, 0],
-                  ArrowRight: [NUDGE_STEP, 0],
-                  ArrowUp: [0, -NUDGE_STEP],
-                  ArrowDown: [0, NUDGE_STEP],
-                };
-                const step = steps[e.key];
-                if (step) {
-                  e.preventDefault();
-                  preview.nudge(step[0], step[1]);
+          {/*
+           * Progressive disclosure (owner complaint: ~17 controls crammed
+           * flat into a small overlay). Only the few high-frequency actions
+           * stay always visible - re-select and copy-translation (docked
+           * control bar below) plus pin/close here; everything else
+           * (provider/model, language pickers, layout, opacity, secondary
+           * copy, the keyboard move handle) moves behind this ONE overflow
+           * affordance, same placement/icon as the caption overlay's.
+           */}
+          <Popover
+            label={t("preview.moreOptions")}
+            icon={<MoreHorizontal size={16} aria-hidden="true" />}
+          >
+            <div className="ost-popover-group">
+              <span className="ost-popover-group-label">
+                {t("preview.layoutLabel")}
+              </span>
+              <div className="ost-popover-row">
+                <Tooltip text={t("preview.layoutStacked")}>
+                  <IconButton
+                    label={t("preview.layoutStacked")}
+                    pressed={layout === "stacked"}
+                    onClick={() => preview.setLayout("stacked")}
+                  >
+                    <Rows2 size={16} aria-hidden="true" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip text={t("preview.layoutColumns")}>
+                  <IconButton
+                    label={t("preview.layoutColumns")}
+                    pressed={layout === "columns"}
+                    onClick={() => preview.setLayout("columns")}
+                  >
+                    <Columns2 size={16} aria-hidden="true" />
+                  </IconButton>
+                </Tooltip>
+              </div>
+            </div>
+            <Select
+              label={t("preview.sourceLanguage")}
+              options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
+              value={sourceLanguage}
+              onChange={preview.setSourceLanguage}
+            />
+            <Select
+              label={t("preview.targetLanguage")}
+              options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
+              value={targetLanguage}
+              onChange={preview.setTargetLanguage}
+            />
+            <Select
+              label={t("preview.providerModel")}
+              options={selectableOptions.map((o) => ({
+                value: o.id,
+                label: providerOptionLabel(o),
+              }))}
+              value={option.id}
+              onChange={(id) => {
+                const next = selectableOptions.find((o) => o.id === id);
+                if (next) {
+                  preview.setOption(next);
                 }
               }}
+            />
+            <Button
+              variant="primary"
+              onClick={preview.retranslate}
+              disabled={state.sourceText === ""}
             >
-              <Move size={16} aria-hidden="true" />
-            </IconButton>
-          </Tooltip>
+              {t("preview.retranslate")}
+            </Button>
+            <div className="ost-popover-row">
+              <Tooltip text={t("preview.copySource")}>
+                <IconButton
+                  label={t("preview.copySource")}
+                  onClick={preview.copySource}
+                  disabled={state.sourceText === ""}
+                >
+                  <Copy size={16} aria-hidden="true" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip text={t("preview.moveHandle")}>
+                <IconButton
+                  label={t("preview.moveHandle")}
+                  onKeyDown={(e) => {
+                    const steps: Record<string, [number, number]> = {
+                      ArrowLeft: [-NUDGE_STEP, 0],
+                      ArrowRight: [NUDGE_STEP, 0],
+                      ArrowUp: [0, -NUDGE_STEP],
+                      ArrowDown: [0, NUDGE_STEP],
+                    };
+                    const step = steps[e.key];
+                    if (step) {
+                      e.preventDefault();
+                      preview.nudge(step[0], step[1]);
+                    }
+                  }}
+                >
+                  <Move size={16} aria-hidden="true" />
+                </IconButton>
+              </Tooltip>
+            </div>
+            <Slider
+              label={t("preview.opacity")}
+              value={opacity}
+              min={OPACITY_MIN}
+              max={OPACITY_MAX}
+              step={OPACITY_STEP}
+              onChange={setOpacity}
+            />
+          </Popover>
           <Tooltip text={pinned ? t("preview.unpin") : t("preview.pin")}>
             <IconButton
               label={pinned ? t("preview.unpin") : t("preview.pin")}
@@ -302,69 +387,20 @@ export function RegionPreviewView() {
           </div>
         </div>
 
-        {/* Docked control bar (owner complaint: controls must not eat the
-            panel) - fixed at the bottom, outside the scrolling body above. */}
+        {/*
+         * Docked control bar (owner complaint: controls must not eat the
+         * panel) - fixed at the bottom, outside the scrolling body above.
+         * Only the two highest-frequency content actions live here now;
+         * everything else moved into the header's "more options" popover
+         * (progressive disclosure - see the header above).
+         */}
         <div className="region-preview-controls">
-          {/* Owner item 1: layout toggle (stacked vs side-by-side), persisted
-              via useRegionPreview/regionLayoutSettings. */}
-          <Tooltip text={t("preview.layoutStacked")}>
+          <Tooltip text={t("preview.reselect")}>
             <IconButton
-              label={t("preview.layoutStacked")}
-              pressed={layout === "stacked"}
-              onClick={() => preview.setLayout("stacked")}
+              label={t("preview.reselect")}
+              onClick={preview.reselect}
             >
-              <Rows2 size={16} aria-hidden="true" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip text={t("preview.layoutColumns")}>
-            <IconButton
-              label={t("preview.layoutColumns")}
-              pressed={layout === "columns"}
-              onClick={() => preview.setLayout("columns")}
-            >
-              <Columns2 size={16} aria-hidden="true" />
-            </IconButton>
-          </Tooltip>
-          <Select
-            label={t("preview.sourceLanguage")}
-            options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
-            value={sourceLanguage}
-            onChange={preview.setSourceLanguage}
-          />
-          <Select
-            label={t("preview.targetLanguage")}
-            options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
-            value={targetLanguage}
-            onChange={preview.setTargetLanguage}
-          />
-          <Select
-            label={t("preview.providerModel")}
-            options={selectableOptions.map((o) => ({
-              value: o.id,
-              label: providerOptionLabel(o),
-            }))}
-            value={option.id}
-            onChange={(id) => {
-              const next = selectableOptions.find((o) => o.id === id);
-              if (next) {
-                preview.setOption(next);
-              }
-            }}
-          />
-          <Button
-            variant="primary"
-            onClick={preview.retranslate}
-            disabled={state.sourceText === ""}
-          >
-            {t("preview.retranslate")}
-          </Button>
-          <Tooltip text={t("preview.copySource")}>
-            <IconButton
-              label={t("preview.copySource")}
-              onClick={preview.copySource}
-              disabled={state.sourceText === ""}
-            >
-              <Copy size={16} aria-hidden="true" />
+              <Crop size={16} aria-hidden="true" />
             </IconButton>
           </Tooltip>
           <Tooltip text={t("preview.copyTranslation")}>
@@ -376,14 +412,6 @@ export function RegionPreviewView() {
               <ClipboardCopy size={16} aria-hidden="true" />
             </IconButton>
           </Tooltip>
-          <Slider
-            label={t("preview.opacity")}
-            value={opacity}
-            min={OPACITY_MIN}
-            max={OPACITY_MAX}
-            step={OPACITY_STEP}
-            onChange={setOpacity}
-          />
         </div>
 
         <span

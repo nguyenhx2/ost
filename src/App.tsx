@@ -147,79 +147,101 @@ function App() {
         <h2 id="home-actions-heading">{t("home.actionsHeading")}</h2>
         <ul className="home-action-list">
           <li className="home-action">
-            <span className="home-action-label">{t("home.actionRegion")}</span>
-            {hotkeys.config ? (
-              <Badge label={t("home.hotkeyLabel")}>
-                {hotkeys.config.regionSelect}
-              </Badge>
-            ) : null}
+            <div className="home-action-info">
+              <span className="home-action-label">
+                {t("home.actionRegion")}
+              </span>
+              {hotkeys.config ? (
+                <Badge label={t("home.hotkeyLabel")}>
+                  {hotkeys.config.regionSelect}
+                </Badge>
+              ) : null}
+            </div>
             {/* Item 3: language pickers default the NEXT region selection
                 anywhere in the app (select overlay + preview dialog read the
-                same persisted preference, useRegionLanguageSettings). */}
-            <Select
-              label={t("home.regionSourceLanguage")}
-              options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
-              value={regionLanguage.settings.sourceLanguage}
-              onChange={regionLanguage.setSourceLanguage}
-            />
-            <Select
-              label={t("home.regionTargetLanguage")}
-              options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
-              value={regionLanguage.settings.targetLanguage}
-              onChange={regionLanguage.setTargetLanguage}
-            />
-            <Button
-              variant="primary"
-              onClick={() => void regionIpc.startSelection()}
-            >
-              <Crop size={16} aria-hidden="true" />
-              {t("home.actionRegionCta")}
-            </Button>
+                same persisted preference, useRegionLanguageSettings). Kept on
+                their own row so the primary CTA button reads as the one
+                visual endpoint of this action, not one control among five. */}
+            <div className="home-action-controls">
+              <Select
+                label={t("home.regionSourceLanguage")}
+                options={languageSelectOptions(SOURCE_LANGUAGE_OPTIONS)}
+                value={regionLanguage.settings.sourceLanguage}
+                onChange={regionLanguage.setSourceLanguage}
+              />
+              <Select
+                label={t("home.regionTargetLanguage")}
+                options={languageSelectOptions(TARGET_LANGUAGE_OPTIONS)}
+                value={regionLanguage.settings.targetLanguage}
+                onChange={regionLanguage.setTargetLanguage}
+              />
+              <Button
+                variant="primary"
+                onClick={() => void regionIpc.startSelection()}
+              >
+                <Crop size={16} aria-hidden="true" />
+                {t("home.actionRegionCta")}
+              </Button>
+            </div>
           </li>
 
           <li className="home-action">
-            <span className="home-action-label">{t("home.actionAudio")}</span>
-            {hotkeys.config ? (
-              <Badge label={t("home.hotkeyLabel")}>
-                {hotkeys.config.toggleAudio}
-              </Badge>
-            ) : null}
-            <Button variant="primary" onClick={handleToggleAudio}>
+            <div className="home-action-info">
+              <span className="home-action-label">{t("home.actionAudio")}</span>
+              {hotkeys.config ? (
+                <Badge label={t("home.hotkeyLabel")}>
+                  {hotkeys.config.toggleAudio}
+                </Badge>
+              ) : null}
               {audio.running ? (
-                <>
-                  <Square size={16} aria-hidden="true" />
-                  {t("home.actionAudioStop")}
-                </>
-              ) : (
-                <>
-                  <Mic size={16} aria-hidden="true" />
-                  {t("home.actionAudioStart")}
-                </>
-              )}
-            </Button>
-            {audio.running ? (
-              <Badge label={t("home.audioRunning")}>
-                {t("home.audioRunning")}
-              </Badge>
-            ) : null}
+                <Badge label={t("home.audioRunning")}>
+                  {t("home.audioRunning")}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="home-action-controls">
+              <Button variant="primary" onClick={handleToggleAudio}>
+                {audio.running ? (
+                  <>
+                    <Square size={16} aria-hidden="true" />
+                    {t("home.actionAudioStop")}
+                  </>
+                ) : (
+                  <>
+                    <Mic size={16} aria-hidden="true" />
+                    {t("home.actionAudioStart")}
+                  </>
+                )}
+              </Button>
+            </div>
           </li>
 
           <li className="home-action">
-            <span className="home-action-label">
-              {t("home.actionSettings")}
-            </span>
-            <Button onClick={() => void settingsIpc.open()}>
-              <SettingsIcon size={16} aria-hidden="true" />
-              {t("home.actionSettingsCta")}
-            </Button>
+            <div className="home-action-info">
+              <span className="home-action-label">
+                {t("home.actionSettings")}
+              </span>
+            </div>
+            <div className="home-action-controls">
+              <Button onClick={() => void settingsIpc.open()}>
+                <SettingsIcon size={16} aria-hidden="true" />
+                {t("home.actionSettingsCta")}
+              </Button>
+            </div>
           </li>
 
           <li className="home-action">
-            <span className="home-action-label">{t("home.actionHistory")}</span>
-            <Button onClick={() => void historyIpc.open()}>
-              <History size={16} aria-hidden="true" />
-              {t("home.actionHistoryCta")}
-            </Button>
+            <div className="home-action-info">
+              <span className="home-action-label">
+                {t("home.actionHistory")}
+              </span>
+            </div>
+            <div className="home-action-controls">
+              <Button onClick={() => void historyIpc.open()}>
+                <History size={16} aria-hidden="true" />
+                {t("home.actionHistoryCta")}
+              </Button>
+            </div>
           </li>
         </ul>
 
