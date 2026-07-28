@@ -159,6 +159,16 @@ async function renderPreview() {
   return rendered;
 }
 
+/**
+ * The provider/model, language, layout, retranslate, copy-source, opacity
+ * and move-handle controls now live behind the header's "more options"
+ * popover (progressive disclosure pass) - tests that exercise them open it
+ * first, same as a real user would.
+ */
+async function openMoreOptions() {
+  await userEvent.click(screen.getByRole("button", { name: "More options" }));
+}
+
 function keyStatuses(present: Partial<Record<string, boolean>>) {
   return [
     { provider_id: "gemini", key_present: !!present.gemini },
@@ -268,7 +278,9 @@ describe("RegionPreviewView (SCR-03)", () => {
     await renderPreview();
     emitOcr({ requestId: "p1", sourceText: "Hallo", lowConfidence: false });
 
-    // One interaction: pick a different provider/model in the custom Select.
+    // One interaction to reach the provider/model Select (behind the "more
+    // options" popover) plus the pick itself and Re-translate.
+    await openMoreOptions();
     await userEvent.click(
       screen.getByRole("button", { name: "Provider and model" }),
     );
@@ -304,7 +316,9 @@ describe("RegionPreviewView (SCR-03)", () => {
     expect(screen.queryByText(/provider 503/)).toBeNull();
     expect(screen.queryByText("Translating...")).toBeNull();
 
-    // The escape hatch is keyboard-operable and re-issues the request.
+    // The escape hatch is keyboard-operable and re-issues the request (now
+    // behind the "more options" popover).
+    await openMoreOptions();
     const retranslate = screen.getByRole("button", { name: "Re-translate" });
     expect(retranslate).toBeEnabled();
     await userEvent.click(retranslate);
@@ -323,6 +337,9 @@ describe("RegionPreviewView (SCR-03)", () => {
       model: "m",
     });
 
+    // Copy source lives behind the "more options" popover; copy translation
+    // stays always visible in the docked control bar.
+    await openMoreOptions();
     await userEvent.click(
       screen.getByRole("button", { name: "Copy source text" }),
     );
@@ -358,6 +375,8 @@ describe("RegionPreviewView (SCR-03)", () => {
   it("opacity slider is a keyboard-operable control (AC-04.3)", async () => {
     await renderPreview();
 
+    // The opacity slider lives behind the "more options" popover.
+    await openMoreOptions();
     const slider = screen.getByRole("slider", { name: "Background opacity" });
     fireEvent.change(slider, { target: { value: "0.5" } });
     const panel = screen.getByRole("dialog", { name: "Region translation" });
@@ -367,6 +386,8 @@ describe("RegionPreviewView (SCR-03)", () => {
   it("move handle nudges the window with arrow keys (keyboard reposition)", async () => {
     await renderPreview();
 
+    // The move handle lives behind the "more options" popover.
+    await openMoreOptions();
     const handle = screen.getByRole("button", {
       name: "Move overlay (arrow keys while focused)",
     });
@@ -577,6 +598,8 @@ describe("RegionPreviewView (SCR-03)", () => {
 
   it("every icon-only control exposes an aria-label (WCAG 2.1 AA)", async () => {
     await renderPreview();
+    // Also check the controls disclosed behind "more options".
+    await openMoreOptions();
 
     for (const button of screen.getAllByRole("button")) {
       const name =
@@ -643,6 +666,8 @@ describe("RegionPreviewView (SCR-03)", () => {
   it("offers source and target language pickers (item 3)", async () => {
     await renderPreview();
 
+    // Language pickers live behind the "more options" popover.
+    await openMoreOptions();
     expect(
       screen.getByRole("button", { name: "Source language" }),
     ).toBeInTheDocument();
@@ -664,6 +689,8 @@ describe("RegionPreviewView (SCR-03)", () => {
   it("offers a stacked/side-by-side layout toggle, persisted (owner item 1)", async () => {
     await renderPreview();
 
+    // Layout toggle lives behind the "more options" popover.
+    await openMoreOptions();
     const stacked = screen.getByRole("button", {
       name: "Stacked layout (source above translation)",
     });
@@ -684,6 +711,8 @@ describe("RegionPreviewView (SCR-03)", () => {
     mocks.loadRegionPreviewLayout.mockResolvedValue("columns");
     await renderPreview();
 
+    // Layout toggle lives behind the "more options" popover.
+    await openMoreOptions();
     await waitFor(() =>
       expect(
         screen.getByRole("button", {

@@ -105,6 +105,8 @@ const en = {
   "preview.layoutColumns":
     "Side-by-side layout (source and translation in columns)",
   "preview.pasteSourceHint": "Paste or type text here to translate",
+  "preview.moreOptions": "More options",
+  "preview.layoutLabel": "Layout",
 
   // SCR-01: live caption overlay (FR-01)
   "caption.title": "Live captions",
@@ -135,6 +137,7 @@ const en = {
   "caption.moveHandle": "Move overlay (arrow keys while focused)",
   "caption.providerBadge": "Active provider and model",
   "caption.retry": "Retry",
+  "caption.moreOptions": "More options",
 
   // Whisper STT model-download consent (reuses the shared disclosure dialog)
   "consent.whisperTitle": "Download speech-to-text model",
@@ -525,6 +528,8 @@ const vi: Record<I18nKey, string> = {
   "preview.layoutStacked": "Bố cục xếp chồng (nguồn phía trên bản dịch)",
   "preview.layoutColumns": "Bố cục song song (nguồn và bản dịch theo hai cột)",
   "preview.pasteSourceHint": "Dán hoặc nhập văn bản vào đây để dịch",
+  "preview.moreOptions": "Thêm tuỳ chọn",
+  "preview.layoutLabel": "Bố cục",
 
   "caption.title": "Phụ đề trực tiếp",
   "caption.sourceLabel": "Nghe được",
@@ -554,6 +559,7 @@ const vi: Record<I18nKey, string> = {
   "caption.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
   "caption.providerBadge": "Provider và model đang dịch",
   "caption.retry": "Thử lại",
+  "caption.moreOptions": "Thêm tuỳ chọn",
 
   "consent.whisperTitle": "Tải mô hình chuyển giọng nói thành văn bản",
   "consent.whisperIntro":

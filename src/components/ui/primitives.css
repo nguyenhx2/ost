@@ -369,6 +369,61 @@
   gap: var(--space-1);
 }
 
+/* ---------- Popover (compact overflow/disclosure surface) ---------- */
+
+.ost-popover {
+  position: relative;
+  display: inline-flex;
+}
+
+/*
+ * Portaled to <body> (Popover.tsx) and positioned in VIEWPORT (fixed)
+ * coordinates computed from the trigger's measured rect - same reasoning as
+ * the Select listbox/Tooltip: escapes the overlay panel's `overflow: hidden`
+ * scroll clip and stays fully on-screen near a small overlay window's edge.
+ * Width pinned to the overlay-panel floor width (token-driven, not a
+ * hardcoded px literal) so the disclosed controls get a stable, readable
+ * column; height capped and scrollable so a tall control stack never runs
+ * off a short viewport.
+ */
+.ost-popover-panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: var(--overlay-min-width);
+  max-height: calc(100vh - var(--space-6));
+  overflow-y: auto;
+  padding: var(--space-3);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-overlay);
+  z-index: var(--z-modal);
+}
+
+.ost-popover-panel:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.ost-popover-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ost-popover-group-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.ost-popover-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* ---------- Flag (self-hosted SVG, secondary visual next to a language name) ---------- */
 
 .ost-flag {
