@@ -1,13 +1,25 @@
+---
+# git-workflow.md governs behavior (git/PR process), not a code surface, so it cannot be scoped to
+# a narrow feature glob the way frontend.md or tech-stack.md can. It is scoped to "any file that
+# can end up in a commit" rather than left unconditional, so a pure read-only exploration session
+# does not pay for it.
+paths:
+  - "src/**"
+  - "src-tauri/src/**"
+  - "docs/**"
+  - ".claude/**"
+---
+
 # Rule: Git workflow
 
-- Platform: GitHub (remote to be added; repo slug TBD - update here when created).
-  Terminology: PR. CLI: `gh` (authenticate with `gh auth login`).
+- Platform: GitHub (`github.com/nguyenhx2/ost`). Terminology: PR. CLI: `gh` (authenticate with
+  `gh auth login`).
 - Commit identity (MANDATORY): **nguyenhx2** `<nguyenhx1@gmail.com>` - verify
   `git config user.name` / `git config user.email` before every commit (this repo carries a
   local config; the global config uses a different work identity - do not let it leak in).
 - Never commit directly to `main` (hook-enforced). One branch per task:
   `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
-- Open a PR for review (after `/review-pr` has been run); the PR description carries
+- Open a PR for review (after `/review-changes` has been run); the PR description carries
   what/why + FR/TASK references + test evidence.
 - Merging: the owner delegated merge authority to the `merge-manager` agent on 2026-07-09.
   It is the ONLY agent that may merge, and only through the gate in its agent file (CI

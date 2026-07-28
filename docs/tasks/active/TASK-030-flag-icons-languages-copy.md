@@ -2,7 +2,7 @@
 title: "TASK-030: Flag icons, more languages, copy controls on translation UI"
 status: Active # Active | Blocked | Pending | Done (Planned before dispatch)
 fr: FR-04
-owner: frontend-ui-dev
+owner: presentation-dev
 deps: TASK-008, TASK-016
 priority: P1
 phase: 3
@@ -61,6 +61,7 @@ control on the region preview AND the caption overlay.
 |------|-----|---------------|--------|
 | 2026-07-15 | orchestrator | Registered task; scoped flags/languages/copy; dispatched frontend-ui-dev | In progress |
 | 2026-07-15 | frontend-ui-dev | Self-hosted 15 MIT-licensed flag-icons SVGs under `src/assets/flags/`; added `Flag` primitive + `Select.icon`; expanded source/target language catalogs to 15 codes with en+vi i18n; added a `languageSelectOptions` helper and wired it into all 4 picker call sites; verified copy-source/copy-translation already render on both the region preview and caption overlay and added coverage; documented the flag-SVG exception in design-system.md; full `npm run test` (405/405) + `npm run lint` + prettier green. Branch `feat/flag-icons-languages-copy`, not yet merged. | In progress |
+| 2026-07-28 | orchestrator | DDD agent-harness rebuild: `frontend-ui-dev` retired, ownership carries to `presentation-dev` (Presentation context, `docs/architecture/domain-model.md`) - no scope change, `src/` is owned identically. Owner field updated. | In progress |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>

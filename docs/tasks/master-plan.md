@@ -36,7 +36,7 @@ overlay system.
 | TASK-008 | Region-select overlay + translation preview UI | frontend-ui-dev | TASK-002 | P0 | 1 | Done |
 | TASK-009 | Settings UI: provider key entry/validation, model selection | frontend-ui-dev | TASK-006 | P1 | 1 | Done |
 | TASK-010 | Additional LLM provider clients: Anthropic, OpenAI, OpenRouter | llm-integration-dev | TASK-006 | P0 | 1 | Done |
-| TASK-011 | Opt-in cloud OCR backends (BR-09) | screen-translate-dev | TASK-007 | P1 | 1 | Pending |
+| TASK-011 | Opt-in cloud OCR backends (BR-09) | recognition-dev | TASK-007 | P1 | 1 | Pending |
 | TASK-012 | Settings revoke-consent control for model downloads | frontend-ui-dev | TASK-007, TASK-009 | P1 | 1 | Done |
 | TASK-013 | System-audio capture: WASAPI loopback + VAD + chunking | audio-pipeline-dev | TASK-002 | P0 | 2 | Done |
 | TASK-014 | Local STT: whisper.cpp + first-run download + hardware probe | audio-pipeline-dev | TASK-013, TASK-007 | P0 | 2 | Done |
@@ -55,5 +55,6 @@ overlay system.
 | TASK-027 | Generalize the deferred window-open helper across all five window sites | frontend-ui-dev | TASK-023 | P0 | 1 | Done |
 | TASK-028 | Build the main-window home screen (primary actions + status at a glance) | frontend-ui-dev | TASK-025 | P0 | 3 | Done |
 | TASK-029 | Tray item + left-click to restore the main window | frontend-ui-dev | TASK-027 | P1 | 3 | Done |
-| TASK-035 | Local LLM managed server engine - backend (ADR-006) | llm-integration-dev | TASK-026 | P1 | 2 | Active |
-| TASK-030 | Flag icons + more languages + copy controls on translation UI | frontend-ui-dev | TASK-008, TASK-016 | P1 | 3 | Active |
+| TASK-035 | Local LLM managed server engine - backend (ADR-006) | translation-dev | TASK-026 | P1 | 2 | Active |
+| TASK-030 | Flag icons + more languages + copy controls on translation UI | presentation-dev | TASK-008, TASK-016 | P1 | 3 | Active |
+| TASK-036 | Deepen domain-model.md aggregate invariants per bounded context (DDD harness follow-up) | domain-modeler | - | P2 | 1 | Planned |

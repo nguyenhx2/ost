@@ -2,6 +2,48 @@
 
 Nhật ký thay đổi dependency/tool/infra (cái gì, vì sao, kiểm chứng thế nào).
 
+## 2026-07-28
+
+- Tái tổ chức AI-agent harness theo Domain-Driven Design (owner-approved design, không tự quyết
+  định lại): roster cũ (13 agent, nhóm theo FR: `audio-pipeline-dev`, `screen-translate-dev`,
+  `llm-integration-dev`, `frontend-ui-dev`, + 9 agent còn lại) đổi thành 18 agent nhóm theo 6
+  bounded context (`docs/architecture/domain-model.md`, `.claude/rules/domain-model.md`). Mapping
+  agent cũ -> mới: `audio-pipeline-dev` -> tách thành `capture-dev` (audio/) + `recognition-dev`
+  (stt/); `screen-translate-dev` -> tách thành `capture-dev` (capture/) + `recognition-dev` (ocr/);
+  `llm-integration-dev` -> `translation-dev` (providers/ + llm/, `keys/` chuyển sang platform-dev);
+  `frontend-ui-dev` -> `presentation-dev` (src/ giữ nguyên, `shell/` chuyển sang platform-dev). Thêm
+  mới: `domain-modeler` (opus/high, chủ sở hữu domain-model.md, phỏng theo asset `data-modeler.md`
+  của skill harness-bootstrap - dự án không có DB nên không dùng nguyên bản) và `platform-dev`
+  (sonnet/high, gộp hai context Model Lifecycle + Platform Shell: models/ + shell/ + commands/ +
+  keys/ + core/ shared-kernel + lib.rs/main.rs). 12 agent còn lại (orchestrator, debugger,
+  code-reviewer, security-reviewer, merge-manager, qa-test, spec-guardian, ba-analyst, devops,
+  brainstormer, tech-researcher, history-tracker) giữ tên, được gán lại model/effort/tools/maxTurns
+  tường minh theo bảng roster + cost-model của skill (vd debugger lên opus/xhigh, qa-test/
+  spec-guardian xuống medium effort, history-tracker xuống haiku/low).
+- Hook layer: nâng cấp 6 hook `.ps1` lên bản shipped mới nhất của skill (force-overwrite, verified
+  bằng sample JSON payload trước khi commit - xem `.claude/hooks/README.md`). Fix quan trọng:
+  `agent-history.ps1` trước đây đăng ký sai event `PostToolUse (Task|Agent)` (không có tool `Task`,
+  payload PostToolUse cho `Agent` không có `tool_input`/`tool_response` như code cũ giả định) nên
+  archive ra file rỗng; sửa thành event `SubagentStop` đúng cách (đọc `agent_transcript_path`).
+  `settings.json` hook registration cập nhật theo.
+- 10 command cũ (`review-pr.md` và 9 file khác) đổi tên/tái tạo từ asset shipped của skill:
+  `review-pr` -> `review-changes` (giữ nội dung tương đương, thêm bước kiểm `cargo fmt`/`clippy`
+  vào gate CI). Thêm 2 command mới: `deploy.md` (checklist release có gate, sửa lại theo
+  `release.yml` thật của repo - KHÔNG có bước migration DB vì app không có DB), `scaffold-feature.md`.
+- Rule: viết lại `testing.md` (DDD là design driver, TDD không còn là nguyên tắc tổ chức nhưng vẫn
+  bắt buộc viết test - không đổi non-negotiables). Thêm mới `.claude/rules/domain-model.md`
+  (context map + luật ACL). Thêm `paths:` frontmatter cho mọi rule path-scope được
+  (coding-standards, design-system, frontend, tech-stack, security-privacy, human-in-the-loop,
+  docs-workflow, testing, domain-model, git-workflow); chỉ còn `00-overview`, `agent-guardrails`,
+  `task-tracking`, `conventional-commits` load không điều kiện. `design-system.md` giữ nguyên nội
+  dung (bảng Landed primitives + ngoại lệ flag-SVG) - chỉ thêm frontmatter.
+- 3 task đang mở (TASK-011 pending, TASK-030/TASK-035 active) đổi trường `owner:` sang tên agent
+  mới (không đổi các task Done - giữ nguyên lịch sử ai làm lúc đó). Thêm TASK-036 (domain-modeler,
+  P2) làm việc kế tiếp: đào sâu aggregate invariant từng context trong domain-model.md.
+- Kiểm chứng: không chạy `cargo`/`npm` (thay đổi này không đụng code sản phẩm); hook test bằng
+  sample JSON payload (`protect-secrets`, `check-commit-msg` block/allow đúng theo kỳ vọng - xem
+  phần xác minh trong báo cáo PR).
+
 ## 2026-07-11
 
 - E2E acceptance gate FR-01/02/04 (TASK-022, test): wire WebdriverIO + tauri-driver against

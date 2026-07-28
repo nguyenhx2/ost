@@ -1,3 +1,17 @@
+---
+paths:
+  - "src-tauri/src/keys/**"
+  - "src-tauri/src/providers/**"
+  - "src-tauri/src/llm/**"
+  - "src-tauri/src/capture/**"
+  - "src-tauri/src/audio/**"
+  - "src-tauri/src/ocr/**"
+  - "src-tauri/src/stt/**"
+  - "src-tauri/src/models/**"
+  - "src/**"
+  - ".env.example"
+---
+
 # Rule: Security and privacy
 
 ## What is sensitive here

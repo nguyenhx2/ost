@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/**/*.{ts,tsx,css}"
+---
+
 # Rule: Frontend
 
 ## Brand assets (MANDATORY section - currently placeholder)

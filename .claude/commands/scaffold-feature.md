@@ -1,21 +1,23 @@
 ---
-description: Plan and implement a functional requirement end-to-end against its acceptance criteria.
-argument-hint: <FR-id> (e.g. FR-03)
+description: Create the skeleton of a feature module (entry point, library module, component, failing test).
+argument-hint: <feature-slug>
 ---
 
-Implement functional requirement **$1**.
+Scaffold the feature **$1**. If $1 is empty, ask for the feature slug and stop.
 
-If $1 is empty, list the functional requirements that have no task yet and ask which one to
-implement. Do not guess.
+Follow the layout in `.claude/rules/coding-standards.md`:
 
-1. Read FR $1 in `docs/specs/05-functional-requirements.md`: inputs, outputs, business rules,
-   acceptance criteria, use case. Read the matching PRD in `docs/requirements/` if one exists.
-2. Dispatch `spec-guardian` to lock the scope and the acceptance criteria before any code is
-   written. An FR with no observable acceptance criteria is not ready to implement: stop and
-   escalate.
-3. Register the work with `/new-task` (it starts at `status: Planned`), then set it to `Active`
-   when implementation begins.
-4. Assign the specialist agent per the routing table:
+1. The entry point (route handler, controller, or command): input validation and delegation only.
+   No business logic lives here.
+2. The library module that holds the business logic, one directory per feature, testable without
+   the transport layer.
+3. The user-facing component, built from the existing design-system primitives rather than new
+   one-off styles, when the feature has a user interface.
+4. A failing cargo test + Vitest test that names the acceptance criterion of the FR it serves. It
+   fails first; the implementation is what makes it pass.
+
+Register the owner agent for the domain in the routing table if this feature is not covered by an
+existing entry:
 
 | Work | Agent |
 |------|-------|
@@ -37,11 +39,5 @@ implement. Do not guess.
 | Merging approved PRs (delegated authority) | `merge-manager` (dispatched only by `orchestrator`) |
 | Agent-run history audit (`.claude/state/history/`) | `history-tracker` |
 
-5. Design against the owning context's domain model (`docs/architecture/domain-model.md`) before writing
-   code that crosses a context boundary; consult `domain-modeler` when it does. Tests express the domain
-   invariants and the FR's acceptance criteria: cargo test + Vitest for the business rules, WebdriverIO +
-   tauri-driver for the user-visible flow. A test names the invariant or acceptance criterion it proves.
-6. Comply with `.claude/rules/`. The change is a proposal: a human reviews and decides.
-7. Run `/test`, then `/review-changes`.
-8. Do not deploy. Append the session-log rows to the task file and report which acceptance
-   criteria are now met and which are not.
+Scaffolding creates structure, not behavior. Leave the logic unimplemented rather than filling it
+with a plausible guess.

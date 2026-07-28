@@ -61,3 +61,9 @@ flowchart TB
 | Idle (không có phiên hoạt động) | RAM < 100MB, CPU < 1% |
 
 Chi tiết stack: `.claude/rules/tech-stack.md`. Quyết định nền tảng: ADR-001..003.
+
+## Bounded context (tổ chức module theo DDD)
+
+Các module Rust ở trên được nhóm thành 6 bounded context, mỗi context một agent sở hữu, giao tiếp
+qua trait/IPC (ACL) chứ không đọc thẳng nội bộ nhau. Bản đồ đầy đủ + ngôn ngữ chung + lý do tái tổ
+chức: `docs/architecture/domain-model.md`.

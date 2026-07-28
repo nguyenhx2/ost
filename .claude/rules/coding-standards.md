@@ -1,3 +1,9 @@
+---
+paths:
+  - "src/**/*.{ts,tsx}"
+  - "src-tauri/src/**/*.rs"
+---
+
 # Rule: Coding standards
 
 ## TypeScript (frontend, `src/`)
@@ -16,9 +22,11 @@
 - Explicit error handling: `thiserror` for domain errors, `anyhow` only at the outermost
   command boundary; never `unwrap()`/`expect()` outside tests and provably-infallible cases
   (comment why).
-- Module structure: one domain per module - `audio/`, `stt/`, `capture/`, `ocr/`,
-  `providers/`, `keys/`, `shell/` (tray, hotkeys, windows), `commands/` (thin Tauri command
-  handlers: validate input, call the domain module, map errors).
+- Module structure: one bounded context per module (see `domain-model.md` for the context map) -
+  `audio/`, `capture/` (Capture); `stt/`, `ocr/` (Recognition); `providers/`, `llm/` (Translation);
+  `models/` (Model Lifecycle); `keys/`, `shell/` (tray, hotkeys, windows), `commands/` (thin Tauri
+  command handlers: validate input, call the owning module, map errors), `core/` (the small shared
+  kernel between Recognition and Capture - see `domain-model.md`) (Platform Shell).
 - Pipelines are trait-based: `AudioSource`, `SpeechToText`, `ScreenCapturer`, `OcrEngine`,
   `TranslationProvider` - platform- and provider-specific impls behind the trait, so the
   macOS/Linux ports (Phase 4) swap impls, not call sites.

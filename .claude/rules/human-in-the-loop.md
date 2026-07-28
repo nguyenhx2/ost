@@ -1,3 +1,13 @@
+---
+paths:
+  - "src/**"
+  - "src-tauri/src/providers/**"
+  - "src-tauri/src/llm/**"
+  - "src-tauri/src/ocr/**"
+  - "src-tauri/src/stt/**"
+  - "src-tauri/src/commands/**"
+---
+
 # Rule: Human in the loop
 
 OST is an AI product: LLM-generated translations are shown to users. Constraints:
