@@ -36,8 +36,18 @@ jobs:
       # windows-latest self-locates MSVC (cl.exe/link.exe) for cargo and the cmake crate's
       # default Visual Studio generator, so no vcvars wrapper is required here - unlike the
       # dev host (VS 18 Enterprise preview), see docs/context/known-issues.md.
-      - name: Install CMake (whisper.cpp build)
-        run: choco install cmake --version=4.3.4 -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+      # windows-latest ships CMake preinstalled. Installing it again through
+      # chocolatey pinned to an exact version is pure risk: the pin was yanked
+      # from the feed and every PR started failing on "Failed to install cmake
+      # because a previous dependency failed". Use what the runner already has,
+      # and only fall back to an unpinned install if it is genuinely missing.
+      - name: Ensure CMake (whisper.cpp build)
+        run: |
+          if (Get-Command cmake -ErrorAction SilentlyContinue) {
+            cmake --version
+          } else {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+          }
       - name: Install LLVM 19 (libclang for bindgen)
         run: choco install llvm --version=19.1.7 -y --no-progress --force
       - name: Set LIBCLANG_PATH
