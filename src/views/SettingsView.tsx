@@ -16,6 +16,7 @@ import "./SettingsView.css";
 import {
   Badge,
   Button,
+  Disclosure,
   IconButton,
   Input,
   PlainText,
@@ -154,14 +155,16 @@ function sttModelLabel(id: string, fallback: string): string {
 }
 
 /**
- * Speech-to-text engine section (FR-01, TASK-026 part C, AC-01.8). Lists the
- * local whisper tiers (hardware-gated, with a Tooltip reason on disabled
- * entries) plus the static cloud-STT rows (always disabled, pending ADR-005).
- * Switching reuses the shared BR-08 consent-download dialog, extended with a
- * live progress bar; a mid-session switch is rejected with a clear message.
- * Takes the shared `stt` hook instance (lifted to `SettingsView`) so an
- * in-flight download's progress survives a tab switch, not just a dropdown
- * change (TASK-034).
+ * Speech-to-text engine picker (FR-01, TASK-026 part C, AC-01.8). Renders
+ * INSIDE the merged "Speech-to-text engine" section (settings IA pass,
+ * TASK-034 owner ask 4: one section per topic, not one per control) - the
+ * heading/hint live on the parent `<section>`. Lists the local whisper tiers
+ * (hardware-gated, with a Tooltip reason on disabled entries) plus the static
+ * cloud-STT rows (always disabled, pending ADR-005). Switching reuses the
+ * shared BR-08 consent-download dialog, extended with a live progress bar; a
+ * mid-session switch is rejected with a clear message. Takes the shared `stt`
+ * hook instance (lifted to `SettingsView`) so an in-flight download's
+ * progress survives a tab switch, not just a dropdown change (TASK-034).
  */
 function SttEngineSection({ stt }: { stt: UseSttModelsResult }) {
   const current = stt.models.find((m) => m.current) ?? null;
@@ -192,13 +195,7 @@ function SttEngineSection({ stt }: { stt: UseSttModelsResult }) {
   ];
 
   return (
-    <section
-      className="settings-section"
-      aria-labelledby="settings-stt-heading"
-    >
-      <h2 id="settings-stt-heading">{t("settings.sttHeading")}</h2>
-      <p className="settings-hint">{t("settings.sttHint")}</p>
-
+    <>
       {!stt.loading ? (
         <div className="settings-field">
           <span className="settings-field-label" id="stt-engine-label">
@@ -277,7 +274,7 @@ function SttEngineSection({ stt }: { stt: UseSttModelsResult }) {
           introKey="consent.sttSwitchIntro"
         />
       ) : null}
-    </section>
+    </>
   );
 }
 
@@ -287,8 +284,10 @@ function SttEngineSection({ stt }: { stt: UseSttModelsResult }) {
  * DOWNLOADED/NOT DOWNLOADED status - with a per-row Delete (frees disk space;
  * consent stays granted so a later re-download never re-prompts) and a
  * Download/Re-download control that reuses the SAME consent-gated switch flow
- * as the picker above. Local LLM model management is a separate, deferred tab
- * (owner ask: do not block on the pending architecture decision).
+ * as the picker above. A SUBSECTION (h3) of the merged "Speech-to-text
+ * engine" section, not its own top-level section (settings IA pass). Local
+ * LLM model management is a separate, deferred tab (owner ask: do not block
+ * on the pending architecture decision).
  */
 function SttModelManagementSection({ stt }: { stt: UseSttModelsResult }) {
   const visible = stt.models.filter((m) => m.allowedByProbe);
@@ -306,13 +305,8 @@ function SttModelManagementSection({ stt }: { stt: UseSttModelsResult }) {
   };
 
   return (
-    <section
-      className="settings-section"
-      aria-labelledby="settings-stt-models-heading"
-    >
-      <h2 id="settings-stt-models-heading">
-        {t("settings.sttModelsListHeading")}
-      </h2>
+    <div className="settings-subsection">
+      <h3>{t("settings.sttModelsListHeading")}</h3>
       <p className="settings-hint">{t("settings.sttModelsListHint")}</p>
 
       <ul className="settings-provider-list">
@@ -409,23 +403,25 @@ function SttModelManagementSection({ stt }: { stt: UseSttModelsResult }) {
           {t(STT_DELETE_ERROR_KEYS[stt.deleteError])}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }
 
 /**
- * Managed local-LLM engine status + server control (Settings, ADR-006). Shows
- * whether `llama-server` is running, which model, and its loopback address;
- * surfaces typed start/stop errors with actionable copy (a `binaryNotFound`
- * error gets the binary-location hint since there is no file picker yet -
- * owner ask: a clear message is enough for now). "Use for translation" is the
- * ONE explicit action that points the `local_openai` provider at the managed
- * server (human-in-the-loop.md: switching provider is a deliberate step, never
+ * Managed local-LLM engine STATUS (Settings, ADR-006, settings IA pass): the
+ * one-line "current state" the Local LLM tab opens with (owner ask 5 - status
+ * before controls), not its own section/heading - shows whether
+ * `llama-server` is running, which model, and its loopback address; surfaces
+ * typed start/stop errors with actionable copy (a `binaryNotFound` error gets
+ * the binary-location hint since there is no file picker yet - owner ask: a
+ * clear message is enough for now). "Use for translation" is the ONE explicit
+ * action that points the `local_openai` provider at the managed server
+ * (human-in-the-loop.md: switching provider is a deliberate step, never
  * silent) - the base_url/model id themselves are threaded automatically the
  * moment the server starts (providers.md WIRING note), so this button only
  * needs to flip the active-provider selection.
  */
-function LocalLlmServerSection({
+function LocalLlmServerStatus({
   llmServer,
   isActiveProvider,
   onUseAsProvider,
@@ -437,13 +433,7 @@ function LocalLlmServerSection({
   const { status } = llmServer;
 
   return (
-    <section
-      className="settings-section"
-      aria-labelledby="settings-llm-server-heading"
-    >
-      <h2 id="settings-llm-server-heading">{t("settings.llmServerHeading")}</h2>
-      <p className="settings-hint">{t("settings.llmServerHint")}</p>
-
+    <div className="settings-status-block">
       {!llmServer.loading ? (
         <div className="settings-model-meta">
           <span className="settings-field-label">
@@ -499,7 +489,7 @@ function LocalLlmServerSection({
           ) : null}
         </>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -1071,8 +1061,41 @@ export function SettingsView() {
       : []),
   ];
 
+  const activeProviderNeedsKey = isProviderId(activeProvider);
+  const activeProviderHasKey = activeProviderNeedsKey
+    ? keys.statuses[activeProvider]
+    : true;
+
   const providersTab = (
     <>
+      <div className="settings-status">
+        <span>
+          {t("settings.statusActiveProvider", {
+            provider: activeProviderDisplayName,
+            model: activeProviderModel,
+          })}
+        </span>
+        {activeProviderNeedsKey ? (
+          <Badge
+            variant={activeProviderHasKey ? "success" : "warning"}
+            label={
+              activeProviderHasKey
+                ? t("settings.statusConfigured")
+                : t("settings.statusNotConfigured")
+            }
+          >
+            {activeProviderHasKey ? (
+              <>
+                <ShieldCheck size={12} aria-hidden="true" />
+                {t("settings.statusConfigured")}
+              </>
+            ) : (
+              t("settings.statusNotConfigured")
+            )}
+          </Badge>
+        ) : null}
+      </div>
+
       <section
         className="settings-section"
         aria-labelledby="settings-providers-heading"
@@ -1081,41 +1104,7 @@ export function SettingsView() {
           {t("settings.providersHeading")}
         </h2>
         <p className="settings-hint">{t("settings.providersHint")}</p>
-        <ul className="settings-provider-list">
-          {PROVIDER_META_LIST.map((meta) => (
-            <ProviderKeyRow
-              key={meta.id}
-              meta={meta}
-              present={keys.statuses[meta.id]}
-              result={keys.results[meta.id]}
-              model={selection.settings.models[meta.id]}
-              onSave={async (id, value) => {
-                const cleared = await keys.saveKey(id, value);
-                // Adding a key while the ACTIVE provider has no key is a dead
-                // end: every translation still routes to the keyless provider
-                // and fails with a generic error. Make the provider you just
-                // configured the active one. The local OpenAI-compatible
-                // provider needs no key, so never switch away from it.
-                const active = selection.settings.defaultProvider;
-                const activeNeedsKey = isProviderId(active);
-                if (cleared && activeNeedsKey && !keys.statuses[active]) {
-                  await selection.setDefaultProvider(id);
-                }
-                return cleared;
-              }}
-              onCheck={(id) => void keys.checkKey(id)}
-              onRemove={(id) => void keys.removeKey(id)}
-              onModelChange={(id, m) => void selection.setProviderModel(id, m)}
-            />
-          ))}
-        </ul>
-      </section>
 
-      <section
-        className="settings-section"
-        aria-labelledby="settings-active-heading"
-      >
-        <h2 id="settings-active-heading">{t("settings.activeHeading")}</h2>
         <div className="settings-field">
           <span className="settings-field-label" id="default-provider-label">
             {t("settings.defaultProvider")}
@@ -1211,13 +1200,38 @@ export function SettingsView() {
             ) : null}
           </div>
         ) : null}
+
+        <ul className="settings-provider-list">
+          {PROVIDER_META_LIST.map((meta) => (
+            <ProviderKeyRow
+              key={meta.id}
+              meta={meta}
+              present={keys.statuses[meta.id]}
+              result={keys.results[meta.id]}
+              model={selection.settings.models[meta.id]}
+              onSave={async (id, value) => {
+                const cleared = await keys.saveKey(id, value);
+                // Adding a key while the ACTIVE provider has no key is a dead
+                // end: every translation still routes to the keyless provider
+                // and fails with a generic error. Make the provider you just
+                // configured the active one. The local OpenAI-compatible
+                // provider needs no key, so never switch away from it.
+                const active = selection.settings.defaultProvider;
+                const activeNeedsKey = isProviderId(active);
+                if (cleared && activeNeedsKey && !keys.statuses[active]) {
+                  await selection.setDefaultProvider(id);
+                }
+                return cleared;
+              }}
+              onCheck={(id) => void keys.checkKey(id)}
+              onRemove={(id) => void keys.removeKey(id)}
+              onModelChange={(id, m) => void selection.setProviderModel(id, m)}
+            />
+          ))}
+        </ul>
       </section>
 
-      <section
-        className="settings-section"
-        aria-labelledby="settings-fallback-heading"
-      >
-        <h2 id="settings-fallback-heading">{t("settings.fallbackHeading")}</h2>
+      <Disclosure summary={t("settings.fallbackHeading")}>
         <p className="settings-hint">{t("settings.fallbackHint")}</p>
         <ol className="settings-fallback-list">
           {order.map((id, index) => (
@@ -1252,14 +1266,46 @@ export function SettingsView() {
             </li>
           ))}
         </ol>
-      </section>
+      </Disclosure>
     </>
   );
 
+  const currentSttModel = stt.models.find((m) => m.current) ?? null;
+
   const sttTab = (
     <>
-      <SttEngineSection stt={stt} />
-      <SttModelManagementSection stt={stt} />
+      <div className="settings-status">
+        <span>
+          {t("settings.statusSttEngine", {
+            model: currentSttModel
+              ? sttModelLabel(currentSttModel.id, currentSttModel.label)
+              : "-",
+          })}
+        </span>
+        {currentSttModel ? (
+          <Badge variant={currentSttModel.downloaded ? "success" : "default"}>
+            {currentSttModel.downloaded ? (
+              <>
+                <ShieldCheck size={12} aria-hidden="true" />
+                {t("settings.sttModelListDownloaded")}
+              </>
+            ) : (
+              t("settings.sttModelListNotDownloaded")
+            )}
+          </Badge>
+        ) : null}
+      </div>
+
+      <section
+        className="settings-section"
+        aria-labelledby="settings-stt-heading"
+      >
+        <h2 id="settings-stt-heading">{t("settings.sttHeading")}</h2>
+        <p className="settings-hint">{t("settings.sttHint")}</p>
+
+        <SttEngineSection stt={stt} />
+        <SttModelManagementSection stt={stt} />
+      </section>
 
       <section
         className="settings-section"
@@ -1382,30 +1428,6 @@ export function SettingsView() {
     <>
       <section
         className="settings-section"
-        aria-labelledby="settings-models-heading"
-      >
-        <h2 id="settings-models-heading">{t("settings.modelsHeading")}</h2>
-        <p className="settings-hint">{t("settings.modelsHint")}</p>
-        {grantedModels.length === 0 ? (
-          <p className="settings-hint" role="status" aria-live="polite">
-            {t("settings.modelsEmpty")}
-          </p>
-        ) : (
-          <ul className="settings-provider-list">
-            {grantedModels.map((status) => (
-              <ModelConsentRow
-                key={status.modelSetId}
-                status={status}
-                revokeState={consent.revokeState[status.modelSetId] ?? "idle"}
-                onRevoke={(id) => void consent.revoke(id)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section
-        className="settings-section"
         aria-labelledby="settings-history-heading"
       >
         <h2 id="settings-history-heading">{t("settings.historyHeading")}</h2>
@@ -1432,6 +1454,30 @@ export function SettingsView() {
           </p>
         ) : null}
       </section>
+
+      {/* Advanced/audit-only (settings IA pass, owner ask 1): every model
+       * download here is ALSO manageable from its own tab (STT / Local LLM) -
+       * this list only exists to review/revoke the BR-08 download consent
+       * itself, so it stays collapsed by default. */}
+      <Disclosure summary={t("settings.modelsHeading")}>
+        <p className="settings-hint">{t("settings.modelsHint")}</p>
+        {grantedModels.length === 0 ? (
+          <p className="settings-hint" role="status" aria-live="polite">
+            {t("settings.modelsEmpty")}
+          </p>
+        ) : (
+          <ul className="settings-provider-list">
+            {grantedModels.map((status) => (
+              <ModelConsentRow
+                key={status.modelSetId}
+                status={status}
+                revokeState={consent.revokeState[status.modelSetId] ?? "idle"}
+                onRevoke={(id) => void consent.revoke(id)}
+              />
+            ))}
+          </ul>
+        )}
+      </Disclosure>
     </>
   );
 
@@ -1447,7 +1493,7 @@ export function SettingsView() {
       label: t("settings.tabLocalLlm"),
       content: (
         <>
-          <LocalLlmServerSection
+          <LocalLlmServerStatus
             llmServer={llmServer}
             isActiveProvider={isLocalProviderActive}
             onUseAsProvider={() =>

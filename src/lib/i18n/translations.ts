@@ -430,6 +430,10 @@ const en = {
 
   // Shared primitives
   "ui.select.placeholder": "Choose...",
+
+  // Settings - per-tab status line (settings IA pass, TASK-034 owner ask 5)
+  "settings.statusActiveProvider": "Active: {provider} - {model}",
+  "settings.statusSttEngine": "Active engine: {model}",
 } as const;
 
 const vi: Record<I18nKey, string> = {
@@ -836,6 +840,9 @@ const vi: Record<I18nKey, string> = {
     "OST cần tải tệp GGUF này trước khi có thể chạy máy chủ dịch LLM cục bộ có quản lý. Tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có nội dung đã chụp hay khoá nào được gửi đi - chỉ tải tệp model, và tệp này ở lại trên máy của bạn.",
 
   "ui.select.placeholder": "Chọn...",
+
+  "settings.statusActiveProvider": "Đang dùng: {provider} - {model}",
+  "settings.statusSttEngine": "Engine đang dùng: {model}",
 };
 
 export type I18nKey = keyof typeof en;
