@@ -590,3 +590,59 @@
   overflow-wrap: anywhere;
   font-family: var(--font-sans);
 }
+
+/* ---------- Disclosure (progressive disclosure) ---------- */
+
+.ost-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ost-disclosure-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--duration-fast) ease;
+}
+
+.ost-disclosure-trigger:hover {
+  color: var(--color-text);
+}
+
+.ost-disclosure-trigger:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ost-disclosure-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--duration-fast) ease;
+}
+
+.ost-disclosure-trigger[aria-expanded="true"] .ost-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+.ost-disclosure-summary {
+  font-weight: 600;
+}
+
+.ost-disclosure-meta {
+  color: var(--color-text-muted);
+}
+
+.ost-disclosure-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: var(--space-5);
+}
