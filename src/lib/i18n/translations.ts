@@ -105,6 +105,8 @@ const en = {
   "preview.layoutColumns":
     "Side-by-side layout (source and translation in columns)",
   "preview.pasteSourceHint": "Paste or type text here to translate",
+  "preview.moreOptions": "More options",
+  "preview.layoutLabel": "Layout",
 
   // SCR-01: live caption overlay (FR-01)
   "caption.title": "Live captions",
@@ -135,6 +137,7 @@ const en = {
   "caption.moveHandle": "Move overlay (arrow keys while focused)",
   "caption.providerBadge": "Active provider and model",
   "caption.retry": "Retry",
+  "caption.moreOptions": "More options",
 
   // Whisper STT model-download consent (reuses the shared disclosure dialog)
   "consent.whisperTitle": "Download speech-to-text model",
@@ -427,6 +430,10 @@ const en = {
 
   // Shared primitives
   "ui.select.placeholder": "Choose...",
+
+  // Settings - per-tab status line (settings IA pass, TASK-034 owner ask 5)
+  "settings.statusActiveProvider": "Active: {provider} - {model}",
+  "settings.statusSttEngine": "Active engine: {model}",
 } as const;
 
 const vi: Record<I18nKey, string> = {
@@ -525,6 +532,8 @@ const vi: Record<I18nKey, string> = {
   "preview.layoutStacked": "Bố cục xếp chồng (nguồn phía trên bản dịch)",
   "preview.layoutColumns": "Bố cục song song (nguồn và bản dịch theo hai cột)",
   "preview.pasteSourceHint": "Dán hoặc nhập văn bản vào đây để dịch",
+  "preview.moreOptions": "Thêm tuỳ chọn",
+  "preview.layoutLabel": "Bố cục",
 
   "caption.title": "Phụ đề trực tiếp",
   "caption.sourceLabel": "Nghe được",
@@ -554,6 +563,7 @@ const vi: Record<I18nKey, string> = {
   "caption.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
   "caption.providerBadge": "Provider và model đang dịch",
   "caption.retry": "Thử lại",
+  "caption.moreOptions": "Thêm tuỳ chọn",
 
   "consent.whisperTitle": "Tải mô hình chuyển giọng nói thành văn bản",
   "consent.whisperIntro":
@@ -830,6 +840,9 @@ const vi: Record<I18nKey, string> = {
     "OST cần tải tệp GGUF này trước khi có thể chạy máy chủ dịch LLM cục bộ có quản lý. Tệp bên dưới được tải qua HTTPS từ máy chủ được nêu tên tại đây. Không có nội dung đã chụp hay khoá nào được gửi đi - chỉ tải tệp model, và tệp này ở lại trên máy của bạn.",
 
   "ui.select.placeholder": "Chọn...",
+
+  "settings.statusActiveProvider": "Đang dùng: {provider} - {model}",
+  "settings.statusSttEngine": "Engine đang dùng: {model}",
 };
 
 export type I18nKey = keyof typeof en;

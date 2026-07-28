@@ -305,6 +305,9 @@ describe("CaptionOverlayView", () => {
       expect(screen.getByText("Copied to clipboard")).toBeInTheDocument(),
     );
 
+    // Copy source ("Heard") lives behind the "more options" popover; copy
+    // translation stays always visible in the docked control bar.
+    await userEvent.click(screen.getByRole("button", { name: "More options" }));
     await userEvent.click(screen.getByRole("button", { name: "Heard" }));
     expect(mocks.copyToClipboard).toHaveBeenCalledWith("こんにちは");
     await waitFor(() =>

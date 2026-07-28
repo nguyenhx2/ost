@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ClipboardCopy,
   Copy,
+  MoreHorizontal,
   Move,
   Pin,
   PinOff,
@@ -14,6 +15,7 @@ import {
   IconButton,
   OverlayPanel,
   PlainText,
+  Popover,
   Slider,
   Tooltip,
 } from "../components/ui";
@@ -74,26 +76,59 @@ export function CaptionOverlayView() {
             {t("caption.title")}
           </h1>
           <Badge label={t("caption.providerBadge")}>{providerBadgeText}</Badge>
-          <Tooltip text={t("caption.moveHandle")}>
-            <IconButton
-              label={t("caption.moveHandle")}
-              onKeyDown={(e) => {
-                const steps: Record<string, [number, number]> = {
-                  ArrowLeft: [-NUDGE_STEP, 0],
-                  ArrowRight: [NUDGE_STEP, 0],
-                  ArrowUp: [0, -NUDGE_STEP],
-                  ArrowDown: [0, NUDGE_STEP],
-                };
-                const step = steps[e.key];
-                if (step) {
-                  e.preventDefault();
-                  overlay.nudge(step[0], step[1]);
-                }
-              }}
-            >
-              <Move size={16} aria-hidden="true" />
-            </IconButton>
-          </Tooltip>
+          {/*
+           * Progressive disclosure (owner complaint: overlays crammed with
+           * controls). Only the highest-frequency actions stay always
+           * visible - copy translation (docked control bar below) plus
+           * pin/close here; the keyboard move handle, secondary "copy
+           * source" and opacity move behind this ONE overflow affordance -
+           * same placement/icon as the region overlay's, so the two overlays
+           * read as one product.
+           */}
+          <Popover
+            label={t("caption.moreOptions")}
+            icon={<MoreHorizontal size={16} aria-hidden="true" />}
+          >
+            <div className="ost-popover-row">
+              <Tooltip text={t("caption.sourceLabel")}>
+                <IconButton
+                  label={t("caption.sourceLabel")}
+                  onClick={overlay.copySource}
+                  disabled={caption === null}
+                >
+                  <Copy size={16} aria-hidden="true" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip text={t("caption.moveHandle")}>
+                <IconButton
+                  label={t("caption.moveHandle")}
+                  onKeyDown={(e) => {
+                    const steps: Record<string, [number, number]> = {
+                      ArrowLeft: [-NUDGE_STEP, 0],
+                      ArrowRight: [NUDGE_STEP, 0],
+                      ArrowUp: [0, -NUDGE_STEP],
+                      ArrowDown: [0, NUDGE_STEP],
+                    };
+                    const step = steps[e.key];
+                    if (step) {
+                      e.preventDefault();
+                      overlay.nudge(step[0], step[1]);
+                    }
+                  }}
+                >
+                  <Move size={16} aria-hidden="true" />
+                </IconButton>
+              </Tooltip>
+            </div>
+            <Slider
+              label={t("caption.opacity")}
+              value={opacity}
+              min={OPACITY_MIN}
+              max={OPACITY_MAX}
+              step={OPACITY_STEP}
+              onChange={setOpacity}
+            />
+          </Popover>
           <Tooltip text={pinned ? t("caption.unpin") : t("caption.pin")}>
             <IconButton
               label={pinned ? t("caption.unpin") : t("caption.pin")}
@@ -229,8 +264,13 @@ export function CaptionOverlayView() {
           ) : null}
         </div>
 
-        {/* Docked control bar (owner complaint: controls must not eat the
-            panel) - fixed at the bottom, outside the scrolling body above. */}
+        {/*
+         * Docked control bar (owner complaint: controls must not eat the
+         * panel) - fixed at the bottom, outside the scrolling body above.
+         * Only the single highest-frequency content action lives here now;
+         * everything else moved into the header's "more options" popover
+         * (progressive disclosure - see the header above).
+         */}
         <div className="caption-overlay-controls">
           <Tooltip text={t("caption.copy")}>
             <IconButton
@@ -241,23 +281,6 @@ export function CaptionOverlayView() {
               <ClipboardCopy size={16} aria-hidden="true" />
             </IconButton>
           </Tooltip>
-          <Tooltip text={t("caption.sourceLabel")}>
-            <IconButton
-              label={t("caption.sourceLabel")}
-              onClick={overlay.copySource}
-              disabled={caption === null}
-            >
-              <Copy size={16} aria-hidden="true" />
-            </IconButton>
-          </Tooltip>
-          <Slider
-            label={t("caption.opacity")}
-            value={opacity}
-            min={OPACITY_MIN}
-            max={OPACITY_MAX}
-            step={OPACITY_STEP}
-            onChange={setOpacity}
-          />
         </div>
 
         <span

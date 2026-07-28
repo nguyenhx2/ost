@@ -101,6 +101,16 @@ async function openTab(name: string) {
   await userEvent.click(tab);
 }
 
+/** Opens the collapsed "Model downloads" (BR-08 consent audit) disclosure on
+ * the General tab (settings IA pass: advanced/audit-only, collapsed by
+ * default) so its content is reachable by role queries. */
+async function openModelDownloadsDisclosure() {
+  const trigger = await screen.findByRole("button", {
+    name: "Model downloads",
+  });
+  await userEvent.click(trigger);
+}
+
 function statusList(present: Partial<Record<string, boolean>> = {}) {
   return [
     { provider_id: "gemini", key_present: !!present.gemini },
@@ -422,9 +432,12 @@ describe("SettingsView", () => {
 
   it("renders the fallback order controls (AC-03.6)", async () => {
     render(<SettingsView />);
-    await waitFor(() =>
-      expect(screen.getByText("Fallback order")).toBeInTheDocument(),
-    );
+    const disclosure = await screen.findByRole("button", {
+      name: "Fallback order",
+    });
+    // Collapsed by default (settings IA pass: advanced control, not the 80%
+    // case) - open it before the reorder buttons are reachable.
+    await userEvent.click(disclosure);
     const upButtons = screen.getAllByRole("button", { name: "Move up" });
     // First provider cannot move up.
     expect(upButtons[0]).toBeDisabled();
@@ -435,12 +448,11 @@ describe("SettingsView", () => {
 
   it("shows a not-configured warning badge in the fallback list", async () => {
     render(<SettingsView />);
-    await waitFor(() =>
-      expect(screen.getByText("Fallback order")).toBeInTheDocument(),
-    );
-    const fallback = screen
-      .getByText("Fallback order")
-      .closest("section") as HTMLElement;
+    const disclosure = await screen.findByRole("button", {
+      name: "Fallback order",
+    });
+    await userEvent.click(disclosure);
+    const fallback = disclosure.closest(".ost-disclosure") as HTMLElement;
     // No keys configured -> every fallback entry flags "no key".
     expect(within(fallback).getAllByText("no key").length).toBe(4);
   });
@@ -448,9 +460,7 @@ describe("SettingsView", () => {
   it("lists a consented model set with a revoke control (BR-08)", async () => {
     render(<SettingsView />);
     await openTab("History and general");
-    await waitFor(() =>
-      expect(screen.getByText("Model downloads")).toBeInTheDocument(),
-    );
+    await openModelDownloadsDisclosure();
     // The granted model set is listed by its (plain-text) display name.
     expect(screen.getByText("PP-OCRv5 recognition model")).toBeInTheDocument();
     // The revoke control is an icon button with an accessible name.
@@ -467,6 +477,7 @@ describe("SettingsView", () => {
     });
     render(<SettingsView />);
     await openTab("History and general");
+    await openModelDownloadsDisclosure();
     await waitFor(() =>
       expect(
         screen.getByText("PP-OCRv5 recognition model"),
@@ -504,9 +515,7 @@ describe("SettingsView", () => {
     ocrGranted = false;
     render(<SettingsView />);
     await openTab("History and general");
-    await waitFor(() =>
-      expect(screen.getByText("Model downloads")).toBeInTheDocument(),
-    );
+    await openModelDownloadsDisclosure();
     expect(screen.queryByRole("button", { name: "Revoke consent" })).toBeNull();
     expect(
       screen.getByText(
@@ -519,6 +528,7 @@ describe("SettingsView", () => {
     mocks.modelIpc.revokeConsent.mockRejectedValue(new Error("keychain"));
     render(<SettingsView />);
     await openTab("History and general");
+    await openModelDownloadsDisclosure();
     await waitFor(() =>
       expect(
         screen.getByText("PP-OCRv5 recognition model"),
@@ -991,6 +1001,45 @@ describe("SettingsView", () => {
     expect(sttTab).toHaveFocus();
     await waitFor(() =>
       expect(screen.getByText("Live audio translation")).toBeInTheDocument(),
+    );
+  });
+
+  it("opens the Providers tab with a one-line active-provider status (settings IA pass)", async () => {
+    mocks.keysIpc.statuses.mockResolvedValue(statusList({ gemini: true }));
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("Active: Gemini - gemini-3.5-flash"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getAllByText("Key configured").length).toBeGreaterThan(0);
+  });
+
+  it("flags the active-provider status as not configured when it has no key", async () => {
+    render(<SettingsView />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("Active: Gemini - gemini-3.5-flash"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getAllByText("No key").length).toBeGreaterThan(0);
+  });
+
+  it("opens the Speech-to-text tab with a one-line active-engine status", async () => {
+    render(<SettingsView />);
+    await openTab("Speech-to-text");
+    await waitFor(() =>
+      expect(
+        screen.getByText("Active engine: Base (recommended)"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("opens the Local LLM tab with a one-line server status", async () => {
+    render(<SettingsView />);
+    await openTab("Local LLM");
+    await waitFor(() =>
+      expect(screen.getByText("Not running")).toBeInTheDocument(),
     );
   });
 

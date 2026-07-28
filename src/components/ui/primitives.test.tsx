@@ -5,6 +5,7 @@ import { Pin } from "lucide-react";
 import {
   Badge,
   Button,
+  Disclosure,
   IconButton,
   OverlayPanel,
   Slider,
@@ -192,6 +193,41 @@ describe("Slider", () => {
     );
     const slider = screen.getByRole("slider", { name: "Độ mờ nền" });
     expect(slider).toHaveValue("0.85");
+  });
+});
+
+describe("Disclosure", () => {
+  it("is collapsed by default and reveals content on toggle (aria-expanded/aria-controls)", async () => {
+    render(
+      <Disclosure summary="Nâng cao">
+        <p>Nội dung nâng cao</p>
+      </Disclosure>,
+    );
+    const trigger = screen.getByRole("button", { name: "Nâng cao" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    // Collapsed content stays in the DOM (state preserved) but is hidden
+    // from assistive tech and sighted users alike.
+    expect(screen.getByText("Nội dung nâng cao")).not.toBeVisible();
+
+    await userEvent.click(trigger);
+
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const content = screen.getByText("Nội dung nâng cao");
+    expect(content).toBeVisible();
+    expect(trigger).toHaveAttribute("aria-controls", content.parentElement?.id);
+  });
+
+  it("supports defaultOpen for an initially expanded disclosure", () => {
+    render(
+      <Disclosure summary="Nâng cao" defaultOpen>
+        <p>Nội dung nâng cao</p>
+      </Disclosure>,
+    );
+    expect(screen.getByRole("button", { name: "Nâng cao" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByText("Nội dung nâng cao")).toBeInTheDocument();
   });
 });
 

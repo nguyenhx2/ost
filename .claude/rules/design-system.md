@@ -48,6 +48,8 @@ Landed primitives:
 | `Tabs` | `src/components/ui/Tabs.tsx` | Keyboard-accessible tab group (`role="tablist"`/`tab`/`tabpanel`, arrow-key nav); groups the Settings view |
 | `Textarea` | `src/components/ui/Textarea.tsx` | Multi-line paste/edit text field (region-preview pasteable source text) |
 | `Flag` | `src/components/ui/Flag.tsx` | Secondary, decorative country-flag visual next to a language name in `Select` options (never flag-only; see the flag-SVG exception below) |
+| `Popover` | `src/components/ui/Popover.tsx` | Compact overflow/disclosure surface (portaled, viewport-clamped) for secondary controls - the region/caption overlay "more options" affordance |
+| `Disclosure` | `src/components/ui/Disclosure.tsx` | Progressive-disclosure toggle (`aria-expanded`/`aria-controls`) that reveals secondary/advanced content without unmounting it; used to collapse rarely-used Settings controls (TASK-034 IA pass) |
 
 ## Flag-SVG exception (owner-approved, TASK-030)
 
