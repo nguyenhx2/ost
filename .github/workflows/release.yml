@@ -59,7 +59,14 @@ jobs:
           workspaces: src-tauri
       # --- Native whisper build prerequisites (ADR-002), identical to ci.yml ---
       - name: Install CMake (whisper.cpp build)
-        run: choco install cmake --version=4.3.4 -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+        run: |
+          # Same reasoning as ci.yml: use the runner's preinstalled CMake. The
+          # pinned chocolatey version was yanked and broke every build.
+          if (Get-Command cmake -ErrorAction SilentlyContinue) {
+            cmake --version
+          } else {
+            choco install cmake -y --no-progress --installargs 'ADD_CMAKE_TO_PATH=System'
+          }
       - name: Install LLVM 19 (libclang for bindgen)
         run: choco install llvm --version=19.1.7 -y --no-progress --force
       - name: Set LIBCLANG_PATH
