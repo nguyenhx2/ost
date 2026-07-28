@@ -1,3 +1,11 @@
+---
+paths:
+  - "src-tauri/**"
+  - "src/**"
+  - "package.json"
+  - "package-lock.json"
+---
+
 # Rule: Tech stack
 
 The settled stack (ADR-001..ADR-003). Do not change the stack without a new ADR.

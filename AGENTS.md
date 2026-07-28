@@ -6,7 +6,7 @@ This file mirrors CLAUDE.md for AI tools other than Claude Code (Codex, Cursor, 
 IMPORTANT - enforcement gap: Claude Code enforces guardrail layers 1-2 (settings.json
 permission gates and hooks) automatically. Other tools DO NOT have those layers and must
 strictly self-comply with the behavioral rules (`.claude/rules/agent-guardrails.md`,
-`security-privacy.md`) and the review gates (`/review-pr`, `/secret-scan` equivalents):
+`security-privacy.md`) and the review gates (`/review-changes`, `/secret-scan` equivalents):
 never read `.env*` except `.env.example`, never commit to `main`, Conventional Commits
 with no AI attribution, always update the task file session log.
 
@@ -23,18 +23,21 @@ the background under strict performance budgets (audio p95 < 3s, region p95 < 2s
 ## Rules
 
 All rules live in `.claude/rules/` - read `00-overview.md` first; precedence:
-`.claude/rules/` > per-folder instructions > defaults. Non-negotiables: human-in-the-loop
-(AI output is a proposal), keys only in the OS keychain, captured content never persists
-or leaves the machine (text-only to the chosen provider), primitives+tokens-only UI,
-no emoji, no em dash, no AI attribution in commits/PRs.
+`.claude/rules/` > per-folder instructions > defaults. Only `00-overview.md`,
+`agent-guardrails.md`, `task-tracking.md`, and `conventional-commits.md` load
+unconditionally; every other rule is path-scoped and loads only when a matching file is
+touched. Non-negotiables: human-in-the-loop (AI output is a proposal), bounded contexts
+talk only through published contracts (`domain-model.md`), keys only in the OS keychain,
+captured content never persists or leaves the machine (text-only to the chosen provider),
+primitives+tokens-only UI, no emoji, no em dash, no AI attribution in commits/PRs.
 
 ## Documentation map
 
 Same as CLAUDE.md: specs/ and requirements/ are the source of truth (ALWAYS read before
-feature work); architecture/decisions/ ADRs are immutable once Accepted; docs/tasks/ holds
-the master-plan and task files (100% English) with mandatory AI session logs;
-docs/context/ is long-term memory. Docs prose is Vietnamese; `.claude/` and root
-instruction files are English.
+feature work); `docs/architecture/domain-model.md` is the bounded-context map;
+architecture/decisions/ ADRs are immutable once Accepted; docs/tasks/ holds the master-plan
+and task files (100% English) with mandatory AI session logs; docs/context/ is long-term
+memory. Docs prose is Vietnamese; `.claude/` and root instruction files are English.
 
 ## Task state
 
@@ -45,29 +48,35 @@ session rows. The files, not conversation memory, are the source of truth.
 
 ## Roles (as responsibilities, tool-agnostic)
 
-- Orchestration: plan, decompose into TASK files, route by module ownership, verify
-  results against git state, record history.
-- Module ownership: audio pipeline (`src-tauri/src/audio|stt`), screen translate
-  (`src-tauri/src/capture|ocr`), LLM provider layer (`src-tauri/src/providers|keys`),
-  UI (`src/`, `src-tauri/src/shell`). Do not cross scopes silently.
+- Orchestration: plan, decompose into TASK files, route by bounded-context ownership,
+  verify results against git state, record history.
+- Domain modeling: state the context map, aggregate boundaries, and the trait/IPC contract
+  between contexts BEFORE a change crosses a boundary.
+- Module ownership (bounded context -> real path): Recognition (`src-tauri/src/ocr|stt`),
+  Translation (`src-tauri/src/providers|llm`), Capture (`src-tauri/src/capture|audio`),
+  Presentation (`src/`), Model Lifecycle + Platform Shell (`src-tauri/src/models|shell|
+  commands|keys|core`). Do not cross scopes silently - reach across a boundary only through
+  its published trait or the IPC contract.
 - Review gates before any PR: tests green (all providers/STT/OCR mocked), coding-standards
-  + design-system check, security check (keys, captured content, prompt injection), secret
-  scan, spec fidelity check.
+  + design-system check, context-boundary check, security check (keys, captured content,
+  prompt injection), secret scan, spec fidelity check.
 
-Standard feature flow: requirement check -> TDD implementation by the owning role -> tests
--> code + security review -> secret scan -> PR. Never release automatically.
+Standard feature flow: requirement check -> implementation by the owning context's role
+(domain-model consult first if crossing a boundary) -> tests -> code + security review ->
+secret scan -> PR. Never release automatically.
 
 ## Git
 
-GitHub, PRs, `gh` CLI. Never commit directly to `main`; one branch per task
-(`feat/fix/chore/docs`). Conventional Commits (types + scopes in
+GitHub (`github.com/nguyenhx2/ost`), PRs, `gh` CLI. Never commit directly to `main`; one
+branch per task (`feat/fix/chore/docs`). Conventional Commits (types + scopes in
 `.claude/rules/conventional-commits.md`), subject lowercase imperative <= 72 chars, NO AI
 attribution. Commit identity: **nguyenhx2** `<nguyenhx1@gmail.com>` (repo-local config).
 
 Merging is delegated to the `merge-manager` agent (owner authorization 2026-07-09) under
 the gate in `.claude/rules/git-workflow.md`: CI green, no conflict, required reviews
 passed, secret scan clean, and no rule file / agent file / hook / `settings.json` /
-Accepted ADR in the diff. It is dispatched only by the `orchestrator` (2026-07-10), one PR
-at a time, never against a branch another agent holds a worktree on; the orchestrator
-sequences the queue to avoid conflicts rather than resolve them. The agent that authored a
-change never merges it. Non-Claude tools lack the hook layer and must self-comply strictly.
+Accepted ADR / undeclared context-boundary crossing in the diff. It is dispatched only by
+the `orchestrator` (2026-07-10), one PR at a time, never against a branch another agent
+holds a worktree on; the orchestrator sequences the queue to avoid conflicts rather than
+resolve them. The agent that authored a change never merges it. Non-Claude tools lack the
+hook layer and must self-comply strictly.

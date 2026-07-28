@@ -1,3 +1,10 @@
+---
+paths:
+  - "src/components/**/*.{ts,tsx}"
+  - "src/views/**/*.{ts,tsx}"
+  - "src/styles/**/*.css"
+---
+
 # Rule: Design system (HARD GATE)
 
 Build UI ONLY from primitives in `src/components/ui/` and design tokens in

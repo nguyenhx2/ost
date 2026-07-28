@@ -2,7 +2,7 @@
 title: "TASK-035: Local LLM managed server engine (backend)"
 status: Active
 fr: FR-03
-owner: llm-integration-dev
+owner: translation-dev
 deps: TASK-026
 priority: P1
 phase: 2
@@ -27,14 +27,21 @@ separate frontend task built against the IPC contract defined here.
   (reuse + generic download engine), `src-tauri/src/providers/local_openai.rs`
   and `local_models.rs` (reused unchanged), `docs/architecture/api-contracts/providers.md`.
 
-## Scope exception (owner-approved, recorded)
-llm-integration-dev normally owns only `providers/` + `keys/`. The coordinator
-NARROWED this task to BACKEND and authorized a deliberate least-privilege
-exception to also touch `docs/architecture/decisions/`, `src-tauri/src/models/`
-(reuse/extend), a new `src-tauri/src/llm/`, and the IPC commands + contract docs.
-The Settings "Local LLM" React tab is EXCLUDED - a frontend agent builds it
-against this IPC contract. Recorded per instruction in ADR-006, the PR body, and
-here.
+## Scope exception (owner-approved, recorded; superseded 2026-07-28)
+At authoring time, llm-integration-dev normally owned only `providers/` + `keys/`.
+The coordinator NARROWED this task to BACKEND and authorized a deliberate
+least-privilege exception to also touch `docs/architecture/decisions/`,
+`src-tauri/src/models/` (reuse/extend), a new `src-tauri/src/llm/`, and the IPC
+commands + contract docs. The Settings "Local LLM" React tab is EXCLUDED - a
+frontend agent builds it against this IPC contract. Recorded per instruction in
+ADR-006, the PR body, and here.
+
+Superseded by the DDD harness rebuild (2026-07-28): `translation-dev` now owns
+`providers/` + `llm/` as its normal Translation-context scope (see
+`docs/architecture/domain-model.md`); `src-tauri/src/models/` (Model Lifecycle)
+and `src-tauri/src/keys/` (Platform Shell) moved to `platform-dev`. The exception
+above is historical context for why this task's diff touched `models/` - it is no
+longer an active exception for future work in this area.
 
 ## To do
 - [x] ADR-006 (Accepted, deciders [nguyenhx2], 2026-07-12) + decisions README row.
@@ -70,6 +77,7 @@ here.
 | Date | Who | What was done | Result |
 |------|-----|---------------|--------|
 | 2026-07-12 | llm-integration-dev | Authored ADR-006; built `llm/` (model/download/server/process/mod) + `models/download.rs` generic engine; wired lib.rs + IPC; updated providers contract | 34 new unit tests green; fmt + clippy clean; PR opened (backend only, not merged) |
+| 2026-07-28 | orchestrator | DDD agent-harness rebuild: `llm-integration-dev` retired, ownership carries to `translation-dev` (Translation context owns `providers/`+`llm/` as normal scope now, not an exception). Owner field updated. | In progress |
 
 ## Result
 <Fill when moving to Done; link the PR/commit. Then move the file to docs/tasks/done/.>

@@ -9,19 +9,24 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
 
 ## Project scopes
 
-One per module/FR area. Adding a new scope = add it to this table in the same PR.
+One per bounded context (see `.claude/rules/domain-model.md`) or cross-cutting area. Adding a new
+scope = add it to this table in the same PR. Scopes below marked "historical" predate the
+DDD reorganization and are kept valid so existing git history and muscle memory stay usable; new
+commits in that area SHOULD prefer the context-named scope next to it.
 
-| Scope | Covers |
-|-------|--------|
-| audio | system-audio capture, VAD, chunking, STT pipeline (FR-01) |
-| screen | region selection, screen capture, OCR pipeline (FR-02) |
-| llm | provider layer, key management, model routing (FR-03) |
-| ui | React frontend, overlay, tray, hotkeys, settings UI (FR-04) |
-| core | shared Rust core, IPC contracts, config, performance (FR-05) |
-| specs | docs/specs and docs/requirements changes |
-| agents | .claude/ agents, rules, commands, hooks |
-| infra | CI, build, packaging, release |
-| docs | other documentation |
+| Scope | Covers | Context |
+|-------|--------|---------|
+| audio | System-audio device capture, VAD, chunking (`src-tauri/src/audio/`) | Capture |
+| screen | Region/screen capture (`src-tauri/src/capture/`) - historical; OCR itself is `recognition` | Capture |
+| recognition | OCR + STT engines (`src-tauri/src/ocr/`, `src-tauri/src/stt/`) | Recognition |
+| llm | Provider layer, local managed engine, model routing (`src-tauri/src/providers/`, `src-tauri/src/llm/`) | Translation |
+| ui | React frontend, overlay, settings UI (`src/`) | Presentation |
+| platform | Tray, hotkeys, windows, IPC commands, key storage, model downloads (`src-tauri/src/shell/`, `commands/`, `keys/`, `models/`, `core/`) | Model Lifecycle + Platform Shell |
+| core | Cross-cutting Rust concerns not otherwise covered - historical; prefer `platform` for `src-tauri/src/core/` | - |
+| specs | docs/specs and docs/requirements changes | - |
+| agents | .claude/ agents, rules, commands, hooks | - |
+| infra | CI, build, packaging, release | - |
+| docs | other documentation | - |
 
 ## Subject rules
 

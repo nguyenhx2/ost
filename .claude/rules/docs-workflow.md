@@ -1,3 +1,8 @@
+---
+paths:
+  - "docs/**"
+---
+
 # Rule: Docs workflow
 
 ## Read/write map

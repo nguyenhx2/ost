@@ -1,6 +1,7 @@
 # Provider contract - `TranslationProvider` (FR-03)
 
-Chủ sở hữu: llm-integration-dev. File này mô tả contract của provider layer
+Chủ sở hữu: translation-dev (Translation context - xem `docs/architecture/domain-model.md`). File
+này mô tả contract của provider layer
 (`src-tauri/src/providers/`) và key storage (`src-tauri/src/keys/`). Mọi thay đổi
 contract phải cập nhật file này TRONG CÙNG PR (docs-workflow.md).
 
@@ -319,8 +320,12 @@ Owner quyết định 2026-07-12 (ADR-006): app TỰ tải model GGUF và quản
 GPU/driver chỉ giết tiến trình con thay vì cả app - xem known-issues 2026-07-12). Module
 này KHÔNG nói chuyện HTTP dịch: nó chỉ tải model + quản lý tiến trình; đường dịch vẫn đi qua
 client `local_openai` (loopback-only, redirect tắt) trỏ tới `base_url` của server có quản lý.
-Đây là ngoại lệ least-privilege được owner phê duyệt (backend do llm-integration-dev làm;
-Settings UI do frontend agent riêng làm dựa trên contract này).
+Lúc quyết định (2026-07-12), đây là ngoại lệ least-privilege được owner phê duyệt cho
+llm-integration-dev (agent theo FR lúc đó, sở hữu `providers/`+`keys/`) được chạm thêm
+`src-tauri/src/models/` + `src-tauri/src/llm/`. Sau tái tổ chức DDD (2026-07-28), `llm/` là sở hữu
+BÌNH THƯỜNG của `translation-dev` trong Translation context - ngoại lệ đã được hấp thụ vào ranh
+giới mới, không còn là exception. Settings UI (Presentation) do `presentation-dev` làm dựa trên
+contract này.
 
 ### Model preset GGUF (`llm::model`)
 

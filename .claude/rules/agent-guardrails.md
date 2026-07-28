@@ -55,6 +55,6 @@ NEVER skip. These constraints bind every agent working in this repo.
 | 1 | `settings.json` deny rules (force push, rm -rf, secret reads) |
 | 2 | Hooks (protect-secrets, guard-main-commit, check-commit-msg, protect-adr) |
 | 3 | This rule + security-privacy.md (behavioral) |
-| 4 | Review commands: `/review-pr` gated by `/secret-scan` |
+| 4 | Review commands: `/review-changes` gated by `/secret-scan` |
 
 Non-Claude tools lack layers 1-2 (see AGENTS.md) and must self-comply with 3-4 strictly.
