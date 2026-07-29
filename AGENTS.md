@@ -1,82 +1,66 @@
 # AGENTS.md - OST (guide for AI coding tools)
 
-This file mirrors CLAUDE.md for AI tools other than Claude Code (Codex, Cursor, Windsurf,
-...). The two files must stay in sync.
+Mirrors CLAUDE.md for AI tools other than Claude Code (Codex, Cursor, Windsurf, ...). Keep
+the two in sync.
 
-IMPORTANT - enforcement gap: Claude Code enforces guardrail layers 1-2 (settings.json
-permission gates and hooks) automatically. Other tools DO NOT have those layers and must
-strictly self-comply with the behavioral rules (`.claude/rules/agent-guardrails.md`,
-`security-privacy.md`) and the review gates (`/review-changes`, `/secret-scan` equivalents):
-never read `.env*` except `.env.example`, never commit to `main`, Conventional Commits
-with no AI attribution, always update the task file session log.
+Enforcement gap: Claude Code enforces guardrail layers 1-2 (settings.json permission gates,
+hooks) automatically. Other tools lack those layers and must self-comply strictly with
+`.claude/rules/guardrails.md` and the review gates (`/review-changes`, `/secret-scan`
+equivalents): never read `.env*` except `.env.example`, never commit to `main`, Conventional
+Commits with no AI attribution.
 
 ## The system
 
 OST is a cross-platform desktop app (Windows first) that translates live system audio
 (WASAPI loopback -> local whisper.cpp STT -> LLM) and user-selected screen regions
 (capture -> OCR -> LLM with live preview) as low-latency overlays. Users bring their own
-provider keys (Gemini, Anthropic, OpenAI, OpenRouter) stored in the OS keychain. Runs in
-the background under strict performance budgets (audio p95 < 3s, region p95 < 2s, idle
-< 100MB RAM / 1% CPU). Stack: Tauri 2 (Rust core) + React 19/TS/Vite - see
-`.claude/rules/tech-stack.md`.
+provider keys (Gemini, Anthropic, OpenAI, OpenRouter) stored in the OS keychain. Runs in the
+background under strict performance budgets (audio p95 < 3s, region p95 < 2s, idle < 100MB
+RAM / 1% CPU). Stack: Tauri 2 (Rust core) + React 19/TS/Vite. Full architecture, IPC contract,
+provider contract: `docs/architecture.md`.
 
 ## Rules
 
-All rules live in `.claude/rules/` - read `00-overview.md` first; precedence:
-`.claude/rules/` > per-folder instructions > defaults. Only `00-overview.md`,
-`agent-guardrails.md`, `task-tracking.md`, and `conventional-commits.md` load
-unconditionally; every other rule is path-scoped and loads only when a matching file is
-touched. Non-negotiables: human-in-the-loop (AI output is a proposal), bounded contexts
-talk only through published contracts (`domain-model.md`), keys only in the OS keychain,
-captured content never persists or leaves the machine (text-only to the chosen provider),
-primitives+tokens-only UI, no emoji, no em dash, no AI attribution in commits/PRs.
+Rules live in `.claude/rules/` - read `00-overview.md` first; precedence: `.claude/rules/` >
+per-folder instructions > defaults. Only `00-overview.md` and `guardrails.md` load
+unconditionally; `conventions.md` and `git.md` are path-scoped. Non-negotiables:
+human-in-the-loop (AI output is a proposal, never an automatic action), the trait/IPC seams
+stay real boundaries even though ownership is per-language now rather than per-context, keys
+only in the OS keychain, captured content never persists or leaves the machine (text-only to
+the chosen provider), primitives+tokens-only UI, no emoji, no em dash, no AI attribution in
+commits/PRs.
 
 ## Documentation map
 
-Same as CLAUDE.md: specs/ and requirements/ are the source of truth (ALWAYS read before
-feature work); `docs/architecture/domain-model.md` is the bounded-context map;
-architecture/decisions/ ADRs are immutable once Accepted; docs/tasks/ holds the master-plan
-and task files (100% English) with mandatory AI session logs; docs/context/ is long-term
-memory. Docs prose is Vietnamese; `.claude/` and root instruction files are English.
+`docs/README.md` (orientation), `architecture.md` (system, module map, IPC + provider
+contracts), `decisions.md` (append-only decision log, replaces the old per-file ADRs),
+`known-issues.md` (environment/build findings), `backlog.md` (flat list of open work).
+Everything under `.claude/` and the root instruction files is English.
 
-## Task state
+## No orchestrator - roles as responsibilities, tool-agnostic
 
-Task progress lives in markdown under `docs/tasks/` (committed). Before continuing any
-task in a new session: read `docs/tasks/master-plan.md` and the task file (equivalent of
-`/task-resume`), verify the working tree with `git status`/`git diff`, then keep logging
-session rows. The files, not conversation memory, are the source of truth.
+Plan and dispatch work directly; an earlier version routed everything through a dedicated
+coordinator and the owner found that layer slowed work down more than it helped.
 
-## Roles (as responsibilities, tool-agnostic)
+- **Rust ownership**: all of `src-tauri/src/` - capture, audio, local STT/OCR, LLM provider
+  clients, the managed local-LLM engine, model downloads, key storage, the Tauri shell/IPC
+  surface. The trait boundaries inside it are still load-bearing.
+- **Frontend ownership**: all of `src/` + `e2e/`. Calls Rust only through the typed IPC
+  wrapper.
+- **Review gate** (read-only): coding standards, the design-system hard gate, and the
+  security/privacy checklist together, one pass, before any PR.
+- **Debug role** (read-only): a hang or crash needs a real thread dump before naming a
+  cause - static code reading alone has produced a confidently wrong root cause here before.
+- **Research role** (read-only on code, public docs only): every claim cited and dated, never
+  sends project data externally.
 
-- Orchestration: plan, decompose into TASK files, route by bounded-context ownership,
-  verify results against git state, record history.
-- Domain modeling: state the context map, aggregate boundaries, and the trait/IPC contract
-  between contexts BEFORE a change crosses a boundary.
-- Module ownership (bounded context -> real path): Recognition (`src-tauri/src/ocr|stt`),
-  Translation (`src-tauri/src/providers|llm`), Capture (`src-tauri/src/capture|audio`),
-  Presentation (`src/`), Model Lifecycle + Platform Shell (`src-tauri/src/models|shell|
-  commands|keys|core`). Do not cross scopes silently - reach across a boundary only through
-  its published trait or the IPC contract.
-- Review gates before any PR: tests green (all providers/STT/OCR mocked), coding-standards
-  + design-system check, context-boundary check, security check (keys, captured content,
-  prompt injection), secret scan, spec fidelity check.
-
-Standard feature flow: requirement check -> implementation by the owning context's role
-(domain-model consult first if crossing a boundary) -> tests -> code + security review ->
-secret scan -> PR. Never release automatically.
+Flow: implement (Rust or frontend role) -> tests -> the review gate -> secret scan -> open a
+PR. Never release automatically - releases are gated and owner-only.
 
 ## Git
 
 GitHub (`github.com/nguyenhx2/ost`), PRs, `gh` CLI. Never commit directly to `main`; one
-branch per task (`feat/fix/chore/docs`). Conventional Commits (types + scopes in
-`.claude/rules/conventional-commits.md`), subject lowercase imperative <= 72 chars, NO AI
-attribution. Commit identity: **nguyenhx2** `<nguyenhx1@gmail.com>` (repo-local config).
-
-Merging is delegated to the `merge-manager` agent (owner authorization 2026-07-09) under
-the gate in `.claude/rules/git-workflow.md`: CI green, no conflict, required reviews
-passed, secret scan clean, and no rule file / agent file / hook / `settings.json` /
-Accepted ADR / undeclared context-boundary crossing in the diff. It is dispatched only by
-the `orchestrator` (2026-07-10), one PR at a time, never against a branch another agent
-holds a worktree on; the orchestrator sequences the queue to avoid conflicts rather than
-resolve them. The agent that authored a change never merges it. Non-Claude tools lack the
-hook layer and must self-comply strictly.
+branch per change (`feat/fix/chore/docs`). Conventional Commits (`.claude/rules/git.md`),
+subject lowercase imperative <= 72 chars, NO AI attribution. Commit identity: **nguyenhx2**
+`<nguyenhx1@gmail.com>` (repo-local config) - verify before every commit. Merging happens
+through GitHub's normal review flow - no agent in this harness merges on its own.

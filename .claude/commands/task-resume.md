@@ -1,21 +1,16 @@
 ---
-description: Resume a task from its task file after a compaction or in a new session.
-argument-hint: <TASK-NNN> (omit to list every unfinished task)
-allowed-tools: Bash(git status), Bash(git diff:*), Bash(git log:*), Read, Grep, Edit
+description: Get oriented at the start of a session - working-tree state plus the open backlog.
+allowed-tools: Bash(git status), Bash(git diff:*), Bash(git log:*), Read, Grep
 ---
 
-Resume task **$1**.
+Get oriented before starting or continuing work. There is no per-task file state anymore -
+`docs/backlog.md` is the flat source of truth for open work, and the git tree is the source of
+truth for what is actually done.
 
-If $1 is empty, do not resume anything: list every unfinished task instead. Search
-`docs/tasks/active/` for `status: Planned`, `status: Active`, and `status: Blocked`, and report
-them with their master-plan rows, priorities, and blockers.
-
-1. Read `docs/tasks/master-plan.md` for the task's position, dependencies, and priority.
-2. Read the task file end to end: session log, decisions, blockers, acceptance criteria.
-3. Trust the files over conversation memory. The conversation may have been compacted; the files
-   were committed.
-4. Verify the working tree with `git status`, `git diff`, and `git log`. The files record intent,
-   the tree records reality. When they disagree, reconcile before continuing: inspect uncommitted
-   work and drive it to completion or escalate it. Never stash, discard, or clobber it.
-5. Continue from the recorded state, appending a session-log row after every meaningful unit of
-   work. Any status change is written in the task file AND the master-plan row together.
+1. `git status` and `git diff` - report any uncommitted work. Never stash, discard, or clobber
+   it; if it looks abandoned, ask before touching it.
+2. `git log -10 --oneline` - recent history, to see what just landed.
+3. Read `docs/backlog.md` and report what is open.
+4. If the user named something specific to resume, cross-check it against the diff/log above
+   rather than trusting a description of "what was done" at face value - the tree records
+   reality.
