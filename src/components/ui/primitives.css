@@ -467,9 +467,15 @@
 }
 
 .ost-progress-fill {
+  width: 100%;
   height: 100%;
   background-color: var(--color-accent);
-  transition: width var(--duration-fast) ease;
+  /* scaleX (not width) so the download-progress bar animates on the
+     compositor instead of running layout every frame; the parent's
+     `overflow: hidden` (.ost-progress) clips the scaled edge, so no extra
+     border-radius is needed on the fill itself. */
+  transform-origin: left;
+  transition: transform var(--duration-fast) ease;
 }
 
 /* ---------- OverlayPanel ---------- */
@@ -547,6 +553,9 @@
 }
 
 .ost-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
@@ -633,7 +642,10 @@
 }
 
 .ost-disclosure-summary {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--font-weight-semibold);
 }
 
 .ost-disclosure-meta {

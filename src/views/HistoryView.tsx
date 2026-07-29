@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { Badge, Button, Dialog, IconButton, PlainText } from "../components/ui";
+import { BrandMark } from "../components/BrandMark";
 import { useHistory } from "../hooks/useHistory";
 import { getLocale, t } from "../lib/i18n";
 import { formatTimestamp } from "../lib/format";
@@ -94,7 +95,10 @@ export function HistoryView() {
     <main className="history">
       <header className="history-header">
         <div className="history-heading">
-          <h1 className="history-title">{t("history.title")}</h1>
+          <h1 className="history-title">
+            <BrandMark />
+            {t("history.title")}
+          </h1>
           <p className="history-subtitle">{t("history.subtitle")}</p>
         </div>
         {/* Clear-all is ALWAYS visible (AC-04.5), disabled only when empty. */}

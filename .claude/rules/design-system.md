@@ -67,6 +67,25 @@ policy:
   the `icon` on a `Select` option; the option's `aria-label` stays pinned to
   the language name alone.
 
+## Brand-SVG exception (owner-approved, visual redesign pass)
+
+The app's own logo (the OST mark and its use next to the "OST"/window-title text as a
+compact wordmark) is a second, narrow, written exception to the lucide-only icon policy, in
+the same shape as the flag-SVG exception above:
+
+- Self-hosted SVG only, under `src/assets/brand/` (currently `mark.svg`); see the README
+  there for the concept and color provenance. No CDN/external host, no runtime fetch, no npm
+  dependency that pulls brand assets at build/run time.
+- Original artwork - simple geometry, no gradients, no text baked into the glyph - so it
+  reads from a 16px tray icon up to a 1024px installer icon.
+- Rendered via the `BrandMark` component (`src/components/BrandMark.tsx`, `alt=""` /
+  `aria-hidden`, decorative) placed as a SIBLING of the heading text it sits beside, never a
+  wrapper around it - the accessible name for "this is OST" stays carried by that text
+  (`app.title` / `settings.title` / `history.title`), never by the image alone.
+- The SAME source file is the input to `npx tauri icon src/assets/brand/mark.svg`, which
+  regenerates the native icon set in `src-tauri/icons/` (window/taskbar/tray/installer icons)
+  - an asset-only regeneration, not a change to Rust window/tray behavior.
+
 ## Banned outright
 
 - Native `<select>`, raw data `<table>` (use the DataList/table primitive when it exists).

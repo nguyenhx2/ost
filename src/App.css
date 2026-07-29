@@ -9,10 +9,17 @@
 .home {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  /*
+   * Density (frontend.md item 3): the home screen is a larger, standalone
+   * window, not a compact overlay - a step roomier than the overlay panel's
+   * --space-3 padding (OverlayPanel, primitives.css) and the settings-provider
+   * row's --space-3 gap, so the window reads as a distinct, more spacious
+   * surface rather than an overlay wearing a bigger frame.
+   */
+  gap: var(--space-6);
   width: 100%;
   height: 100%;
-  padding: var(--space-5);
+  padding: var(--space-6);
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
@@ -27,9 +34,20 @@
 }
 
 .home-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
+}
+
+.home-title-mark {
+  /* One step larger than the BrandMark default (--space-5, BrandMark.css) -
+     the home title is the app's one wordmark moment. */
+  width: var(--space-6);
+  height: var(--space-6);
 }
 
 .home-subtitle {
@@ -49,8 +67,12 @@
 }
 
 .home-section h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ---------- Status ---------- */
@@ -78,6 +100,7 @@
 .home-status-label {
   flex: 1 1 auto;
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-muted);
 }
 

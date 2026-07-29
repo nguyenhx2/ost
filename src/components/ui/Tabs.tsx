@@ -2,8 +2,12 @@ import { useRef, type ReactNode, type KeyboardEvent } from "react";
 
 export interface TabItem {
   id: string;
-  /** Tab label (i18n'd by the caller). */
+  /** Tab label (i18n'd by the caller) - the tab button's accessible name. */
   label: string;
+  /** Optional decorative icon rendered before the label (a lucide-react SVG,
+   * `aria-hidden` - contributes nothing to the tab's accessible name, which
+   * stays exactly `label`; design-system.md icon-language sweep). */
+  icon?: ReactNode;
   /** Tab panel content, rendered only while this tab is active (unmounted
    * otherwise - keeps inactive sections' effects/timers from running). */
   content: ReactNode;
@@ -88,6 +92,7 @@ export function Tabs({ items, activeId, onChange, label }: TabsProps) {
               onClick={() => onChange(item.id)}
               onKeyDown={onKeyDown}
             >
+              {item.icon}
               {item.label}
             </button>
           );

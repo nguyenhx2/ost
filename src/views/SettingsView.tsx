@@ -2,13 +2,20 @@ import { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Captions,
+  Cpu,
   Download,
   History,
+  KeyRound,
   Keyboard,
+  ListOrdered,
+  Mic,
   Play,
+  Radio,
   Server,
   ShieldCheck,
   ShieldOff,
+  Sparkles,
   Square,
   Trash2,
 } from "lucide-react";
@@ -28,6 +35,7 @@ import {
   type SelectOption,
   type TabItem,
 } from "../components/ui";
+import { BrandMark } from "../components/BrandMark";
 import { ConsentDialog } from "../components/ConsentDialog";
 import { t } from "../lib/i18n";
 import {
@@ -526,7 +534,10 @@ function LocalLlmModelListSection({
       className="settings-section"
       aria-labelledby="settings-llm-models-heading"
     >
-      <h2 id="settings-llm-models-heading">{t("settings.llmModelsHeading")}</h2>
+      <h2 id="settings-llm-models-heading">
+        <Cpu size={16} aria-hidden="true" />
+        {t("settings.llmModelsHeading")}
+      </h2>
       <p className="settings-hint">{t("settings.llmModelsHint")}</p>
 
       <ul className="settings-provider-list">
@@ -719,7 +730,10 @@ function HotkeysSection() {
       className="settings-section"
       aria-labelledby="settings-hotkeys-heading"
     >
-      <h2 id="settings-hotkeys-heading">{t("settings.hotkeysHeading")}</h2>
+      <h2 id="settings-hotkeys-heading">
+        <Keyboard size={16} aria-hidden="true" />
+        {t("settings.hotkeysHeading")}
+      </h2>
       <p className="settings-hint">{t("settings.hotkeysHint")}</p>
 
       {hotkeys.config ? (
@@ -1069,6 +1083,7 @@ export function SettingsView() {
   const providersTab = (
     <>
       <div className="settings-status">
+        <Sparkles size={14} aria-hidden="true" />
         <span>
           {t("settings.statusActiveProvider", {
             provider: activeProviderDisplayName,
@@ -1101,6 +1116,7 @@ export function SettingsView() {
         aria-labelledby="settings-providers-heading"
       >
         <h2 id="settings-providers-heading">
+          <KeyRound size={16} aria-hidden="true" />
           {t("settings.providersHeading")}
         </h2>
         <p className="settings-hint">{t("settings.providersHint")}</p>
@@ -1231,7 +1247,14 @@ export function SettingsView() {
         </ul>
       </section>
 
-      <Disclosure summary={t("settings.fallbackHeading")}>
+      <Disclosure
+        summary={
+          <>
+            <ListOrdered size={16} aria-hidden="true" />
+            {t("settings.fallbackHeading")}
+          </>
+        }
+      >
         <p className="settings-hint">{t("settings.fallbackHint")}</p>
         <ol className="settings-fallback-list">
           {order.map((id, index) => (
@@ -1275,6 +1298,7 @@ export function SettingsView() {
   const sttTab = (
     <>
       <div className="settings-status">
+        <Captions size={14} aria-hidden="true" />
         <span>
           {t("settings.statusSttEngine", {
             model: currentSttModel
@@ -1300,7 +1324,10 @@ export function SettingsView() {
         className="settings-section"
         aria-labelledby="settings-stt-heading"
       >
-        <h2 id="settings-stt-heading">{t("settings.sttHeading")}</h2>
+        <h2 id="settings-stt-heading">
+          <Captions size={16} aria-hidden="true" />
+          {t("settings.sttHeading")}
+        </h2>
         <p className="settings-hint">{t("settings.sttHint")}</p>
 
         <SttEngineSection stt={stt} />
@@ -1311,7 +1338,10 @@ export function SettingsView() {
         className="settings-section"
         aria-labelledby="settings-audio-heading"
       >
-        <h2 id="settings-audio-heading">{t("settings.audioHeading")}</h2>
+        <h2 id="settings-audio-heading">
+          <Mic size={16} aria-hidden="true" />
+          {t("settings.audioHeading")}
+        </h2>
         <p className="settings-hint">{t("settings.audioHint")}</p>
 
         <div className="settings-field">
@@ -1395,6 +1425,7 @@ export function SettingsView() {
           )}
           {audio.running ? (
             <Badge variant="default" label={t("settings.audioRunning")}>
+              <Radio size={12} aria-hidden="true" />
               {t("settings.audioRunning")}
             </Badge>
           ) : null}
@@ -1430,7 +1461,10 @@ export function SettingsView() {
         className="settings-section"
         aria-labelledby="settings-history-heading"
       >
-        <h2 id="settings-history-heading">{t("settings.historyHeading")}</h2>
+        <h2 id="settings-history-heading">
+          <History size={16} aria-hidden="true" />
+          {t("settings.historyHeading")}
+        </h2>
         <p className="settings-hint">{t("settings.historyHint")}</p>
         <Switch
           checked={history.enabled}
@@ -1459,7 +1493,14 @@ export function SettingsView() {
        * download here is ALSO manageable from its own tab (STT / Local LLM) -
        * this list only exists to review/revoke the BR-08 download consent
        * itself, so it stays collapsed by default. */}
-      <Disclosure summary={t("settings.modelsHeading")}>
+      <Disclosure
+        summary={
+          <>
+            <Download size={16} aria-hidden="true" />
+            {t("settings.modelsHeading")}
+          </>
+        }
+      >
         <p className="settings-hint">{t("settings.modelsHint")}</p>
         {grantedModels.length === 0 ? (
           <p className="settings-hint" role="status" aria-live="polite">
@@ -1485,12 +1526,19 @@ export function SettingsView() {
     {
       id: "providers",
       label: t("settings.tabProviders"),
+      icon: <KeyRound size={16} aria-hidden="true" />,
       content: providersTab,
     },
-    { id: "stt", label: t("settings.tabStt"), content: sttTab },
+    {
+      id: "stt",
+      label: t("settings.tabStt"),
+      icon: <Captions size={16} aria-hidden="true" />,
+      content: sttTab,
+    },
     {
       id: "localLlm",
       label: t("settings.tabLocalLlm"),
+      icon: <Cpu size={16} aria-hidden="true" />,
       content: (
         <>
           <LocalLlmServerStatus
@@ -1510,14 +1558,23 @@ export function SettingsView() {
     {
       id: "hotkeys",
       label: t("settings.tabHotkeys"),
+      icon: <Keyboard size={16} aria-hidden="true" />,
       content: <HotkeysSection />,
     },
-    { id: "general", label: t("settings.tabGeneral"), content: generalTab },
+    {
+      id: "general",
+      label: t("settings.tabGeneral"),
+      icon: <History size={16} aria-hidden="true" />,
+      content: generalTab,
+    },
   ];
 
   return (
     <main className="settings">
-      <h1 className="settings-title">{t("settings.title")}</h1>
+      <h1 className="settings-title">
+        <BrandMark />
+        {t("settings.title")}
+      </h1>
 
       {selection.error ? (
         <p

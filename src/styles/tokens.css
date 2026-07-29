@@ -34,6 +34,15 @@
   --font-size-md: 1rem;
   --font-size-lg: 1.25rem;
   --font-size-xl: 2rem;
+  /*
+   * Weight scale (type-hierarchy refinement): headings use --font-weight-semibold
+   * instead of the browser-default 700 for a lighter, more refined heading
+   * weight; field/status labels use --font-weight-medium to sit a step above
+   * regular muted body/hint text without a second color.
+   */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
 
   /* Spacing scale */
   --space-1: 0.25rem;
