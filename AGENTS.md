@@ -35,7 +35,14 @@ commits/PRs.
 `docs/README.md` (orientation), `architecture.md` (system, module map, IPC + provider
 contracts), `decisions.md` (append-only decision log, replaces the old per-file ADRs),
 `known-issues.md` (environment/build findings), `backlog.md` (flat list of open work).
-Everything under `.claude/` and the root instruction files is English.
+
+## Language - two different rules, do not conflate them
+
+Documentation (`docs/`), everything under `.claude/`, and task/commit/PR text: English.
+USER-FACING UI COPY is the opposite and unconditional: Vietnamese AND English via i18n keys
+(`src/lib/i18n/`), Vietnamese fully accented - see `.claude/rules/conventions.md`. This is a
+product requirement, not a docs-style choice; "docs are English" is never grounds to touch
+Vietnamese UI strings.
 
 ## No orchestrator - roles as responsibilities, tool-agnostic
 

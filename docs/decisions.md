@@ -133,3 +133,10 @@ guard the init call) - deferred, would need its own ADR-equivalent entry here if
 
 **Status**: Accepted, shipped as opt-in (`--features vulkan`). Default distribution stays
 CPU-only.
+
+---
+
+Hook-enforced: `.claude/hooks/protect-adr.ps1` treats everything already committed to this
+file as immutable - Edit is blocked outright, and a Write is permitted only when it keeps the
+existing content as an exact, unchanged prefix (a pure append). This is whole-file protection,
+not per-entry, because the file has no machine-checkable per-entry "Accepted" marker.

@@ -30,6 +30,11 @@ Precedence: `.claude/rules/` > per-folder CLAUDE.md > defaults.
    `conventions.md`.
 8. **Writing style everywhere**: no emoji, never the em dash (write "-"), no AI attribution
    in commits/PRs - `git.md`.
+9. **Language - two different rules, do not conflate them**: documentation (`docs/`),
+   everything under `.claude/`, and task/commit/PR text are English. USER-FACING UI COPY is
+   the opposite and unconditional: Vietnamese AND English via i18n keys (`src/lib/i18n/`),
+   Vietnamese fully accented - see `conventions.md`. This is a product requirement, not a
+   docs-style choice; "docs are English" is never grounds to touch Vietnamese UI strings.
 
 ## Agents - no orchestrator
 

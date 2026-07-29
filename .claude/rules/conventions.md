@@ -96,8 +96,12 @@ Build UI ONLY from primitives in `src/components/ui/` and design tokens in
 
 - **Icons**: no emoji anywhere in the UI - SVG icons only, via `lucide-react`, with one
   written exception below.
-- **Copy**: Vietnamese and English via i18n keys (`src/lib/i18n/`) from day one; no hardcoded
-  user-facing strings in components; Vietnamese strings fully accented.
+- **Copy - unconditional, does not follow the docs-are-English rule**: every user-facing
+  string ships in Vietnamese AND English via i18n keys (`src/lib/i18n/`) from day one; no
+  hardcoded user-facing strings in components; Vietnamese strings fully accented. This is a
+  product requirement, separate from and unaffected by the fact that `docs/`, `.claude/`, and
+  commit/PR text are English-only - never delete or English-only-ify a Vietnamese UI string on
+  the theory that "docs are English now."
 - **Theme**: dark-first; light theme through the same tokens; never hardcode colors - tokens
   only. Overlay windows need a token-defined scrim/contrast layer and user-adjustable opacity
   to stay legible over arbitrary backgrounds.
