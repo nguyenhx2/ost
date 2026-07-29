@@ -157,6 +157,7 @@ mod tests {
             source_language: src.map(str::to_string),
             target_language: tgt.map(str::to_string),
             base_url: None,
+            audio_source: None,
         }
     }
 

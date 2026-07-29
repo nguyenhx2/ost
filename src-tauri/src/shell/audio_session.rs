@@ -21,7 +21,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -30,8 +30,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_store::StoreExt;
 use tokio::sync::mpsc;
+use tracing::Instrument;
 
-use crate::audio::{AudioChunk, CaptureSession};
+use crate::audio::{open_source, AudioChunk, AudioSourceKind, CaptureSession};
 use crate::core::{HeavySessionCoordinator, HeavySessionKind};
 use crate::keys::{ApiKey, KeyStore};
 use crate::models::{ConsentDisclosure, ModelGate};
@@ -56,11 +57,23 @@ pub const EVENT_AUDIO_CAPTION: &str = "audio:caption";
 /// "translating" state instead of hanging (human-in-the-loop.md: no silent
 /// failure). The session keeps running for subsequent chunks.
 pub const EVENT_AUDIO_ERROR: &str = "audio:error";
-/// Emitted (app-global) when the caption overlay window is destroyed, so a
-/// separate Settings window that started the session keeps its running-state in
-/// sync (TASK-016 follow-up). No payload - closing is the only signal. Kept in
-/// sync with `src/lib/ipc.ts` `EVENT_AUDIO_STOPPED` and ipc.md.
+/// Emitted (app-global) whenever a session actually stops: `stop_audio_session`
+/// (owner-reported: no way to halt without losing the window - stop is now a
+/// distinct control from closing the overlay) and when the caption overlay
+/// window is destroyed, so a separate Settings window that started the session
+/// keeps its running-state in sync (TASK-016 follow-up). No payload - stopping
+/// is the only signal. Kept in sync with `src/lib/ipc.ts` `EVENT_AUDIO_STOPPED`
+/// and ipc.md.
 pub const EVENT_AUDIO_STOPPED: &str = "audio:stopped";
+/// Emitted when a running session transitions to paused (`pause_audio_session`);
+/// never emitted for a no-op call (no active session, or already paused), so
+/// a listener can trust it as a real state change. No payload, same precedent
+/// as `EVENT_AUDIO_STOPPED`. Kept in sync with `src/lib/ipc.ts` and ipc.md.
+pub const EVENT_AUDIO_PAUSED: &str = "audio:paused";
+/// Emitted when a paused session resumes (`resume_audio_session`) - same
+/// real-change-only guarantee as `EVENT_AUDIO_PAUSED`. Kept in sync with
+/// `src/lib/ipc.ts` and ipc.md.
+pub const EVENT_AUDIO_RESUMED: &str = "audio:resumed";
 /// Emitted while a Settings-time STT model switch is downloading (TASK-026);
 /// the Settings UI renders a progress bar instead of a silent multi-hundred-MB
 /// wait. Kept in sync with `src/lib/ipc.ts` and ipc.md.
@@ -72,6 +85,11 @@ pub const EVENT_STT_MODEL_DOWNLOAD_PROGRESS: &str = "stt:model-download-progress
 /// (BR-02).
 const SETTINGS_STORE_FILE: &str = "settings.json";
 const STT_MODEL_STORE_KEY: &str = "sttModel";
+/// The settings-store key the last-chosen audio source is persisted under
+/// (item 4 of this task): a NAME only (`AudioSourceKind`'s serde
+/// representation), never a secret (BR-02). Sits next to `sttModel` in the
+/// same `settings.json` file.
+const AUDIO_SOURCE_STORE_KEY: &str = "audioSource";
 
 /// Default caption target language (AC-01.5): Vietnamese, the product's primary
 /// locale. Configurable per session via [`AudioSessionRequest::target_language`].
@@ -164,6 +182,11 @@ pub struct AudioSessionRequest {
     /// when `provider` is `local_openai`; ignored otherwise.
     #[serde(default)]
     pub base_url: Option<String>,
+    /// The audio source to capture from (item 4: owner-reported, source must
+    /// be selectable). Absent = [`AudioSourceKind::SystemLoopback`], preserving
+    /// pre-microphone behaviour.
+    #[serde(default)]
+    pub audio_source: Option<AudioSourceKind>,
 }
 
 /// The `audio:caption` event payload. Carries source + translated text, the
@@ -198,6 +221,25 @@ pub struct AudioCaptionPayload {
     /// Milliseconds since the session started (monotonic; never wall-clock, so
     /// no capture timestamp leaks - mirrors the chunk-sequence rationale).
     pub timestamp_ms: u64,
+    /// The active whisper model's catalog id (e.g. `"base"`) - item 1:
+    /// owner-reported, no way to see which STT model is running. Empty when
+    /// the currently-selected model does not (should not happen) match a
+    /// catalog entry.
+    pub stt_model: String,
+    /// The audio source this session captures from (item 4).
+    pub audio_source: AudioSourceKind,
+    /// Milliseconds this chunk waited between arriving at the caption loop and
+    /// the previous chunk's arrival (item 3: instrumentation, not
+    /// optimization). Approximates the capture+VAD+chunk stage's duration from
+    /// the consumer's point of view; NOT wall-clock timestamps (no capture
+    /// time leaks). See the `capture_to_chunk` tracing span in
+    /// `run_caption_loop`.
+    pub capture_to_chunk_ms: u64,
+    /// Milliseconds whisper spent transcribing this chunk (`stt_transcribe`
+    /// span).
+    pub stt_ms: u64,
+    /// Milliseconds the provider translate call took (`translate` span).
+    pub translate_ms: u64,
 }
 
 /// Per-session caption configuration derived from the start request.
@@ -211,6 +253,12 @@ pub struct CaptionConfig {
     pub model_id: String,
     /// Low-confidence flag threshold (AC-01.7).
     pub low_confidence_threshold: f32,
+    /// The active whisper model's catalog id, stamped onto every caption
+    /// payload (item 1).
+    pub stt_model_id: String,
+    /// The audio source this session captures from, stamped onto every
+    /// caption payload (item 4).
+    pub audio_source: AudioSourceKind,
 }
 
 impl CaptionConfig {
@@ -315,6 +363,35 @@ pub struct AudioErrorPayload {
     pub message: String,
 }
 
+/// One-read snapshot returned by `get_audio_session_status` (item 1):
+/// whether a session is running, whether it is paused, the STT model actually
+/// in use (id + label), the translation provider + model (only when running),
+/// and the audio source. Lets the caption overlay show real state at mount,
+/// before the first `audio:caption` event.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioSessionStatusPayload {
+    /// `true` when an audio session is currently running.
+    pub running: bool,
+    /// `true` when a running session is paused (always `false` when
+    /// `running` is `false`).
+    pub paused: bool,
+    /// The whisper model's catalog id (`"tiny" | "base" | "small" |
+    /// "large-v3-turbo" | "large-v3"`); the running session's actual model
+    /// when `running`, otherwise the currently-selected-for-next-session one.
+    pub stt_model_id: String,
+    /// The catalog label for `stt_model_id` (English fallback; i18n owns the
+    /// rendered copy, matches `SttModelInfo::label`).
+    pub stt_model_label: String,
+    /// The translation provider actually in use. `None` when idle.
+    pub provider: Option<String>,
+    /// The translation model actually in use. `None` when idle.
+    pub model: Option<String>,
+    /// The audio source: the running session's actual source when `running`,
+    /// otherwise the persisted-or-default choice.
+    pub audio_source: AudioSourceKind,
+}
+
 /// Builds the caption payload from a transcript + its translation. Pure and
 /// I/O-free so the language/confidence/flag mapping is unit-tested without a
 /// model or a provider.
@@ -322,6 +399,7 @@ pub struct AudioErrorPayload {
 /// Source language: when pinned (AC-01.4) the payload echoes the pin and marks
 /// it non-auto; when auto (AC-01.3) it carries whisper's detected code. The
 /// low-confidence flag is set when ANY segment falls below `threshold` (AC-01.7).
+#[allow(clippy::too_many_arguments)]
 fn build_caption_payload(
     transcript: &Transcript,
     source_text: String,
@@ -329,6 +407,9 @@ fn build_caption_payload(
     config: &CaptionConfig,
     sequence: u64,
     timestamp_ms: u64,
+    capture_to_chunk_ms: u64,
+    stt_ms: u64,
+    translate_ms: u64,
 ) -> AudioCaptionPayload {
     let segment_confidences: Vec<f32> = transcript.segments.iter().map(|s| s.confidence).collect();
     let low_confidence = transcript.has_low_confidence(config.low_confidence_threshold);
@@ -344,6 +425,11 @@ fn build_caption_payload(
         segment_confidences,
         low_confidence,
         timestamp_ms,
+        stt_model: config.stt_model_id.clone(),
+        audio_source: config.audio_source,
+        capture_to_chunk_ms,
+        stt_ms,
+        translate_ms,
     }
 }
 
@@ -358,6 +444,21 @@ fn build_caption_payload(
 /// AC-01.9 (belt-and-braces): an empty transcript (whisper returned no speech)
 /// produces NO caption and NO translate call - even though VAD already gates
 /// silence upstream.
+///
+/// PAUSE semantics (item 2): while `paused` is `true`, chunks are drained from
+/// `rx` and immediately DISCARDED - no STT, no translate, no caption, no
+/// buffering. This keeps the capture thread from blocking on a full channel
+/// (which would otherwise happen if the loop simply stopped reading) while
+/// never growing a backlog that would make resume slower (a paused session
+/// resumes instantly: whisper stays loaded, capture stays alive).
+///
+/// INSTRUMENTATION (item 3): every chunk is timed in three stages - the gap
+/// since the previous chunk arrived (`capture_to_chunk`, an approximation of
+/// the capture+VAD+chunk stage from the consumer's side - the audio module is
+/// out of this context's scope so no finer-grained timestamp is available),
+/// whisper transcription (`stt_transcribe`), and the provider translate call
+/// (`translate`). Each stage gets a `tracing` span plus an integer-millisecond
+/// field on the emitted caption payload.
 pub async fn run_caption_loop(
     mut rx: mpsc::Receiver<AudioChunk>,
     stt: Arc<dyn SpeechToText>,
@@ -365,34 +466,61 @@ pub async fn run_caption_loop(
     sink: Arc<dyn CaptionSink>,
     config: CaptionConfig,
     started: Instant,
+    paused: Arc<AtomicBool>,
 ) {
     let options = config.transcribe_options();
-    while let Some(chunk) = rx.recv().await {
+    let mut stage_start = Instant::now();
+    loop {
+        let chunk = match rx
+            .recv()
+            .instrument(tracing::debug_span!("capture_to_chunk"))
+            .await
+        {
+            Some(chunk) => chunk,
+            None => break,
+        };
+        let capture_to_chunk_ms = stage_start.elapsed().as_millis() as u64;
         let sequence = chunk.sequence;
+
+        if paused.load(Ordering::SeqCst) {
+            // Discard without STT/translate/caption - see PAUSE semantics above.
+            tracing::debug!(sequence, "chunk discarded: session paused");
+            stage_start = Instant::now();
+            continue;
+        }
+
         let stt = Arc::clone(&stt);
         let opts = options.clone();
-
+        let stt_start = Instant::now();
         // OFF the async runtime: native whisper inference on the blocking pool.
-        let transcript =
-            match tokio::task::spawn_blocking(move || stt.transcribe(&chunk, &opts)).await {
-                Ok(Ok(transcript)) => transcript,
-                Ok(Err(SttError::ConsentRequired(disclosure))) => {
-                    // Cannot proceed without the model; ask once and stop the loop.
-                    sink.consent_required(*disclosure);
-                    break;
-                }
-                Ok(Err(err)) => {
-                    sink.error(err.to_string());
-                    continue;
-                }
-                Err(join) => {
-                    sink.error(format!("stt task failed: {join}"));
-                    continue;
-                }
-            };
+        let transcript = match tokio::task::spawn_blocking(move || {
+            let _span = tracing::debug_span!("stt_transcribe", sequence).entered();
+            stt.transcribe(&chunk, &opts)
+        })
+        .await
+        {
+            Ok(Ok(transcript)) => transcript,
+            Ok(Err(SttError::ConsentRequired(disclosure))) => {
+                // Cannot proceed without the model; ask once and stop the loop.
+                sink.consent_required(*disclosure);
+                break;
+            }
+            Ok(Err(err)) => {
+                sink.error(err.to_string());
+                stage_start = Instant::now();
+                continue;
+            }
+            Err(join) => {
+                sink.error(format!("stt task failed: {join}"));
+                stage_start = Instant::now();
+                continue;
+            }
+        };
+        let stt_ms = stt_start.elapsed().as_millis() as u64;
 
         // AC-01.9: no speech -> no caption, no LLM call.
         if transcript.is_empty() {
+            stage_start = Instant::now();
             continue;
         }
         let source_text = transcript.text(" ");
@@ -404,15 +532,19 @@ pub async fn run_caption_loop(
             None => Some(transcript.language.code.clone()),
         };
 
-        match translator
+        let translate_start = Instant::now();
+        let translate_result = translator
             .translate(
                 &source_text,
                 source_language.as_deref(),
                 &config.target_language,
                 &config.model_id,
             )
-            .await
-        {
+            .instrument(tracing::debug_span!("translate", sequence))
+            .await;
+        let translate_ms = translate_start.elapsed().as_millis() as u64;
+
+        match translate_result {
             Ok(translation) => {
                 let payload = build_caption_payload(
                     &transcript,
@@ -421,11 +553,15 @@ pub async fn run_caption_loop(
                     &config,
                     sequence,
                     started.elapsed().as_millis() as u64,
+                    capture_to_chunk_ms,
+                    stt_ms,
+                    translate_ms,
                 );
                 sink.caption(payload);
             }
             Err(message) => sink.error(message),
         }
+        stage_start = Instant::now();
     }
 }
 
@@ -440,6 +576,21 @@ struct ActiveSession {
     consumer: tauri::async_runtime::JoinHandle<()>,
     /// The whisper engine, kept so stop can unload the model (NFR-REL-02).
     stt: Arc<dyn SpeechToText>,
+    /// `true` while paused (item 2): shared with the caption loop, which
+    /// checks it on every chunk and discards while set. `pause_audio_session`/
+    /// `resume_audio_session` flip it; stop tears the whole session down
+    /// regardless of this flag.
+    paused: Arc<AtomicBool>,
+    /// The whisper model actually resident for this session (may differ from
+    /// the pipeline's CURRENTLY SELECTED model if a Settings-time switch raced
+    /// in after start - this always reports what is truly loaded).
+    stt_model: WhisperModel,
+    /// The translation provider actually in use for this session.
+    provider: ProviderId,
+    /// The translation model id actually in use for this session.
+    translate_model_id: String,
+    /// The audio source actually in use for this session.
+    audio_source: AudioSourceKind,
 }
 
 /// Managed Tauri state for the audio pipeline: the shared backends plus the (at
@@ -454,6 +605,12 @@ pub struct AudioSessionPipeline {
     /// NEXT session with no separate "reload" path and no app restart.
     model: Mutex<WhisperModel>,
     model_dir: PathBuf,
+    /// The persisted-or-default audio source (item 4): seeded at startup from
+    /// `settings.json`'s `audioSource` key (mirrors `model`'s persisted-
+    /// selection pattern), and updated whenever a session starts. Read by
+    /// [`Self::status`] when idle so a UI can show "what will be used next"
+    /// before any session has run this app launch.
+    default_audio_source: Mutex<AudioSourceKind>,
     active: Mutex<Option<ActiveSession>>,
     /// The one-heavy-session-at-a-time coordinator (BR-04): starting an audio
     /// session drops any resident ORT OCR session, and stopping it drops the
@@ -479,12 +636,14 @@ impl AudioSessionPipeline {
         model: WhisperModel,
         model_dir: PathBuf,
         coordinator: Arc<HeavySessionCoordinator>,
+        audio_source: AudioSourceKind,
     ) -> Self {
         Self {
             keys,
             gate,
             model: Mutex::new(model),
             model_dir,
+            default_audio_source: Mutex::new(audio_source),
             active: Mutex::new(None),
             coordinator,
             downloads: Mutex::new(HashMap::new()),
@@ -516,7 +675,7 @@ impl AudioSessionPipeline {
     fn cancel_download(&self, model_id: &str) {
         if let Ok(guard) = self.downloads.lock() {
             if let Some(flag) = guard.get(model_id) {
-                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                flag.store(true, Ordering::SeqCst);
             }
         }
     }
@@ -529,11 +688,84 @@ impl AudioSessionPipeline {
         self.model.lock().map(|g| *g).unwrap_or(WhisperModel::BASE)
     }
 
+    /// The persisted-or-default audio source, used when idle (see
+    /// `default_audio_source`'s docs). Falls back to
+    /// [`AudioSourceKind::SystemLoopback`] on a poisoned lock, mirroring
+    /// `current_model`.
+    fn current_audio_source(&self) -> AudioSourceKind {
+        self.default_audio_source
+            .lock()
+            .map(|g| *g)
+            .unwrap_or(AudioSourceKind::SystemLoopback)
+    }
+
     /// `true` while an audio session is running - switching the model is
     /// refused during this window (TASK-026: never swap the engine under an
     /// active transcription loop).
     fn is_session_active(&self) -> bool {
         self.active.lock().map(|g| g.is_some()).unwrap_or(false)
+    }
+
+    /// Pauses the active session, if any (item 2): the caption loop starts
+    /// discarding chunks instead of transcribing/translating them, while
+    /// capture and whisper stay resident for an instant resume. Returns `true`
+    /// only when this call actually transitioned a running, not-yet-paused
+    /// session - `false` for a no-op (no active session, or already paused) so
+    /// the command layer emits [`EVENT_AUDIO_PAUSED`] only on a real change.
+    pub fn pause(&self) -> bool {
+        match self.active.lock() {
+            Ok(guard) => match guard.as_ref() {
+                Some(session) => !session.paused.swap(true, Ordering::SeqCst),
+                None => false,
+            },
+            Err(_) => false,
+        }
+    }
+
+    /// Resumes the active session, if any and if paused (item 2): the caption
+    /// loop starts consuming chunks again immediately (nothing was buffered
+    /// while paused, so there is no backlog to drain). Same real-change-only
+    /// return contract as [`Self::pause`].
+    pub fn resume(&self) -> bool {
+        match self.active.lock() {
+            Ok(guard) => match guard.as_ref() {
+                Some(session) => session.paused.swap(false, Ordering::SeqCst),
+                None => false,
+            },
+            Err(_) => false,
+        }
+    }
+
+    /// One-read snapshot for `get_audio_session_status` (item 1): what the
+    /// caption overlay needs at mount, before the first `audio:caption`
+    /// arrives - which model is running, whether the session is paused, and
+    /// which provider/model/audio source are actually in use. Reports the
+    /// currently-selected-for-next-session values when idle instead.
+    pub fn status(&self) -> AudioSessionStatusPayload {
+        if let Ok(guard) = self.active.lock() {
+            if let Some(session) = guard.as_ref() {
+                let entry = catalog_entry_for(session.stt_model);
+                return AudioSessionStatusPayload {
+                    running: true,
+                    paused: session.paused.load(Ordering::SeqCst),
+                    stt_model_id: entry.map(|e| e.id.to_string()).unwrap_or_default(),
+                    stt_model_label: entry.map(|e| e.label.to_string()).unwrap_or_default(),
+                    provider: Some(session.provider.to_string()),
+                    model: Some(session.translate_model_id.clone()),
+                    audio_source: session.audio_source,
+                };
+            }
+        }
+        let entry = catalog_entry_for(self.current_model());
+        AudioSessionStatusPayload {
+            running: false,
+            paused: false,
+            stt_model_id: entry.map(|e| e.id.to_string()).unwrap_or_default(),
+            stt_model_label: entry.map(|e| e.label.to_string()).unwrap_or_default(),
+            provider: None,
+            model: None,
+            audio_source: self.current_audio_source(),
+        }
     }
 
     /// Stops the active session (if any): halts capture within <= 1s (AC-01.10),
@@ -649,10 +881,15 @@ pub async fn start_audio_session(
         pipeline.model_dir.clone(),
         Arc::clone(&pipeline.gate),
     ));
+    // Item 4: absent -> SystemLoopback, preserving pre-microphone behaviour.
+    let audio_source = request
+        .audio_source
+        .unwrap_or(AudioSourceKind::SystemLoopback);
+
     // Start capture first: if the backend fails we return before marking a heavy
     // session active, so the coordinator's state never goes stale on a failed
     // start.
-    let (capture, rx) = start_capture()?;
+    let (capture, rx) = start_capture(audio_source)?;
 
     // One-heavy-session-at-a-time (BR-04): register this session's whisper unload
     // hook, then start the STT session - dropping any resident ORT OCR session so
@@ -664,17 +901,27 @@ pub async fn start_audio_session(
         .register(HeavySessionKind::Stt, Arc::new(move || hook_stt.unload()));
     pipeline.coordinator.begin(HeavySessionKind::Stt);
 
+    // Item 1: the catalog id stamped onto every caption payload + `status()`.
+    let stt_model_id = catalog_entry_for(model)
+        .map(|e| e.id.to_string())
+        .unwrap_or_default();
+    let translate_model_id = request.model.clone();
     let config = CaptionConfig {
         source_language: normalize_language(request.source_language),
         target_language: normalize_target(request.target_language),
         model_id: request.model,
         low_confidence_threshold: LOW_CONFIDENCE_THRESHOLD,
+        stt_model_id: stt_model_id.clone(),
+        audio_source,
     };
     let sink: Arc<dyn CaptionSink> = Arc::new(EventCaptionSink { app: app.clone() });
     let loop_stt = Arc::clone(&stt);
     let started = Instant::now();
+    // Item 2: shared with the caption loop; pause/resume flip it in place.
+    let paused: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+    let loop_paused = Arc::clone(&paused);
     let consumer = tauri::async_runtime::spawn(async move {
-        run_caption_loop(rx, loop_stt, translator, sink, config, started).await;
+        run_caption_loop(rx, loop_stt, translator, sink, config, started, loop_paused).await;
     });
 
     if let Ok(mut guard) = pipeline.active.lock() {
@@ -682,19 +929,80 @@ pub async fn start_audio_session(
             capture,
             consumer,
             stt,
+            paused,
+            stt_model: model,
+            provider,
+            translate_model_id,
+            audio_source,
         });
     }
+
+    // Item 4: persist the resolved choice next to `sttModel` (BR-02: a NAME
+    // only) and update the idle default so a later `status()` reflects it.
+    // Best-effort - a persistence failure never blocks the session that just
+    // started successfully.
+    persist_audio_source(&app, audio_source).await;
+    if let Ok(mut guard) = pipeline.default_audio_source.lock() {
+        *guard = audio_source;
+    }
+
     Ok(())
 }
 
 /// Stops the active audio session (AC-01.10): capture halts within <= 1s and the
 /// whisper model is released. Idempotent - safe to call with no active session.
+/// Deliberately does NOT touch any window (item 2: stop and "close the
+/// overlay" are distinct operations - the caption overlay stays open so the
+/// user keeps the accumulated transcript).
 #[tauri::command]
 pub async fn stop_audio_session(
+    app: AppHandle,
     pipeline: State<'_, AudioSessionPipeline>,
 ) -> Result<(), AudioError> {
     pipeline.stop();
+    let _ = app.emit(EVENT_AUDIO_STOPPED, ());
     Ok(())
+}
+
+/// Pauses the active session (item 2): halts consumption of speech chunks and
+/// discards what arrives while paused - whisper stays loaded and capture stays
+/// alive so `resume_audio_session` is instant. Idempotent - safe to call with
+/// no active session or an already-paused one; only emits
+/// [`EVENT_AUDIO_PAUSED`] on a real transition.
+#[tauri::command]
+pub async fn pause_audio_session(
+    app: AppHandle,
+    pipeline: State<'_, AudioSessionPipeline>,
+) -> Result<(), AudioError> {
+    if pipeline.pause() {
+        let _ = app.emit(EVENT_AUDIO_PAUSED, ());
+    }
+    Ok(())
+}
+
+/// Resumes a paused session (item 2). Idempotent - safe to call with no
+/// active session or a not-paused one; only emits [`EVENT_AUDIO_RESUMED`] on a
+/// real transition.
+#[tauri::command]
+pub async fn resume_audio_session(
+    app: AppHandle,
+    pipeline: State<'_, AudioSessionPipeline>,
+) -> Result<(), AudioError> {
+    if pipeline.resume() {
+        let _ = app.emit(EVENT_AUDIO_RESUMED, ());
+    }
+    Ok(())
+}
+
+/// One-read snapshot of the audio session (item 1): lets the caption overlay
+/// (and a separate Settings window) show the active STT model, provider/model,
+/// audio source, and running/paused state at mount, instead of staring at a
+/// blank state until the first `audio:caption` arrives.
+#[tauri::command]
+pub fn get_audio_session_status(
+    pipeline: State<'_, AudioSessionPipeline>,
+) -> AudioSessionStatusPayload {
+    pipeline.status()
 }
 
 // ---------------------------------------------------------------------------
@@ -1038,21 +1346,60 @@ async fn apply_model_switch(
     Ok(())
 }
 
-/// Builds the platform capture source + session. Windows-first (WASAPI
-/// loopback); other platforms are Phase-4 ports.
-#[cfg(windows)]
-fn start_capture() -> Result<(CaptureSession, mpsc::Receiver<AudioChunk>), AudioError> {
-    let source = crate::audio::WindowsLoopbackSource::new().map_err(|e| {
-        tracing::error!(error = %e, "WASAPI loopback capture failed to start");
+/// Opens the requested audio source (item 4) and starts the capture session.
+/// Delegates the actual backend selection to `crate::audio::open_source`
+/// (Capture context's cross-platform contract - it errors on an unsupported
+/// platform/source combination internally, so no `cfg` split is needed here).
+fn start_capture(
+    kind: AudioSourceKind,
+) -> Result<(CaptureSession, mpsc::Receiver<AudioChunk>), AudioError> {
+    let source = open_source(kind).map_err(|e| {
+        tracing::error!(error = %e, "audio capture failed to start");
         AudioError::Capture
     })?;
     Ok(CaptureSession::start(source))
 }
 
-#[cfg(not(windows))]
-fn start_capture() -> Result<(CaptureSession, mpsc::Receiver<AudioChunk>), AudioError> {
-    // Capture backends for macOS/Linux land in Phase 4 (behind the same trait).
-    Err(AudioError::Capture)
+/// Reverse-looks-up the catalog entry for `model` by size (mirrors
+/// `list_stt_models`'s existing `entry.model.size == current.size` pattern).
+/// `None` only if a caller ever constructs a [`WhisperModel`] outside the
+/// catalog (does not happen in this pipeline - every value here originates
+/// from `stt::catalog::CATALOG`).
+fn catalog_entry_for(model: WhisperModel) -> Option<&'static catalog::CatalogEntry> {
+    catalog::CATALOG.iter().find(|e| e.model.size == model.size)
+}
+
+/// Resolves the persisted audio-source choice read from `settings.json`
+/// (mirrors `stt::resolve_selected_model`'s persisted-selection pattern): the
+/// stored value when it deserializes to a known [`AudioSourceKind`];
+/// otherwise [`AudioSourceKind::SystemLoopback`] (pre-microphone default).
+/// Pure so this is unit-tested without a real settings store.
+pub fn resolve_stored_audio_source(stored: Option<serde_json::Value>) -> AudioSourceKind {
+    stored
+        .and_then(|v| serde_json::from_value::<AudioSourceKind>(v).ok())
+        .unwrap_or(AudioSourceKind::SystemLoopback)
+}
+
+/// Persists the resolved audio source to `settings.json`'s `audioSource` key,
+/// next to `sttModel` (BR-02: a NAME only, never a secret). Best-effort: a
+/// failure is logged, never propagated - it must not undo a session that
+/// already started successfully. Off-loaded to `spawn_blocking`
+/// (coding-standards.md: `store.save()` is synchronous file I/O), same
+/// pattern as `apply_model_switch`.
+async fn persist_audio_source(app: &AppHandle, kind: AudioSourceKind) {
+    let app = app.clone();
+    let outcome = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let store = app.store(SETTINGS_STORE_FILE).map_err(|e| e.to_string())?;
+        let value = serde_json::to_value(kind).map_err(|e| e.to_string())?;
+        store.set(AUDIO_SOURCE_STORE_KEY, value);
+        store.save().map_err(|e| e.to_string())
+    })
+    .await;
+    match outcome {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::warn!(%error, "failed to persist the selected audio source"),
+        Err(join) => tracing::warn!(%join, "audio source persistence task failed"),
+    }
 }
 
 /// Normalizes the pinned source language: empty / `"auto"` -> auto-detect
@@ -1110,6 +1457,8 @@ mod tests {
             target_language: target.to_string(),
             model_id: "test-model".into(),
             low_confidence_threshold: 0.6,
+            stt_model_id: "base".into(),
+            audio_source: AudioSourceKind::SystemLoopback,
         }
     }
 
@@ -1127,8 +1476,17 @@ mod tests {
         // segment sets the low-confidence flag.
         let t = transcript(vec![("hello", 0.95), ("world", 0.40)], "en", true);
         let cfg = config(None, "vi");
-        let payload =
-            build_caption_payload(&t, t.text(" "), translation("xin chao"), &cfg, 3, 1500);
+        let payload = build_caption_payload(
+            &t,
+            t.text(" "),
+            translation("xin chao"),
+            &cfg,
+            3,
+            1500,
+            20,
+            150,
+            80,
+        );
         assert_eq!(payload.sequence, 3);
         assert_eq!(payload.source_text, "hello world");
         assert_eq!(payload.translated_text, "xin chao");
@@ -1139,13 +1497,18 @@ mod tests {
         assert_eq!(payload.segment_confidences, vec![0.95, 0.40]);
         assert!(payload.low_confidence);
         assert_eq!(payload.timestamp_ms, 1500);
+        assert_eq!(payload.stt_model, "base");
+        assert_eq!(payload.audio_source, AudioSourceKind::SystemLoopback);
+        assert_eq!(payload.capture_to_chunk_ms, 20);
+        assert_eq!(payload.stt_ms, 150);
+        assert_eq!(payload.translate_ms, 80);
     }
 
     #[test]
     fn payload_high_confidence_is_not_flagged() {
         let t = transcript(vec![("clear speech", 0.92)], "ja", true);
         let cfg = config(None, "vi");
-        let payload = build_caption_payload(&t, t.text(" "), translation("x"), &cfg, 0, 0);
+        let payload = build_caption_payload(&t, t.text(" "), translation("x"), &cfg, 0, 0, 0, 0, 0);
         assert!(!payload.low_confidence);
         assert_eq!(payload.segment_confidences, vec![0.92]);
     }
@@ -1187,7 +1550,8 @@ mod tests {
         // threshold), so the JSON number compares clean and stays high-confidence.
         let t = transcript(vec![("hi", 0.75)], "en", true);
         let cfg = config(None, "vi");
-        let payload = build_caption_payload(&t, t.text(" "), translation("chao"), &cfg, 1, 10);
+        let payload =
+            build_caption_payload(&t, t.text(" "), translation("chao"), &cfg, 1, 10, 5, 30, 15);
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["sourceText"], "hi");
         assert_eq!(json["translatedText"], "chao");
@@ -1196,6 +1560,10 @@ mod tests {
         assert_eq!(json["targetLanguage"], "vi");
         assert_eq!(json["lowConfidence"], false);
         assert_eq!(json["segmentConfidences"][0], 0.75);
+        assert_eq!(json["sttModel"], "base");
+        assert_eq!(json["captureToChunkMs"], 5);
+        assert_eq!(json["sttMs"], 30);
+        assert_eq!(json["translateMs"], 15);
     }
 
     #[test]
@@ -1300,6 +1668,12 @@ mod tests {
         }
     }
 
+    /// A fresh not-paused flag for `run_caption_loop` in tests that don't
+    /// exercise the pause/resume path.
+    fn not_paused() -> Arc<AtomicBool> {
+        Arc::new(AtomicBool::new(false))
+    }
+
     #[tokio::test]
     async fn silence_transcript_produces_no_caption_and_no_translate() {
         // AC-01.9: an empty transcript yields no caption and no LLM call.
@@ -1319,6 +1693,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn CaptionSink>,
             config(None, "vi"),
             Instant::now(),
+            not_paused(),
         )
         .await;
 
@@ -1354,6 +1729,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn CaptionSink>,
             config(None, "vi"),
             Instant::now(),
+            not_paused(),
         )
         .await;
 
@@ -1407,6 +1783,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn CaptionSink>,
             config(None, "vi"),
             Instant::now(),
+            not_paused(),
         )
         .await;
 
@@ -1467,6 +1844,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn CaptionSink>,
             config(None, "vi"),
             Instant::now(),
+            not_paused(),
         )
         .await;
 
@@ -1520,6 +1898,7 @@ mod tests {
             Arc::clone(&sink) as Arc<dyn CaptionSink>,
             config(None, "vi"),
             Instant::now(),
+            not_paused(),
         )
         .await;
 
@@ -1527,6 +1906,87 @@ mod tests {
         assert_eq!(*sink.consents.lock().unwrap(), 1);
         assert!(sink.captions.lock().unwrap().is_empty());
         assert_eq!(translator.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn paused_session_discards_chunks_without_transcribing_or_translating() {
+        // Item 2: PAUSE halts consumption and discards - no STT, no translate,
+        // no caption, no buffering. A `FlakyStt` that panics if ever called
+        // proves the chunk never reaches the STT stage while paused.
+        struct NeverCalledStt;
+        impl SpeechToText for NeverCalledStt {
+            fn id(&self) -> &'static str {
+                "never-called-stt"
+            }
+            fn transcribe(
+                &self,
+                _chunk: &AudioChunk,
+                _options: &TranscribeOptions,
+            ) -> Result<Transcript, SttError> {
+                panic!("transcribe must not run on a chunk received while paused")
+            }
+            fn is_loaded(&self) -> bool {
+                true
+            }
+            fn unload(&self) {}
+        }
+
+        let (tx, rx) = mpsc::channel(4);
+        tx.send(chunk(0)).await.unwrap();
+        tx.send(chunk(1)).await.unwrap();
+        drop(tx);
+
+        let stt: Arc<dyn SpeechToText> = Arc::new(NeverCalledStt);
+        let translator = Arc::new(StubTranslator {
+            calls: AtomicUsize::new(0),
+        });
+        let sink = Arc::new(CollectingSink::default());
+        let paused = Arc::new(AtomicBool::new(true));
+
+        run_caption_loop(
+            rx,
+            stt,
+            Arc::clone(&translator) as Arc<dyn CaptionTranslator>,
+            Arc::clone(&sink) as Arc<dyn CaptionSink>,
+            config(None, "vi"),
+            Instant::now(),
+            paused,
+        )
+        .await;
+
+        assert!(sink.captions.lock().unwrap().is_empty());
+        assert!(sink.errors.lock().unwrap().is_empty());
+        assert_eq!(translator.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn catalog_entry_for_resolves_the_matching_tier() {
+        let entry = catalog_entry_for(WhisperModel::BASE).expect("base is in the catalog");
+        assert_eq!(entry.id, "base");
+        assert_eq!(entry.label, "Base");
+    }
+
+    #[test]
+    fn resolve_stored_audio_source_defaults_to_system_loopback() {
+        assert_eq!(
+            resolve_stored_audio_source(None),
+            AudioSourceKind::SystemLoopback
+        );
+        // An unknown/garbage stored value fails closed to the pre-microphone
+        // default rather than erroring the whole startup.
+        assert_eq!(
+            resolve_stored_audio_source(Some(serde_json::json!("not-a-source"))),
+            AudioSourceKind::SystemLoopback
+        );
+    }
+
+    #[test]
+    fn resolve_stored_audio_source_honors_a_valid_stored_choice() {
+        let stored = serde_json::to_value(AudioSourceKind::Microphone).unwrap();
+        assert_eq!(
+            resolve_stored_audio_source(Some(stored)),
+            AudioSourceKind::Microphone
+        );
     }
 
     #[tokio::test]
