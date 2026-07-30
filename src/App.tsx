@@ -18,6 +18,7 @@ import { useRegionLanguageSettings } from "./hooks/useRegionLanguageSettings";
 import { useSttModels } from "./hooks/useSttModels";
 import { historyIpc, regionIpc, settingsIpc } from "./lib/ipc";
 import { t } from "./lib/i18n";
+import { AUDIO_SOURCE_OPTIONS } from "./lib/audioSource";
 import {
   SOURCE_LANGUAGE_OPTIONS,
   TARGET_LANGUAGE_OPTIONS,
@@ -199,7 +200,26 @@ function App() {
                 </Badge>
               ) : null}
             </div>
+            {/* Item 4: the audio-source choice (system audio vs microphone) is
+                resolved core-side only at session start, so it lives right
+                next to the Start button (same pattern as the region language
+                pickers above). Changing it while a session is already running
+                cannot take effect mid-session - the hint below says so
+                explicitly rather than silently ignoring the change. */}
             <div className="home-action-controls">
+              <Select
+                label={t("home.audioSourceLabel")}
+                options={AUDIO_SOURCE_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: t(option.labelKey),
+                }))}
+                value={audio.audioSource}
+                onChange={(value) =>
+                  audio.setAudioSource(
+                    value === "microphone" ? "microphone" : "systemLoopback",
+                  )
+                }
+              />
               <Button variant="primary" onClick={handleToggleAudio}>
                 {audio.running ? (
                   <>
@@ -214,6 +234,7 @@ function App() {
                 )}
               </Button>
             </div>
+            <p className="home-action-hint">{t("home.audioSourceHint")}</p>
           </li>
 
           <li className="home-action">

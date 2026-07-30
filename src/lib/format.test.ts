@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatTimestamp } from "./format";
+import { formatBytes, formatDurationMs, formatTimestamp } from "./format";
 
 describe("formatBytes", () => {
   it("formats megabyte-scale sizes with one decimal", () => {
@@ -24,6 +24,24 @@ describe("formatBytes", () => {
     expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(-1)).toBe("0 B");
     expect(formatBytes(Number.NaN)).toBe("0 B");
+  });
+});
+
+describe("formatDurationMs", () => {
+  it("renders sub-second durations as whole milliseconds", () => {
+    expect(formatDurationMs(0)).toBe("0 ms");
+    expect(formatDurationMs(420)).toBe("420 ms");
+    expect(formatDurationMs(999)).toBe("999 ms");
+  });
+
+  it("renders second-scale durations with one decimal", () => {
+    expect(formatDurationMs(1000)).toBe("1.0 s");
+    expect(formatDurationMs(6200)).toBe("6.2 s");
+  });
+
+  it("guards non-finite and negative inputs", () => {
+    expect(formatDurationMs(-1)).toBe("0 ms");
+    expect(formatDurationMs(Number.NaN)).toBe("0 ms");
   });
 });
 

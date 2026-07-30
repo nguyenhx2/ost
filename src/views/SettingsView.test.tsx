@@ -53,6 +53,8 @@ const mocks = vi.hoisted(() => ({
   saveProviderSettings: vi.fn(),
   isHistoryEnabled: vi.fn(),
   setHistoryEnabled: vi.fn(),
+  loadAudioSourcePreference: vi.fn(),
+  saveAudioSourcePreference: vi.fn(),
 }));
 
 vi.mock("../lib/ipc", async (importOriginal) => {
@@ -85,6 +87,15 @@ vi.mock("../lib/history", () => ({
   isHistoryEnabled: mocks.isHistoryEnabled,
   setHistoryEnabled: mocks.setHistoryEnabled,
 }));
+
+vi.mock("../lib/audioSource", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/audioSource")>();
+  return {
+    ...actual,
+    loadAudioSourcePreference: mocks.loadAudioSourcePreference,
+    saveAudioSourcePreference: mocks.saveAudioSourcePreference,
+  };
+});
 
 import { DEFAULT_PROVIDER_SETTINGS } from "../lib/settings";
 import {
@@ -293,6 +304,10 @@ beforeEach(() => {
   mocks.saveProviderSettings.mockReset().mockResolvedValue(undefined);
   mocks.isHistoryEnabled.mockReset().mockResolvedValue(true);
   mocks.setHistoryEnabled.mockReset().mockResolvedValue(undefined);
+  mocks.loadAudioSourcePreference
+    .mockReset()
+    .mockResolvedValue("systemLoopback");
+  mocks.saveAudioSourcePreference.mockReset().mockResolvedValue(undefined);
   mocks.hotkeysIpc.get.mockReset().mockResolvedValue({
     toggleAudio: "Ctrl+Alt+A",
     regionSelect: "Ctrl+Alt+R",
@@ -598,19 +613,23 @@ describe("SettingsView", () => {
 
     // The overlay is opened with the request (NAMES only) that carries the
     // pinned source + vi target; the overlay window owns start_audio_session.
+    // `audioSource` is a NAME (the persisted preference, item 4) - not audio
+    // content.
     await waitFor(() =>
       expect(mocks.captionIpc.openOverlay).toHaveBeenCalledWith({
         provider: "gemini",
         model: "gemini-3.5-flash",
         sourceLanguage: "ja",
         targetLanguage: "vi",
+        audioSource: "systemLoopback",
       }),
     );
-    // No key/audio ever crosses the request.
+    // No key or actual audio content ever crosses the request.
     const arg = mocks.captionIpc.openOverlay.mock.calls[0][0];
     const json = JSON.stringify(arg).toLowerCase();
     expect(json).not.toContain("key");
-    expect(json).not.toContain("audio");
+    expect(json).not.toContain("sample");
+    expect(json).not.toContain("buffer");
   });
 
   it("stops the session and closes the overlay (AC-01.10)", async () => {

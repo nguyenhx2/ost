@@ -6,12 +6,18 @@ import {
   listenIpc,
   modelIpc,
   WHISPER_MODEL_SET_ID,
+  type AudioSourceKind,
   type ModelConsentStatus,
 } from "../lib/ipc";
 import {
   DEFAULT_SOURCE_LANGUAGE,
   DEFAULT_TARGET_LANGUAGE,
 } from "../lib/languages";
+import {
+  DEFAULT_AUDIO_SOURCE,
+  loadAudioSourcePreference,
+  saveAudioSourcePreference,
+} from "../lib/audioSource";
 
 /** A failed session-control action the Settings UI can surface. */
 export type AudioSessionActionError = "start" | null;
@@ -23,6 +29,17 @@ export interface UseAudioSessionResult {
   /** Target language (AC-01.5); default `vi`. */
   targetLanguage: string;
   setTargetLanguage: (code: string) => void;
+  /**
+   * Captured audio source (item 4, owner-reported: no way to pick microphone
+   * vs system audio). Persisted (`src/lib/audioSource.ts`, the SAME
+   * `settings.json` key the Rust core writes) so the choice survives restarts
+   * and is what `useCaptionOverlay.startSession` reads for the ACTUAL
+   * `start_audio_session` call. Resolved core-side only at session start
+   * (AC-01 pipeline) - changing it while a session is running has no effect
+   * until the NEXT start (surfaced to the user, never silently ignored).
+   */
+  audioSource: AudioSourceKind;
+  setAudioSource: (source: AudioSourceKind) => void;
   /** Whether a session has been started from this control (optimistic). */
   running: boolean;
   /** Last control failure, or null. */
@@ -55,6 +72,8 @@ export interface UseAudioSessionResult {
 export function useAudioSession(): UseAudioSessionResult {
   const [sourceLanguage, setSourceLanguage] = useState(DEFAULT_SOURCE_LANGUAGE);
   const [targetLanguage, setTargetLanguage] = useState(DEFAULT_TARGET_LANGUAGE);
+  const [audioSource, setAudioSourceState] =
+    useState<AudioSourceKind>(DEFAULT_AUDIO_SOURCE);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<AudioSessionActionError>(null);
   const [whisper, setWhisper] = useState<ModelConsentStatus | null>(null);
@@ -83,6 +102,25 @@ export function useAudioSession(): UseAudioSessionResult {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadAudioSourcePreference()
+      .then((preference) => {
+        if (active) {
+          setAudioSourceState(preference);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const setAudioSource = useCallback((source: AudioSourceKind) => {
+    setAudioSourceState(source);
+    void saveAudioSourcePreference(source).catch(() => undefined);
   }, []);
 
   // Keep `running` in sync when the caption overlay is closed directly (its own
@@ -120,6 +158,7 @@ export function useAudioSession(): UseAudioSessionResult {
             model,
             sourceLanguage,
             targetLanguage,
+            audioSource,
           });
           setRunning(true);
         } catch {
@@ -127,7 +166,7 @@ export function useAudioSession(): UseAudioSessionResult {
         }
       })();
     },
-    [sourceLanguage, targetLanguage],
+    [sourceLanguage, targetLanguage, audioSource],
   );
 
   const stop = useCallback(() => {
@@ -154,6 +193,8 @@ export function useAudioSession(): UseAudioSessionResult {
     setSourceLanguage,
     targetLanguage,
     setTargetLanguage,
+    audioSource,
+    setAudioSource,
     running,
     error,
     whisper,

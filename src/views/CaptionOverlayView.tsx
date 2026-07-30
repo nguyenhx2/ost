@@ -3,10 +3,14 @@ import {
   AlertTriangle,
   ClipboardCopy,
   Copy,
+  List,
   MoreHorizontal,
   Move,
+  Pause,
   Pin,
   PinOff,
+  Play,
+  Square,
   X,
 } from "lucide-react";
 import {
@@ -20,12 +24,15 @@ import {
   Tooltip,
 } from "../components/ui";
 import { ConsentDialog } from "../components/ConsentDialog";
+import { CaptionTranscriptDialog } from "../components/CaptionTranscriptDialog";
 import {
   useCaptionOverlay,
   parseCaptionRequest,
 } from "../hooks/useCaptionOverlay";
 import { t } from "../lib/i18n";
+import { formatDurationMs } from "../lib/format";
 import { languageLabelKey } from "../lib/languages";
+import { STT_MODEL_LABEL_KEYS } from "../lib/sttModelLabels";
 import "./CaptionOverlayView.css";
 
 const OPACITY_MIN = 0.3;
@@ -38,9 +45,12 @@ const NUDGE_STEP = 16;
 /**
  * SCR-01: live bilingual caption overlay (FR-01, AC-01.1/01.3/01.7, AC-03.5,
  * AC-04.3/04.8). Renders the latest `audio:caption` as source + translated text
- * (PlainText - untrusted DATA), the detected/pinned source language, a
- * provider/model badge, and a low-confidence flag. Everything is keyboard
- * operable; Esc dismisses unless pinned. Copy is the ONLY outbound action.
+ * (PlainText - untrusted DATA), the detected/pinned source language, the
+ * active provider/model AND whisper STT model (human-in-the-loop.md model
+ * transparency), a low-confidence flag, and distinct pause/resume/stop
+ * controls alongside the always-on-top window's own pin/close. Everything is
+ * keyboard operable; Esc dismisses unless pinned. Copy is the ONLY outbound
+ * action.
  */
 export function CaptionOverlayView() {
   const [request] = useState(() =>
@@ -50,16 +60,48 @@ export function CaptionOverlayView() {
   );
   const overlay = useCaptionOverlay(request);
   const [opacity, setOpacity] = useState(OPACITY_DEFAULT);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const { state, copied, pinned, consentDialogOpen } = overlay;
   const caption = state.caption;
+  const sessionState = state.sessionState;
 
   const providerBadgeText = caption
     ? `${caption.provider} / ${caption.model}`
     : `${request.provider} / ${request.model}`;
 
+  // Item 1 (owner-reported: never knew which model was running): the caption
+  // itself is authoritative once one has arrived; before that, fall back to
+  // the AT-MOUNT status snapshot (`useCaptionOverlay`'s separate effect) so
+  // the badge is populated well before the first caption can arrive.
+  const sttModelId = caption?.sttModel ?? state.status?.sttModelId ?? null;
+  const sttLabelKey = sttModelId ? STT_MODEL_LABEL_KEYS[sttModelId] : undefined;
+  const sttModelLabel = sttModelId
+    ? sttLabelKey
+      ? t(sttLabelKey)
+      : (state.status?.sttModelLabel ?? sttModelId)
+    : null;
+
   const languageCode = caption?.sourceLanguage ?? "";
   const languageKey = languageLabelKey(languageCode);
+
+  // Item 3 (owner-reported "tốc độ xử lí chậm"): a small, unobtrusive latency
+  // readout - instrumentation only, no thresholds/alarms - tucked into the
+  // "more options" popover rather than the always-visible surface.
+  const timingText = caption
+    ? t("caption.timingLabel", {
+        capture: formatDurationMs(caption.captureToChunkMs),
+        stt: formatDurationMs(caption.sttMs),
+        translate: formatDurationMs(caption.translateMs),
+      })
+    : null;
+
+  // Session controls (pause/resume/stop) only make sense once there is an
+  // actual session to control - never while blocked on a start error or an
+  // undeclined consent gate.
+  const sessionControlsVisible =
+    state.startError === null &&
+    !(overlay.consentDisclosure && !consentDialogOpen);
 
   return (
     <div
@@ -75,15 +117,22 @@ export function CaptionOverlayView() {
           <h1 className="caption-overlay-title" data-tauri-drag-region>
             {t("caption.title")}
           </h1>
-          <Badge label={t("caption.providerBadge")}>{providerBadgeText}</Badge>
+          <div className="caption-overlay-badges">
+            <Badge label={t("caption.providerBadge")}>
+              {providerBadgeText}
+            </Badge>
+            {sttModelLabel !== null ? (
+              <Badge label={t("caption.sttModelBadge")}>{sttModelLabel}</Badge>
+            ) : null}
+          </div>
           {/*
            * Progressive disclosure (owner complaint: overlays crammed with
            * controls). Only the highest-frequency actions stay always
-           * visible - copy translation (docked control bar below) plus
-           * pin/close here; the keyboard move handle, secondary "copy
-           * source" and opacity move behind this ONE overflow affordance -
-           * same placement/icon as the region overlay's, so the two overlays
-           * read as one product.
+           * visible - copy translation/pause/stop/transcript in the docked
+           * control bar below, plus pin/close here; the keyboard move handle,
+           * secondary "copy source", opacity, and the latency readout move
+           * behind this ONE overflow affordance - same placement/icon as the
+           * region overlay's, so the two overlays read as one product.
            */}
           <Popover
             label={t("caption.moreOptions")}
@@ -128,6 +177,9 @@ export function CaptionOverlayView() {
               step={OPACITY_STEP}
               onChange={setOpacity}
             />
+            {timingText !== null ? (
+              <p className="caption-overlay-timing">{timingText}</p>
+            ) : null}
           </Popover>
           <Tooltip text={pinned ? t("caption.unpin") : t("caption.pin")}>
             <IconButton
@@ -201,7 +253,23 @@ export function CaptionOverlayView() {
             </div>
           ) : null}
 
+          {/* Item 2 (owner complaint: no way to pause/stop): a status line
+              distinct from the "waiting" placeholder, visible whenever the
+              session itself is not (or no longer) actively running. */}
+          {sessionControlsVisible && sessionState === "paused" ? (
+            <p className="caption-overlay-status" role="status">
+              {t("caption.pausedNotice")}
+            </p>
+          ) : null}
+
+          {sessionControlsVisible && sessionState === "stopped" ? (
+            <p className="caption-overlay-status" role="status">
+              {t("caption.stoppedNotice")}
+            </p>
+          ) : null}
+
           {caption === null &&
+          sessionState === "running" &&
           state.startError === null &&
           !(overlay.consentDisclosure && !consentDialogOpen) ? (
             <p className="caption-overlay-status" role="status">
@@ -267,9 +335,10 @@ export function CaptionOverlayView() {
         {/*
          * Docked control bar (owner complaint: controls must not eat the
          * panel) - fixed at the bottom, outside the scrolling body above.
-         * Only the single highest-frequency content action lives here now;
-         * everything else moved into the header's "more options" popover
-         * (progressive disclosure - see the header above).
+         * Copy translation, pause/resume, stop, and the full-transcript
+         * trigger are the highest-frequency actions (item 2/3) and stay
+         * always visible; everything else lives in the header's "more
+         * options" popover.
          */}
         <div className="caption-overlay-controls">
           <Tooltip text={t("caption.copy")}>
@@ -279,6 +348,51 @@ export function CaptionOverlayView() {
               disabled={caption === null}
             >
               <ClipboardCopy size={16} aria-hidden="true" />
+            </IconButton>
+          </Tooltip>
+
+          {sessionControlsVisible && sessionState !== "stopped" ? (
+            <Tooltip
+              text={
+                sessionState === "paused"
+                  ? t("caption.resume")
+                  : t("caption.pause")
+              }
+            >
+              <IconButton
+                label={
+                  sessionState === "paused"
+                    ? t("caption.resume")
+                    : t("caption.pause")
+                }
+                pressed={sessionState === "paused"}
+                onClick={
+                  sessionState === "paused" ? overlay.resume : overlay.pause
+                }
+              >
+                {sessionState === "paused" ? (
+                  <Play size={16} aria-hidden="true" />
+                ) : (
+                  <Pause size={16} aria-hidden="true" />
+                )}
+              </IconButton>
+            </Tooltip>
+          ) : null}
+
+          {sessionControlsVisible && sessionState !== "stopped" ? (
+            <Tooltip text={t("caption.stop")}>
+              <IconButton label={t("caption.stop")} onClick={overlay.stop}>
+                <Square size={16} aria-hidden="true" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+
+          <Tooltip text={t("caption.viewTranscript")}>
+            <IconButton
+              label={t("caption.viewTranscript")}
+              onClick={() => setTranscriptOpen(true)}
+            >
+              <List size={16} aria-hidden="true" />
             </IconButton>
           </Tooltip>
         </div>
@@ -302,6 +416,13 @@ export function CaptionOverlayView() {
           introKey="consent.whisperIntro"
         />
       ) : null}
+
+      <CaptionTranscriptDialog
+        open={transcriptOpen}
+        captions={state.captions}
+        onClose={() => setTranscriptOpen(false)}
+        onCopyAll={overlay.copyTranscript}
+      />
     </div>
   );
 }
