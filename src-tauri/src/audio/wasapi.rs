@@ -1,19 +1,26 @@
-//! Windows WASAPI loopback backend for [`AudioSource`] (FR-01, first impl).
+//! Windows WASAPI backends for [`AudioSource`] (FR-01, first impl).
 //!
-//! Captures whatever is playing to the default render endpoint (system audio)
-//! by opening that render device in loopback capture mode. This is the ONLY
-//! platform impl today; macOS ScreenCaptureKit and Linux PipeWire are Phase-4
-//! swaps behind the same trait (NFR-SCA-01), not call-site changes.
+//! Two endpoints share one WASAPI shared-mode client lifecycle
+//! ([`WasapiPcmSource`]):
+//! - [`WindowsLoopbackSource`] captures whatever is playing to the default
+//!   render endpoint (system audio) by opening that render device in loopback
+//!   capture mode - the default source (FR-01).
+//! - [`WindowsMicrophoneSource`] captures the default capture endpoint
+//!   (microphone) directly, no loopback flag.
 //!
-//! Threading: the COM/WASAPI client is created lazily on the FIRST `read`, which
-//! the session runs on its dedicated capture thread, so all interface use stays
-//! on one MTA thread. [`WindowsLoopbackSource::new`] does a cheap probe (default
-//! render endpoint mix format) only to report [`AudioFormat`] before the thread
-//! starts, then drops those objects.
+//! These are the ONLY platform impls today; macOS ScreenCaptureKit and Linux
+//! PipeWire are Phase-4 swaps behind the same [`AudioSource`] trait
+//! (NFR-SCA-01), not call-site changes.
 //!
-//! HARD SECURITY REQUIREMENT (AC-01.6 / BR-01): captured frames are converted to
-//! in-memory mono `f32` and handed straight to the pipeline. Nothing here writes
-//! audio to disk or a network payload.
+//! Threading: the COM/WASAPI client is created lazily on the FIRST `read`,
+//! which the session runs on its dedicated capture thread, so all interface
+//! use stays on one MTA thread. `new()` does a cheap probe (the endpoint's mix
+//! format) only to report [`AudioFormat`] before the thread starts, then drops
+//! those objects.
+//!
+//! HARD SECURITY REQUIREMENT (AC-01.6 / BR-01): captured frames are converted
+//! to in-memory mono `f32` and handed straight to the pipeline. Nothing here
+//! writes audio to disk or a network payload.
 
 use std::collections::VecDeque;
 
@@ -29,8 +36,36 @@ use crate::audio::source::{AudioFormat, AudioSource, CaptureError};
 /// keeping stop well under the 1s budget (AC-01.10).
 const EVENT_TIMEOUT_MS: u32 = 200;
 
-/// f32 loopback capture from the default render endpoint.
-pub struct WindowsLoopbackSource {
+/// Which default endpoint a [`WasapiPcmSource`] opens. The client-init
+/// direction passed to `initialize_client` is always [`Direction::Capture`];
+/// the `wasapi` crate derives the loopback stream flag from the endpoint's own
+/// dataflow (render vs. capture), so opening the render endpoint this way is
+/// what turns capture into loopback - see `initialize_client` in the `wasapi`
+/// crate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsEndpoint {
+    /// Default render (playback) endpoint, opened in loopback mode.
+    RenderLoopback,
+    /// Default capture (microphone) endpoint.
+    Capture,
+}
+
+impl WindowsEndpoint {
+    /// Direction used to look up the DEFAULT endpoint via [`DeviceEnumerator`].
+    fn device_direction(self) -> Direction {
+        match self {
+            WindowsEndpoint::RenderLoopback => Direction::Render,
+            WindowsEndpoint::Capture => Direction::Capture,
+        }
+    }
+}
+
+/// Shared WASAPI shared-mode capture implementation for both endpoints. Not
+/// exported: [`WindowsLoopbackSource`] and [`WindowsMicrophoneSource`] are
+/// thin, distinctly-named wrappers so callers pick a backend by type, not by
+/// a runtime flag.
+struct WasapiPcmSource {
+    endpoint: WindowsEndpoint,
     sample_rate: u32,
     channels: u16,
     inner: Option<Inner>,
@@ -50,22 +85,22 @@ struct Inner {
 // SAFETY: `Inner` holds COM interface pointers that are not auto-`Send`. The
 // value is constructed lazily inside `read` on the session's single capture
 // thread and is only ever touched from that thread; it is never accessed
-// concurrently. `WindowsLoopbackSource` is moved to the capture thread while
+// concurrently. `WasapiPcmSource` is moved to the capture thread while
 // `inner` is still `None`, so no COM pointer actually crosses a thread
 // boundary. COM is initialized MTA on that thread before any interface use.
-unsafe impl Send for WindowsLoopbackSource {}
+unsafe impl Send for WasapiPcmSource {}
 
-impl WindowsLoopbackSource {
-    /// Probes the default render endpoint to learn its mix format, so
+impl WasapiPcmSource {
+    /// Probes the given endpoint to learn its mix format, so
     /// [`AudioSource::format`] is answerable before capture starts. The heavy
     /// client is built later, on the capture thread.
-    pub fn new() -> Result<Self, CaptureError> {
+    fn new(endpoint: WindowsEndpoint) -> Result<Self, CaptureError> {
         initialize_mta()
             .ok()
             .map_err(|e| CaptureError::Init(e.to_string()))?;
         let enumerator = DeviceEnumerator::new().map_err(|e| CaptureError::Init(e.to_string()))?;
         let device = enumerator
-            .get_default_device(&Direction::Render)
+            .get_default_device(&endpoint.device_direction())
             .map_err(|_| CaptureError::NoEndpoint)?;
         let client = device
             .get_iaudioclient()
@@ -74,13 +109,14 @@ impl WindowsLoopbackSource {
             .get_mixformat()
             .map_err(|e| CaptureError::Init(e.to_string()))?;
         Ok(Self {
+            endpoint,
             sample_rate: mix.get_samplespersec(),
             channels: mix.get_nchannels(),
             inner: None,
         })
     }
 
-    /// Builds the live loopback client on the current (capture) thread.
+    /// Builds the live client on the current (capture) thread.
     fn init_inner(&self) -> Result<Inner, CaptureError> {
         // Ensure this thread shares the process MTA before touching COM.
         initialize_mta()
@@ -88,7 +124,7 @@ impl WindowsLoopbackSource {
             .map_err(|e| CaptureError::Init(e.to_string()))?;
         let enumerator = DeviceEnumerator::new().map_err(|e| CaptureError::Init(e.to_string()))?;
         let device = enumerator
-            .get_default_device(&Direction::Render)
+            .get_default_device(&self.endpoint.device_direction())
             .map_err(|_| CaptureError::NoEndpoint)?;
         let mut client = device
             .get_iaudioclient()
@@ -111,8 +147,10 @@ impl WindowsLoopbackSource {
             autoconvert: true,
             buffer_duration_hns: min_period,
         };
-        // Render device + Capture direction = loopback (the wasapi crate sets
-        // AUDCLNT_STREAMFLAGS_LOOPBACK for this combination).
+        // Client-init direction is always Capture: on a Render endpoint that
+        // yields loopback (the `wasapi` crate sets AUDCLNT_STREAMFLAGS_LOOPBACK
+        // for that combination); on a Capture endpoint it is a plain capture
+        // stream (no loopback flag).
         client
             .initialize_client(&format, &Direction::Capture, &mode)
             .map_err(|e| CaptureError::Init(e.to_string()))?;
@@ -137,7 +175,7 @@ impl WindowsLoopbackSource {
     }
 }
 
-impl AudioSource for WindowsLoopbackSource {
+impl AudioSource for WasapiPcmSource {
     fn format(&self) -> AudioFormat {
         AudioFormat {
             sample_rate: self.sample_rate,
@@ -191,5 +229,43 @@ impl Drop for Inner {
     fn drop(&mut self) {
         // Best-effort: stop the capture stream so the endpoint is released.
         let _ = self.client.stop_stream();
+    }
+}
+
+/// f32 loopback capture from the default render endpoint (system audio).
+pub struct WindowsLoopbackSource(WasapiPcmSource);
+
+impl WindowsLoopbackSource {
+    pub fn new() -> Result<Self, CaptureError> {
+        Ok(Self(WasapiPcmSource::new(WindowsEndpoint::RenderLoopback)?))
+    }
+}
+
+impl AudioSource for WindowsLoopbackSource {
+    fn format(&self) -> AudioFormat {
+        self.0.format()
+    }
+
+    fn read(&mut self, out: &mut Vec<f32>) -> Result<usize, CaptureError> {
+        self.0.read(out)
+    }
+}
+
+/// f32 capture from the default capture endpoint (microphone).
+pub struct WindowsMicrophoneSource(WasapiPcmSource);
+
+impl WindowsMicrophoneSource {
+    pub fn new() -> Result<Self, CaptureError> {
+        Ok(Self(WasapiPcmSource::new(WindowsEndpoint::Capture)?))
+    }
+}
+
+impl AudioSource for WindowsMicrophoneSource {
+    fn format(&self) -> AudioFormat {
+        self.0.format()
+    }
+
+    fn read(&mut self, out: &mut Vec<f32>) -> Result<usize, CaptureError> {
+        self.0.read(out)
     }
 }
