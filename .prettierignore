@@ -13,3 +13,6 @@ docs/
 .agents/
 .github/
 *.md
+
+# Generated tool caches (git-ignored, but prettier does not read .gitignore).
+.impeccable/
