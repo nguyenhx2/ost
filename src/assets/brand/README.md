@@ -6,12 +6,17 @@ fetch (design-system.md brand-SVG exception).
 
 ## Concept
 
-Two offset, rounded caption bars - the source line, and beneath it, larger and bolder, the
-translated line - the same shape the app's own overlays render (source text above,
-translated text below). The field behind them is the exact accent blue the app already uses
-for the region-selection highlight (`--color-selection-border` / `--color-accent` in
-`src/styles/tokens.css`), so the mark reuses a color that already means "this is what OST
-captures/selects" inside the product itself, rather than inventing a new brand color.
+Four accent-blue waveform bars of varying height, resolving into two off-white horizontal
+caption bars, on a dark rounded field - sound becoming text, the app's own pipeline (system
+audio and screen capture -> recognition -> translation, rendered as caption-style overlay
+proposals).
+
+This mark was chosen over three other candidates specifically for legibility at native tray/
+taskbar sizes: it is the only concept that stays fully readable at both 16px and 32px while
+keeping a balanced silhouette. An earlier two-bar "source line / translated line" concept was
+rejected at the 32px review - both bars rendered near-black on a hard-edged accent-blue
+square, so the intended light/dark distinction between the two lines was invisible at tray
+size and the unrounded field read as unfinished.
 
 Fixed, hardcoded fill colors (not CSS custom properties) are intentional: this is a static
 raster-source asset baked into the native app icon (tray, taskbar, installer) via
@@ -20,13 +25,13 @@ user's dark/light theme setting.
 
 | Fill | Hex | Matches token |
 |------|-----|----------------|
-| Background field | `#8ab4f8` | `--color-accent` / `--color-selection-border` (dark theme) |
-| Source-line bar | `#232733` | `--color-surface-raised` (dark theme) |
-| Translated-line bar | `#0f1115` | `--color-bg` (dark theme) |
+| Background field | `#0f1115` | `--color-bg` (dark theme) |
+| Waveform bars | `#8ab4f8` | `--color-accent` / `--color-selection-border` (dark theme) |
+| Caption bars | `#eef1f7` | close to `--color-text` (dark theme); kept slightly off-white for contrast against the waveform blue |
 
 ## Files
 
-- `mark.svg` - the app mark. Simple geometry (two rounded rectangles on a solid field), no
+- `mark.svg` - the app mark. Simple geometry (rounded bars on a solid rounded field), no
   gradients, no text in the glyph - legible from a 16px tray icon up to a 1024px installer
   icon. Source for `npx tauri icon src/assets/brand/mark.svg`, which regenerates the full
   `src-tauri/icons/` set (window/taskbar/tray/installer icons).
