@@ -349,6 +349,9 @@ fn read_audio_request<R: Runtime>(app: &AppHandle<R>) -> Option<AudioSessionRequ
         source_language: None,
         target_language: None,
         base_url,
+        // Absent = SystemLoopback (today's behaviour); the hotkey path has no
+        // UI to pick a source, same as it has none for source/target language.
+        audio_source: None,
     })
 }
 

@@ -124,6 +124,12 @@ pub fn run() {
                 recommended,
                 &hardware_profile,
             );
+            // Item 4 (FR-01 audio-session controls): the persisted-or-default
+            // audio source, mirroring `sttModel`'s persisted-selection pattern
+            // (a NAME only, BR-02).
+            let selected_audio_source = shell::audio_session::resolve_stored_audio_source(
+                settings_store.get("audioSource"),
+            );
             let gate = Arc::new(models::ModelGate::new(
                 consent,
                 vec![ocr_descriptor, whisper_descriptor, llm_descriptor],
@@ -163,6 +169,7 @@ pub fn run() {
                 selected_model,
                 whisper_dir,
                 coordinator,
+                selected_audio_source,
             ));
 
             #[cfg(desktop)]
@@ -180,6 +187,9 @@ pub fn run() {
             shell::region::nudge_region_preview,
             shell::audio_session::start_audio_session,
             shell::audio_session::stop_audio_session,
+            shell::audio_session::pause_audio_session,
+            shell::audio_session::resume_audio_session,
+            shell::audio_session::get_audio_session_status,
             shell::audio_session::list_stt_models,
             shell::audio_session::request_stt_model_switch,
             shell::audio_session::confirm_stt_model_switch,

@@ -104,10 +104,13 @@ luồng UI: chụp WASAPI + VAD + chunk trên luồng riêng, whisper suy luận
 dịch qua lớp provider, rồi phát sự kiện `audio:caption`. Âm thanh KHÔNG BAO GIỜ rời máy
 (STT cục bộ) - chỉ TEXT phiên âm + bản dịch đi tới provider (security-privacy.md, AC-01.6).
 
-| Command               | Tham số                     | Vai trò                                                                                     |
-| --------------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
-| `start_audio_session` | `request: AudioSessionRequest` | Bắt đầu phiên dịch âm thanh (AC-01.1). Kiểm tra khoá provider TRƯỚC (AC-01.11: không có khoá -> lỗi `noProviderKey` hướng người dùng tới Settings, không chụp, không crash), bảo đảm model whisper đã tải + verify SHA-256 qua cổng đồng thuận fail-closed, rồi spawn chụp + vòng lặp caption. |
-| `stop_audio_session`  | -                           | Dừng phiên đang chạy (AC-01.10): chụp dừng trong <= 1s và model whisper được giải phóng. Idempotent. |
+| Command                     | Tham số                        | Trả về                       | Vai trò                                                                                     |
+| ---------------------------- | ------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `start_audio_session`        | `request: AudioSessionRequest`  | `void`                        | Bắt đầu phiên dịch âm thanh (AC-01.1). Kiểm tra khoá provider TRƯỚC (AC-01.11: không có khoá -> lỗi `noProviderKey` hướng người dùng tới Settings, không chụp, không crash), bảo đảm model whisper đã tải + verify SHA-256 qua cổng đồng thuận fail-closed, mở nguồn âm thanh theo `audioSource`, rồi spawn chụp + vòng lặp caption. |
+| `stop_audio_session`         | -                                | `void`                        | Dừng phiên đang chạy (AC-01.10): chụp dừng trong <= 1s và model whisper được giải phóng. Idempotent. KHÔNG đóng cửa sổ overlay caption (dừng và đóng overlay là hai thao tác tách biệt - owner-reported: người dùng cần dừng mà không mất transcript). Phát `audio:stopped`. |
+| `pause_audio_session`        | -                                | `void`                        | Tạm dừng phiên đang chạy: vòng lặp caption ngừng tiêu thụ + HUỶ chunk lời nói đến trong lúc tạm dừng (không đệm lại); whisper vẫn nạp và luồng chụp vẫn sống để resume tức thời. Idempotent (không có phiên, hoặc phiên đã tạm dừng -> no-op, không phát sự kiện). Phát `audio:paused` CHỈ khi thực sự chuyển trạng thái. |
+| `resume_audio_session`       | -                                | `void`                        | Tiếp tục phiên đang tạm dừng. Idempotent cùng ngữ nghĩa với `pause_audio_session`. Phát `audio:resumed` CHỈ khi thực sự chuyển trạng thái. |
+| `get_audio_session_status`   | -                                | `AudioSessionStatusPayload`   | Đọc trạng thái phiên trong MỘT lần gọi (owner-reported: không biết model nào đang chạy) - overlay/Settings dùng khi mount, trước khi `audio:caption` đầu tiên tới. |
 
 ### `AudioSessionRequest`
 
@@ -118,6 +121,7 @@ dịch qua lớp provider, rồi phát sự kiện `audio:caption`. Âm thanh KH
 | `sourceLanguage` | `string \| null`   | Ghim ngôn ngữ nguồn (AC-01.4); rỗng/`"auto"`/absent = tự phát hiện (AC-01.3). |
 | `targetLanguage` | `string \| null`   | Ngôn ngữ đích (AC-01.5); rỗng/absent = mặc định `vi`.                  |
 | `baseUrl`        | `string \| null`   | `base_url` của provider local OpenAI-compatible (FR-03.CUSTOM-1..5); chỉ đọc khi `provider = local_openai`, không phải bí mật (security-privacy.md). |
+| `audioSource`    | `AudioSourceKind \| null` | Nguồn âm thanh chụp (xem dưới); absent = `"systemLoopback"` (giữ hành vi trước khi có microphone). Lựa chọn được LƯU vào `settings.json` khoá `audioSource` (chỉ TÊN, BR-02), cạnh `sttModel`. |
 
 `AudioError` tuần tự hoá thành `{ kind }` với `kind` ∈ `unknownProvider | noProviderKey |
 keychain | consentRequired | model | localNotConfigured | capture | alreadyRunning`; UI ánh xạ
@@ -132,6 +136,37 @@ Model whisper dùng lại cổng đồng thuận tải-model dùng chung với `
 (xem mục dưới). Khi chưa có đồng thuận, `start_audio_session` phát `models:consent-required`
 (kèm `ConsentDisclosure`) rồi trả lỗi `consentRequired`; sau khi người dùng `grant_model_consent`,
 UI gọi lại `start_audio_session`.
+
+### `AudioSourceKind`
+
+Định nghĩa phía Capture context (`src-tauri/src/audio/`, được `audio_session.rs` tiêu thụ qua
+`crate::audio::{open_source, AudioSourceKind}` - KHÔNG được định nghĩa lại ở đây). Union chuỗi,
+serde camelCase:
+
+```ts
+type AudioSourceKind = "systemLoopback" | "microphone";
+```
+
+GHI CHÚ PHỤ THUỘC (viết lúc PR này mở): `open_source`/`AudioSourceKind` là hợp đồng của nhánh
+`feat/audio-source-selection` (Capture context, microphone backend) - CHƯA merge tại thời điểm
+PR audio-session-controls này mở, nên `cargo build`/`test` toàn crate sẽ lỗi thiếu 2 symbol này
+cho tới khi nhánh kia landed. Thêm nữa: `open_source` trả `Box<dyn AudioSource>` nhưng
+`CaptureSession::start<S: AudioSource + 'static>` (`audio/session.rs`) đòi kiểu CỤ THỂ - cần một
+`impl AudioSource for Box<dyn AudioSource>` (hoặc tương đương) ở phía Capture context để hai
+nhánh khớp nhau khi merge; đã xác minh lỗi này bằng build thử cục bộ (đã revert, không nằm
+trong diff).
+
+### `AudioSessionStatusPayload` (trả về của `get_audio_session_status`)
+
+| Trường          | Kiểu                | Ghi chú                                                                          |
+| --------------- | ------------------- | --------------------------------------------------------------------------------- |
+| `running`       | `boolean`            | Có phiên đang chạy không.                                                        |
+| `paused`        | `boolean`            | Phiên đang chạy có bị tạm dừng không (luôn `false` khi `running` là `false`).    |
+| `sttModelId`    | `string`              | Id catalog model whisper (`"tiny" \| "base" \| "small" \| "large-v3-turbo" \| "large-v3"`) - model THỰC SỰ đang dùng nếu `running`, ngược lại model sẽ dùng cho phiên kế tiếp. |
+| `sttModelLabel` | `string`              | Nhãn hiển thị tương ứng `sttModelId` (khớp `SttModelInfo.label`).                |
+| `provider`      | `string \| null`      | Provider dịch thực sự đang dùng; `null` khi không có phiên.                      |
+| `model`         | `string \| null`      | Model dịch thực sự đang dùng; `null` khi không có phiên.                         |
+| `audioSource`   | `AudioSourceKind`     | Nguồn âm thanh thực sự đang dùng nếu `running`, ngược lại lựa chọn đã lưu/mặc định. |
 
 ### Commands bộ chọn model whisper (FR-01, TASK-026)
 
@@ -215,10 +250,12 @@ tự gọi `start_audio_session` khi mount, tái phát tín hiệu sau khi cấp
 | `close_caption_overlay` | -                              | Đóng cửa sổ overlay caption. Idempotent.                       |
 | `nudge_caption_overlay` | `dx: number, dy: number`       | Dời overlay caption bằng bàn phím (AC-04.3); dùng lại kẹp `clamp_nudge` của vùng chọn. |
 
-Khi cửa sổ overlay caption bị HUỶ (đóng trực tiếp, hoặc qua tray/hotkey), core phát
-`audio:stopped` (toàn cục, không payload) để một cửa sổ Settings riêng đồng bộ lại trạng
-thái đang-chạy (TASK-016 follow-up). Hằng số: `EVENT_AUDIO_STOPPED` (`audio_session.rs`) /
-`EVENT_AUDIO_STOPPED` (`ipc.ts`).
+`audio:stopped` (toàn cục, không payload) phát ở HAI nơi để một cửa sổ Settings riêng luôn
+đồng bộ trạng thái đang-chạy dù overlay có bị đóng hay không (TASK-016 follow-up, mở rộng cho
+`stop_audio_session` là control tách biệt): (1) `stop_audio_session` tự phát sau khi dừng
+phiên; (2) khi cửa sổ overlay caption bị HUỶ (đóng trực tiếp, hoặc qua tray/hotkey), core cũng
+dừng phiên (nếu còn chạy) rồi phát cùng sự kiện. Cả hai đường đều idempotent. Hằng số:
+`EVENT_AUDIO_STOPPED` (`audio_session.rs`) / `EVENT_AUDIO_STOPPED` (`ipc.ts`).
 
 ## Commands cửa sổ Lịch sử (FR-04, BR-06)
 
@@ -480,6 +517,29 @@ markup - human-in-the-loop.md, design-system.md).
 | `segmentConfidences`         | `number[]` | Độ tin cậy trung bình theo token của từng segment, theo thứ tự.       |
 | `lowConfidence`              | `boolean`  | `true` khi CÓ segment dưới ngưỡng (AC-01.7/BR-05); overlay gắn cờ không chắc chắn. |
 | `timestampMs`                | `number`   | Mili-giây kể từ khi phiên bắt đầu (đơn điệu; không phải wall-clock).   |
+| `sttModel`                   | `string`   | Id catalog model whisper đang dùng (owner-reported: không biết model nào đang chạy). Khớp `AudioSessionStatusPayload.sttModelId`. |
+| `audioSource`                | `AudioSourceKind` | Nguồn âm thanh của phiên (xem trên).                            |
+| `captureToChunkMs`           | `number`   | Số mili-giây chunk này chờ kể từ chunk trước tới lúc tới vòng lặp caption - XẤP XỈ giai đoạn chụp+VAD+chunk từ góc nhìn consumer (KHÔNG phải timestamp chụp thực; instrumentation, không tối ưu hoá - xem ghi chú dưới). |
+| `sttMs`                      | `number`   | Số mili-giây whisper suy luận chunk này.                              |
+| `translateMs`                | `number`   | Số mili-giây lệnh gọi dịch provider mất.                              |
+
+Ba trường `*Ms` (item 3, owner-reported "tốc độ xử lí chậm") là INSTRUMENTATION THUẦN TUÝ -
+PR này KHÔNG tối ưu hoá gì, chỉ đo. Kết quả đo trên máy chủ sở hữu (AVX2 tắt): whisper p95/chunk
+tiny 6.2s / base 15.6s / small 57.4s - STT gần như chắc chắn là chi phí chiếm ưu thế, không phải
+LLM dịch; ba trường trên xác nhận việc này bằng số liệu runtime thực thay vì suy đoán. Nếu số đo
+xác nhận đúng vậy, đề xuất theo dõi: bật tính năng GPU, hạ tier mặc định, hoặc rút ngắn chunk -
+KHÔNG triển khai trong PR này.
+
+### `audio:paused` (không payload)
+
+Phát khi một phiên đang chạy chuyển sang tạm dừng (`pause_audio_session`) - CHỈ khi thực sự có
+chuyển trạng thái (gọi lại khi đã tạm dừng, hoặc không có phiên, KHÔNG phát). Hằng số:
+`EVENT_AUDIO_PAUSED`.
+
+### `audio:resumed` (không payload)
+
+Phát khi một phiên tạm dừng được tiếp tục (`resume_audio_session`) - cùng ngữ nghĩa "chỉ khi
+chuyển trạng thái thực" như `audio:paused`. Hằng số: `EVENT_AUDIO_RESUMED`.
 
 ### `audio:error` -> `AudioErrorPayload`
 
