@@ -102,7 +102,8 @@ mod contract_tests {
     //! caller that only knows the trait, not a concrete backend. Never real
     //! captured audio (agent-guardrails.md section 4).
     use super::*;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
+    use tokio::sync::mpsc;
 
     /// A fake backend that stands in for a platform endpoint of a given
     /// [`AudioSourceKind`] (the kind is only relevant to the caller wiring the
@@ -205,5 +206,52 @@ mod contract_tests {
         let mic = serde_json::to_string(&AudioSourceKind::Microphone).unwrap();
         assert_eq!(loopback, "\"systemLoopback\"");
         assert_eq!(mic, "\"microphone\"");
+    }
+
+    /// Regression test for the boxed-forwarding impl in `source.rs`: proves,
+    /// at the type level, that `open_source`'s `Box<dyn AudioSource>` return
+    /// threads straight into `CaptureSession::start`/`start_with` (both
+    /// generic over `S: AudioSource + 'static`) without the shell downcasting
+    /// or matching on a concrete backend. If the forwarding impl regressed,
+    /// this test would fail to COMPILE, not just fail to pass.
+    #[test]
+    fn boxed_dyn_audio_source_runs_through_capture_session() {
+        let sample_rate = 1_000;
+        let mut stream = vec![0.3; 800]; // above the test threshold: "speech"
+        stream.extend(vec![0.0; 400]); // trailing silence closes the utterance
+        let source: Box<dyn AudioSource> = Box::new(FakeEndpoint::new(sample_rate, stream));
+
+        let config = ChunkConfig {
+            vad: VadConfig {
+                frame_samples: 100,
+                energy_threshold: 0.05,
+                onset_frames: 2,
+                hangover_frames: 3,
+            },
+            sample_rate,
+            min_chunk_samples: 200,
+            max_chunk_samples: 2_000,
+        };
+
+        let (mut session, mut rx) = CaptureSession::start_with(source, config, 16);
+
+        let deadline = Instant::now() + Duration::from_millis(500);
+        let mut chunks = Vec::new();
+        while Instant::now() < deadline {
+            match rx.try_recv() {
+                Ok(chunk) => chunks.push(chunk),
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => break,
+            }
+        }
+        session.stop();
+
+        assert_eq!(
+            chunks.len(),
+            1,
+            "a boxed source must flow through the session exactly like a sized one"
+        );
     }
 }
