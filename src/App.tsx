@@ -1,13 +1,18 @@
 import {
+  Activity,
   Crop,
   History,
   Mic,
+  Radio,
   Settings as SettingsIcon,
   ShieldCheck,
+  Sparkles,
   Square,
+  Zap,
 } from "lucide-react";
 import "./App.css";
 import { Badge, Button, Select } from "./components/ui";
+import { BrandMark } from "./components/BrandMark";
 import { ProviderKeyNotice } from "./components/ProviderKeyNotice";
 import { useAudioSession } from "./hooks/useAudioSession";
 import { useHasAnyProviderKey } from "./hooks/useHasAnyProviderKey";
@@ -83,16 +88,23 @@ function App() {
   return (
     <main className="home">
       <header className="home-header">
-        <h1 className="home-title">{t("app.title")}</h1>
+        <h1 className="home-title">
+          <BrandMark className="home-title-mark" />
+          {t("app.title")}
+        </h1>
         <p className="home-subtitle">{t("home.subtitle")}</p>
       </header>
 
       <section className="home-section" aria-labelledby="home-status-heading">
-        <h2 id="home-status-heading">{t("home.statusHeading")}</h2>
+        <h2 id="home-status-heading">
+          <Activity size={16} aria-hidden="true" />
+          {t("home.statusHeading")}
+        </h2>
         <ul className="home-status-list">
           <li className="home-status-item">
             <span className="home-status-label">{t("home.providerLabel")}</span>
             <Badge label={t("home.providerLabel")}>
+              <Sparkles size={12} aria-hidden="true" />
               {`${activeProviderDisplayName} / ${activeProviderModel}`}
             </Badge>
           </li>
@@ -131,7 +143,14 @@ function App() {
                 audio.running ? t("home.audioRunning") : t("home.audioIdle")
               }
             >
-              {audio.running ? t("home.audioRunning") : t("home.audioIdle")}
+              {audio.running ? (
+                <>
+                  <Radio size={12} aria-hidden="true" />
+                  {t("home.audioRunning")}
+                </>
+              ) : (
+                t("home.audioIdle")
+              )}
             </Badge>
           </li>
         </ul>
@@ -145,7 +164,10 @@ function App() {
       </section>
 
       <section className="home-section" aria-labelledby="home-actions-heading">
-        <h2 id="home-actions-heading">{t("home.actionsHeading")}</h2>
+        <h2 id="home-actions-heading">
+          <Zap size={16} aria-hidden="true" />
+          {t("home.actionsHeading")}
+        </h2>
         <ul className="home-action-list">
           <li className="home-action">
             <div className="home-action-info">
@@ -196,6 +218,7 @@ function App() {
               ) : null}
               {audio.running ? (
                 <Badge label={t("home.audioRunning")}>
+                  <Radio size={12} aria-hidden="true" />
                   {t("home.audioRunning")}
                 </Badge>
               ) : null}

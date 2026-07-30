@@ -1,0 +1,11 @@
+/*
+ * OST app mark (design-system.md brand-SVG exception). Token-driven sizing
+ * only - the image itself carries its own fixed brand colors (see
+ * src/assets/brand/README.md), but every dimension here comes from tokens.
+ */
+.brand-mark {
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
