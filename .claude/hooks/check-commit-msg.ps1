@@ -36,10 +36,44 @@ if ($cmd -match '(?i)co-authored-by:[^"]*(claude|anthropic|copilot|cursor)|gener
     exit 2
 }
 
+# Resolve the commit message from EVERY form git accepts, not only `-m "..."`.
+#
+# The previous version bailed out whenever the `-m "..."` capture failed, commented as "editor
+# flow / -F file: git's own hooks own that path". That was FALSE and it was a straight bypass:
+# this repo has no git-level commit-msg hook at all (`.git/hooks` holds only `.sample` files and
+# `core.hooksPath` is unset), so `git commit -F-` fed by a heredoc, `git commit -F <file>`, and a
+# multi-line `-m "$(cat <<EOF ...)"` each skipped every check below. Writing a multi-line message
+# via heredoc is the natural way to do it, so this was the easiest of all paths to trip.
 $msg = $null
-if ($cmd -match '(?s)-m\s+"(.*?)"') { $msg = $Matches[1] }
-elseif ($cmd -match "(?s)-m\s+'(.*?)'") { $msg = $Matches[1] }
-if (-not $msg) { exit 0 }   # editor flow / -F file: git's own hooks own that path
+
+# 1. A heredoc body - covers both `-F-` and `-m "$(cat <<EOF ...)"`. The delimiter may be quoted
+#    (`<<'EOF'`) and may use the dash form (`<<-EOF`).
+$heredocRe = '(?s)<<-?[ \t]*(["'']?)([A-Za-z_][A-Za-z0-9_]*)\1[ \t]*\r?\n(.*?)\r?\n[ \t]*\2[ \t]*(?:\r?\n|$)'
+$heredoc = [regex]::Match($cmd, $heredocRe)
+if ($heredoc.Success) { $msg = $heredoc.Groups[3].Value }
+
+# 2. `-F <path>` / `--file=<path>` - read what git itself would read. A bare `-` is stdin, which
+#    the heredoc branch above already handled. Best-effort: an unreadable path falls through.
+if (-not $msg -and $cmd -cmatch '(?:-F[ \t]+|--file[= \t])(?!-)("([^"]+)"|''([^'']+)''|([^\s;&|]+))') {
+    $path = @($Matches[2], $Matches[3], $Matches[4]) | Where-Object { $_ } | Select-Object -First 1
+    if ($path) {
+        try {
+            if (-not [System.IO.Path]::IsPathRooted($path)) {
+                $path = Join-Path $(if ($payload.cwd) { $payload.cwd } else { (Get-Location).Path }) $path
+            }
+            if (Test-Path -LiteralPath $path -PathType Leaf) { $msg = Get-Content -LiteralPath $path -Raw }
+        } catch { }
+    }
+}
+
+# 3. Plain `-m "..."` / `-m '...'`. Non-greedy so a following argument's quote does not swallow it.
+if (-not $msg -and $cmd -match '(?s)-m\s+"(.*?)"') { $msg = $Matches[1] }
+elseif (-not $msg -and $cmd -match "(?s)-m\s+'(.*?)'") { $msg = $Matches[1] }
+
+# True editor flow (`git commit` with no message source) genuinely cannot be inspected here: the
+# message does not exist yet at PreToolUse time. That path stays unvalidated by THIS layer, which
+# is a known gap rather than a silent one - see .claude/hooks/README.md.
+if (-not $msg) { exit 0 }
 
 $subject = ($msg -split "(`r)?`n")[0].Trim()
 if ($subject -match '^(Merge|Revert)\b') { exit 0 }
