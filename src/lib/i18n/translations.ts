@@ -35,6 +35,12 @@ const en = {
     "Could not start the audio session - please try again",
   "home.regionSourceLanguage": "Region source language",
   "home.regionTargetLanguage": "Region target language",
+  "home.audioSourceLabel": "Audio source",
+  "home.audioSourceHint": "Applies the next time you start a session",
+
+  // Audio source picker (item 4, FR-01)
+  "audioSource.systemLoopback": "System audio",
+  "audioSource.microphone": "Microphone",
 
   // SCR-02: region selection overlay
   "select.overlayLabel": "Select a screen region to translate",
@@ -132,12 +138,24 @@ const en = {
   "caption.copied": "Copied to clipboard",
   "caption.pin": "Pin overlay",
   "caption.unpin": "Unpin overlay",
-  "caption.close": "Stop and close",
+  "caption.close": "Close",
   "caption.opacity": "Background opacity",
   "caption.moveHandle": "Move overlay (arrow keys while focused)",
   "caption.providerBadge": "Active provider and model",
+  "caption.sttModelBadge": "Speech-to-text model",
   "caption.retry": "Retry",
   "caption.moreOptions": "More options",
+  "caption.pause": "Pause",
+  "caption.resume": "Resume",
+  "caption.stop": "Stop",
+  "caption.pausedNotice": "Paused - press Resume to keep listening",
+  "caption.stoppedNotice": "Session stopped - the transcript below is kept",
+  "caption.viewTranscript": "View full transcript",
+  "caption.transcriptTitle": "Full transcript",
+  "caption.transcriptEmpty": "No captions yet",
+  "caption.copyAll": "Copy full transcript",
+  "caption.timingLabel":
+    "Processing: capture {capture}, speech-to-text {stt}, translation {translate}",
 
   // Whisper STT model-download consent (reuses the shared disclosure dialog)
   "consent.whisperTitle": "Download speech-to-text model",
@@ -465,6 +483,11 @@ const vi: Record<I18nKey, string> = {
     "Không bắt đầu được phiên âm thanh - vui lòng thử lại",
   "home.regionSourceLanguage": "Ngôn ngữ nguồn cho vùng",
   "home.regionTargetLanguage": "Ngôn ngữ đích cho vùng",
+  "home.audioSourceLabel": "Nguồn âm thanh",
+  "home.audioSourceHint": "Áp dụng cho lần bắt đầu phiên kế tiếp",
+
+  "audioSource.systemLoopback": "Âm thanh hệ thống",
+  "audioSource.microphone": "Micro",
 
   "select.overlayLabel": "Chọn vùng màn hình để dịch",
   "select.hintMouse":
@@ -558,12 +581,24 @@ const vi: Record<I18nKey, string> = {
   "caption.copied": "Đã chép vào clipboard",
   "caption.pin": "Ghim overlay",
   "caption.unpin": "Bỏ ghim overlay",
-  "caption.close": "Dừng và đóng",
+  "caption.close": "Đóng",
   "caption.opacity": "Độ mờ nền",
   "caption.moveHandle": "Di chuyển overlay (phím mũi tên khi đang focus)",
   "caption.providerBadge": "Provider và model đang dịch",
+  "caption.sttModelBadge": "Mô hình nhận dạng giọng nói",
   "caption.retry": "Thử lại",
   "caption.moreOptions": "Thêm tuỳ chọn",
+  "caption.pause": "Tạm dừng",
+  "caption.resume": "Tiếp tục",
+  "caption.stop": "Dừng",
+  "caption.pausedNotice": "Đã tạm dừng - nhấn Tiếp tục để nghe lại",
+  "caption.stoppedNotice": "Phiên đã dừng - phụ đề bên dưới vẫn được giữ lại",
+  "caption.viewTranscript": "Xem toàn bộ phụ đề",
+  "caption.transcriptTitle": "Toàn bộ phụ đề",
+  "caption.transcriptEmpty": "Chưa có phụ đề nào",
+  "caption.copyAll": "Chép toàn bộ phụ đề",
+  "caption.timingLabel":
+    "Xử lý: chụp {capture}, nhận dạng giọng nói {stt}, dịch {translate}",
 
   "consent.whisperTitle": "Tải mô hình chuyển giọng nói thành văn bản",
   "consent.whisperIntro":

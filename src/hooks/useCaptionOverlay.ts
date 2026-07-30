@@ -6,7 +6,11 @@ import {
   copyToClipboard,
   EVENT_AUDIO_CAPTION,
   EVENT_AUDIO_ERROR,
+  EVENT_AUDIO_PAUSED,
+  EVENT_AUDIO_RESUMED,
+  EVENT_AUDIO_STOPPED,
   EVENT_MODELS_CONSENT_REQUIRED,
+  isAudioSourceKind,
   keysIpc,
   listenIpc,
   modelIpc,
@@ -16,8 +20,10 @@ import {
   type AudioCommandError,
   type AudioErrorPayload,
   type AudioSessionRequest,
+  type AudioSessionStatusPayload,
   type ConsentDisclosure,
 } from "../lib/ipc";
+import { loadAudioSourcePreference } from "../lib/audioSource";
 import { recordTranslation } from "../lib/history";
 import { DEFAULT_TARGET_LANGUAGE } from "../lib/languages";
 import { hasAnyProviderKey } from "../lib/providerKeys";
@@ -33,13 +39,36 @@ import { loadProviderSettings } from "../lib/settings";
  */
 export type CaptionStartError = AudioCommandError | null;
 
+/**
+ * Session lifecycle distinct from the overlay WINDOW's own lifecycle (item 2,
+ * owner-reported: no way to pause or stop without losing the overlay).
+ * `stopped` keeps the window and its accumulated transcript intact - only
+ * `close()` tears the window down too.
+ */
+export type CaptionSessionState = "running" | "paused" | "stopped";
+
 export interface CaptionOverlayState {
-  /** The most recent translated caption, or null before the first one. */
+  /** The most recent translated caption, or null before the first one - drives
+   * the default COMPACT presentation. */
   caption: AudioCaptionPayload | null;
+  /**
+   * Every completed caption this window has seen, ordered by `sequence`
+   * (item 3, the owner's biggest complaint: the old code overwrote this with
+   * `setCaption(payload)` so only the latest chunk ever existed). Drives the
+   * secondary full-transcript view; never mutates past entries in place.
+   */
+  captions: AudioCaptionPayload[];
   /** `true` briefly after an `audio:error` chunk (localized, never raw). */
   chunkError: boolean;
   /** Session start failure to surface, or null. */
   startError: CaptionStartError;
+  /**
+   * One-call session snapshot fetched AT MOUNT (item 1, owner-reported: the
+   * overlay never showed which models were running - the gap was worst
+   * before the first `audio:caption`, which can be many seconds away).
+   */
+  status: AudioSessionStatusPayload | null;
+  sessionState: CaptionSessionState;
 }
 
 export interface UseCaptionOverlayResult {
@@ -48,14 +77,22 @@ export interface UseCaptionOverlayResult {
   copyTranslation: () => void;
   /** Copy the current caption's transcribed source text. */
   copySource: () => void;
+  /** Copy every accumulated caption (source + translation), in sequence order. */
+  copyTranscript: () => void;
   /** Whether a copy just happened (drives aria-live feedback). */
-  copied: "source" | "translation" | null;
+  copied: "source" | "translation" | "transcript" | null;
   pinned: boolean;
   togglePin: () => void;
   /** Esc dismiss - ignored while pinned; otherwise stops + closes. */
   dismiss: () => void;
   /** Explicit close - always stops the session and closes the window. */
   close: () => void;
+  /** Pause the running session WITHOUT closing the window (item 2). Idempotent. */
+  pause: () => void;
+  /** Resume a paused session (item 2). Idempotent. */
+  resume: () => void;
+  /** Stop the session but keep the window and its transcript (item 2). Idempotent. */
+  stop: () => void;
   /** Keyboard reposition of the overlay window (AC-04.3). */
   nudge: (dx: number, dy: number) => void;
   /** Open Settings (the CTA for a missing provider key, AC-01.11). */
@@ -87,21 +124,39 @@ export function useCaptionOverlay(
   request: AudioSessionRequest,
 ): UseCaptionOverlayResult {
   const [caption, setCaption] = useState<AudioCaptionPayload | null>(null);
+  const [captions, setCaptions] = useState<AudioCaptionPayload[]>([]);
   const [chunkError, setChunkError] = useState(false);
   const [startError, setStartError] = useState<CaptionStartError>(null);
-  const [copied, setCopied] = useState<"source" | "translation" | null>(null);
+  const [copied, setCopied] = useState<
+    "source" | "translation" | "transcript" | null
+  >(null);
   const [pinned, setPinned] = useState(false);
   const [consentDisclosure, setConsentDisclosure] =
     useState<ConsentDisclosure | null>(null);
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
+  const [status, setStatus] = useState<AudioSessionStatusPayload | null>(null);
+  const [sessionState, setSessionState] =
+    useState<CaptionSessionState>("running");
 
   const captionRef = useRef<AudioCaptionPayload | null>(null);
+  const captionsRef = useRef<AudioCaptionPayload[]>([]);
   const requestRef = useRef(request);
   requestRef.current = request;
 
   const startSession = useCallback(async () => {
     setStartError(null);
     const request = requestRef.current;
+    // Item 4 (audio source): the caption-overlay window is a fresh WebView
+    // navigation that only receives provider/model/language NAMES via its URL
+    // query (`shell/caption.rs`, Platform Shell context) - it does not carry
+    // this preference across that boundary today. Resolve it the SAME way the
+    // `local_openai` branch below resolves `baseUrl`: read the persisted
+    // preference fresh (the SAME `settings.json` key the Rust core itself
+    // writes on a successful start, src/lib/audioSource.ts) whenever the
+    // request itself did not already carry one.
+    const audioSource =
+      request.audioSource ??
+      (await loadAudioSourcePreference().catch(() => undefined));
     // The local OpenAI-compatible provider needs no key at all (BR-02): check
     // it FIRST, independently of the key-status check below, so a doomed
     // session never spins up capture and the actionable "set the server URL"
@@ -117,7 +172,7 @@ export function useCaptionOverlay(
           return;
         }
         try {
-          await audioIpc.start({ ...request, baseUrl });
+          await audioIpc.start({ ...request, baseUrl, audioSource });
         } catch (err) {
           const typed = asAudioCommandError(err);
           if (typed.kind !== "consentRequired") {
@@ -145,7 +200,7 @@ export function useCaptionOverlay(
       // Ignore - fall back to the backend's own noProviderKey mapping below.
     }
     try {
-      await audioIpc.start(request);
+      await audioIpc.start({ ...request, audioSource });
     } catch (err) {
       const typed = asAudioCommandError(err);
       // consentRequired is handled by the disclosure dialog (via the event),
@@ -165,6 +220,18 @@ export function useCaptionOverlay(
       setChunkError(false);
       setStartError(null);
       setCaption(payload);
+      // A caption only ever arrives for a running session.
+      setSessionState("running");
+      // Item 3 (accumulate, never overwrite): append/replace by `sequence`
+      // and keep the list ordered, instead of the old `setCaption` overwrite
+      // that left only the latest chunk visible.
+      setCaptions((prev) => {
+        const next = prev.filter((c) => c.sequence !== payload.sequence);
+        next.push(payload);
+        next.sort((a, b) => a.sequence - b.sequence);
+        captionsRef.current = next;
+        return next;
+      });
       // Recording seam (BR-06/AC-04.4): every COMPLETED caption is logged
       // text-only through the shared, serialized helper. Fire-and-forget - a
       // history-store failure must never break the caption UX. Audio and keys
@@ -196,6 +263,17 @@ export function useCaptionOverlay(
       setConsentDialogOpen(true);
     };
 
+    // Item 2 (pause/resume/stop): these are edges, not periodic state (ipc.md)
+    // - a no-op pause/resume never re-emits, so this listener is the ONLY
+    // authority for reflecting a transition that may have been triggered
+    // elsewhere (tray/hotkey), not just from this window's own controls.
+    const onPaused = () => setSessionState("paused");
+    const onResumed = () => setSessionState("running");
+    // `audio:stopped` also fires when the session is stopped from OUTSIDE this
+    // window (tray/hotkey/Settings) - reflect that here too so the controls
+    // never show a running session that has actually ended.
+    const onStopped = () => setSessionState("stopped");
+
     void (async () => {
       const un1 = await listenIpc<AudioCaptionPayload>(
         EVENT_AUDIO_CAPTION,
@@ -209,13 +287,19 @@ export function useCaptionOverlay(
         EVENT_MODELS_CONSENT_REQUIRED,
         onConsentRequired,
       );
+      const un4 = await listenIpc<undefined>(EVENT_AUDIO_PAUSED, onPaused);
+      const un5 = await listenIpc<undefined>(EVENT_AUDIO_RESUMED, onResumed);
+      const un6 = await listenIpc<undefined>(EVENT_AUDIO_STOPPED, onStopped);
       if (disposed) {
         un1();
         un2();
         un3();
+        un4();
+        un5();
+        un6();
         return;
       }
-      unlistens.push(un1, un2, un3);
+      unlistens.push(un1, un2, un3, un4, un5, un6);
       // Listeners attached; now start the session this overlay was opened for.
       await startSession();
     })();
@@ -225,6 +309,28 @@ export function useCaptionOverlay(
       unlistens.forEach((un) => un());
     };
   }, [startSession]);
+
+  // Item 1 (model transparency): fetch the session snapshot once at mount,
+  // independently of the listener/start effect above, so the STT model badge
+  // has something to show even before `start_audio_session` itself resolves -
+  // not just before the first `audio:caption`.
+  useEffect(() => {
+    let disposed = false;
+    void audioIpc
+      .getStatus()
+      .then((snapshot) => {
+        if (!disposed) {
+          setStatus(snapshot);
+        }
+      })
+      .catch(() => {
+        // Best effort - the compact view still shows the request's own
+        // provider/model; only the STT-model badge stays unpopulated.
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (copied === null) {
@@ -258,6 +364,18 @@ export function useCaptionOverlay(
     }
   }, []);
 
+  const copyTranscript = useCallback(() => {
+    const current = captionsRef.current;
+    if (current.length === 0) {
+      return;
+    }
+    const text = current
+      .map((c) => `${c.sourceText}\n${c.translatedText}`)
+      .join("\n\n");
+    void copyToClipboard(text);
+    setCopied("transcript");
+  }, []);
+
   const togglePin = useCallback(() => setPinned((p) => !p), []);
 
   const close = useCallback(() => {
@@ -273,6 +391,22 @@ export function useCaptionOverlay(
       close();
     }
   }, [pinned, close]);
+
+  // Item 2: pause/resume/stop are DISTINCT from close() - none of them touch
+  // the overlay window. `sessionState` is set optimistically from the
+  // resolved command (the listeners above are the fallback for externally
+  // triggered transitions).
+  const pause = useCallback(() => {
+    void audioIpc.pause().then(() => setSessionState("paused"));
+  }, []);
+
+  const resume = useCallback(() => {
+    void audioIpc.resume().then(() => setSessionState("running"));
+  }, []);
+
+  const stop = useCallback(() => {
+    void audioIpc.stop().then(() => setSessionState("stopped"));
+  }, []);
 
   const nudge = useCallback((dx: number, dy: number) => {
     void captionIpc.nudgeOverlay(dx, dy);
@@ -308,14 +442,18 @@ export function useCaptionOverlay(
   }, [consentDisclosure]);
 
   return {
-    state: { caption, chunkError, startError },
+    state: { caption, captions, chunkError, startError, status, sessionState },
     copyTranslation,
     copySource,
+    copyTranscript,
     copied,
     pinned,
     togglePin,
     dismiss,
     close,
+    pause,
+    resume,
+    stop,
     nudge,
     openSettings,
     retry,
@@ -331,15 +469,22 @@ export function useCaptionOverlay(
  * Parse the caption overlay's session request from the window query string
  * (set by `shell/caption.rs` when it opens the window). NAMES only - never a
  * key or audio. Absent/empty language params fall through to the core defaults.
+ * `audioSource` is read here for forward-compatibility ONLY (`shell/caption.rs`
+ * does not carry it today, see `src/lib/audioSource.ts`); `startSession` above
+ * falls back to the persisted preference whenever it is absent.
  */
 export function parseCaptionRequest(search: string): AudioSessionRequest {
   const params = new URLSearchParams(search);
   const source = params.get("source") ?? "";
   const target = params.get("target") ?? "";
+  const audioSourceParam = params.get("audioSource");
   return {
     provider: params.get("provider") ?? "",
     model: params.get("model") ?? "",
     sourceLanguage: source === "" ? undefined : source,
     targetLanguage: target === "" ? undefined : target,
+    audioSource: isAudioSourceKind(audioSourceParam)
+      ? audioSourceParam
+      : undefined,
   };
 }

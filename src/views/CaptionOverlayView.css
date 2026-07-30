@@ -57,6 +57,16 @@
   cursor: move;
 }
 
+/* Item 1 (owner complaint: never knew which model was running): wraps onto
+   its own line on a narrow window rather than forcing the header to overflow
+   or squeeze the pin/close controls. */
+.caption-overlay-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
 .caption-overlay-meta {
   display: flex;
   align-items: center;
@@ -91,6 +101,15 @@
 
 .caption-overlay-status {
   font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Item 3 (owner-reported "processing feels slow"): a small, non-alarming
+   latency readout tucked into the "more options" popover - instrumentation
+   only, never a color-coded threshold. */
+.caption-overlay-timing {
+  margin: 0;
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
 

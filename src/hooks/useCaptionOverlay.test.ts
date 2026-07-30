@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => {
     audioIpc: {
       start: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn(),
     },
     captionIpc: {
       openOverlay: vi.fn().mockResolvedValue(undefined),
@@ -34,6 +37,7 @@ const mocks = vi.hoisted(() => {
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     recordTranslation: vi.fn().mockResolvedValue(null),
     loadProviderSettings: vi.fn(),
+    loadAudioSourcePreference: vi.fn(),
   };
 });
 
@@ -63,9 +67,20 @@ vi.mock("../lib/settings", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/audioSource", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/audioSource")>();
+  return {
+    ...actual,
+    loadAudioSourcePreference: mocks.loadAudioSourcePreference,
+  };
+});
+
 import {
   EVENT_AUDIO_CAPTION,
   EVENT_AUDIO_ERROR,
+  EVENT_AUDIO_PAUSED,
+  EVENT_AUDIO_RESUMED,
+  EVENT_AUDIO_STOPPED,
   EVENT_MODELS_CONSENT_REQUIRED,
   WHISPER_MODEL_SET_ID,
 } from "../lib/ipc";
@@ -91,6 +106,11 @@ function caption(over: Partial<AudioCaptionPayload> = {}): AudioCaptionPayload {
     segmentConfidences: [0.9],
     lowConfidence: false,
     timestampMs: 100,
+    sttModel: "base",
+    audioSource: "systemLoopback",
+    captureToChunkMs: 50,
+    sttMs: 900,
+    translateMs: 300,
     ...over,
   };
 }
@@ -110,6 +130,24 @@ function emitError(payload: AudioErrorPayload) {
 function emitConsent(disclosure: ConsentDisclosure) {
   act(() => {
     mocks.handlers.get(EVENT_MODELS_CONSENT_REQUIRED)?.(disclosure);
+  });
+}
+
+function emitPaused() {
+  act(() => {
+    mocks.handlers.get(EVENT_AUDIO_PAUSED)?.(undefined);
+  });
+}
+
+function emitResumed() {
+  act(() => {
+    mocks.handlers.get(EVENT_AUDIO_RESUMED)?.(undefined);
+  });
+}
+
+function emitStopped() {
+  act(() => {
+    mocks.handlers.get(EVENT_AUDIO_STOPPED)?.(undefined);
   });
 }
 
@@ -139,11 +177,24 @@ function keyStatuses(present: Partial<Record<string, boolean>>) {
   ];
 }
 
+const DEFAULT_STATUS = {
+  running: true,
+  paused: false,
+  sttModelId: "base",
+  sttModelLabel: "Base (recommended)",
+  provider: "gemini",
+  model: "gemini-2.5-flash",
+  audioSource: "systemLoopback" as const,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
   mocks.audioIpc.start.mockResolvedValue(undefined);
   mocks.audioIpc.stop.mockResolvedValue(undefined);
+  mocks.audioIpc.pause.mockResolvedValue(undefined);
+  mocks.audioIpc.resume.mockResolvedValue(undefined);
+  mocks.audioIpc.getStatus.mockResolvedValue(DEFAULT_STATUS);
   mocks.captionIpc.closeOverlay.mockResolvedValue(undefined);
   mocks.modelIpc.grantConsent.mockResolvedValue(undefined);
   // Default: a key IS configured, so existing session-start behavior is
@@ -162,6 +213,7 @@ beforeEach(() => {
     fallbackOrder: [],
     localOpenAi: { baseUrl: "", modelId: "" },
   });
+  mocks.loadAudioSourcePreference.mockResolvedValue("systemLoopback");
 });
 
 describe("useCaptionOverlay - session start (AC-01.1)", () => {
@@ -172,7 +224,41 @@ describe("useCaptionOverlay - session start (AC-01.1)", () => {
       model: "gemini-2.5-flash",
       sourceLanguage: "ja",
       targetLanguage: "vi",
+      audioSource: "systemLoopback",
     });
+  });
+
+  it("resolves the audio source from the persisted preference (item 4) when the request itself does not carry one", async () => {
+    mocks.loadAudioSourcePreference.mockResolvedValue("microphone");
+    await renderOverlay();
+
+    expect(mocks.audioIpc.start).toHaveBeenCalledWith(
+      expect.objectContaining({ audioSource: "microphone" }),
+    );
+  });
+
+  it("prefers an explicit request audioSource over the persisted preference", async () => {
+    mocks.loadAudioSourcePreference.mockResolvedValue("microphone");
+    await renderOverlay({ ...REQUEST, audioSource: "systemLoopback" });
+
+    expect(mocks.audioIpc.start).toHaveBeenCalledWith(
+      expect.objectContaining({ audioSource: "systemLoopback" }),
+    );
+  });
+});
+
+describe("useCaptionOverlay - session status snapshot at mount (item 1)", () => {
+  it("fetches the session status once at mount, before any caption arrives", async () => {
+    const { result } = await renderOverlay();
+
+    await waitFor(() =>
+      expect(result.current.state.status?.sttModelLabel).toBe(
+        "Base (recommended)",
+      ),
+    );
+    expect(mocks.audioIpc.getStatus).toHaveBeenCalledTimes(1);
+    // Populated BEFORE any audio:caption - the whole point of item 1.
+    expect(result.current.state.caption).toBeNull();
   });
 });
 
@@ -346,6 +432,7 @@ describe("useCaptionOverlay - local provider not configured (owner-reported bug)
     expect(mocks.audioIpc.start).toHaveBeenCalledWith({
       ...LOCAL_REQUEST,
       baseUrl: "http://127.0.0.1:1234",
+      audioSource: "systemLoopback",
     });
     expect(result.current.state.startError).toBeNull();
   });
@@ -427,5 +514,145 @@ describe("useCaptionOverlay - copy / pin / dismiss (AC-04.3/04.8)", () => {
     act(() => result.current.nudge(16, 0));
 
     expect(mocks.captionIpc.nudgeOverlay).toHaveBeenCalledWith(16, 0);
+  });
+});
+
+describe("useCaptionOverlay - accumulated transcript (item 3, the owner's biggest complaint)", () => {
+  it("keeps EVERY caption in order instead of overwriting with only the latest (regression test for the setCaption overwrite bug)", async () => {
+    const { result } = await renderOverlay();
+
+    emitCaption(
+      caption({ sequence: 0, sourceText: "one", translatedText: "một" }),
+    );
+    emitCaption(
+      caption({ sequence: 1, sourceText: "two", translatedText: "hai" }),
+    );
+    emitCaption(
+      caption({ sequence: 2, sourceText: "three", translatedText: "ba" }),
+    );
+
+    // The compact/latest view still shows only the newest caption...
+    expect(result.current.state.caption?.sourceText).toBe("three");
+    // ...but ALL three survive, in order, for the full-transcript view.
+    expect(result.current.state.captions.map((c) => c.sourceText)).toEqual([
+      "one",
+      "two",
+      "three",
+    ]);
+  });
+
+  it("replaces (never duplicates) an entry re-emitted with the same sequence", async () => {
+    const { result } = await renderOverlay();
+
+    emitCaption(caption({ sequence: 0, translatedText: "first pass" }));
+    emitCaption(caption({ sequence: 0, translatedText: "corrected" }));
+
+    expect(result.current.state.captions).toHaveLength(1);
+    expect(result.current.state.captions[0].translatedText).toBe("corrected");
+  });
+
+  it("copies the full transcript (source + translation, in order) to the clipboard", async () => {
+    const { result } = await renderOverlay();
+    emitCaption(
+      caption({ sequence: 0, sourceText: "one", translatedText: "một" }),
+    );
+    emitCaption(
+      caption({ sequence: 1, sourceText: "two", translatedText: "hai" }),
+    );
+
+    act(() => result.current.copyTranscript());
+
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith("one\nmột\n\ntwo\nhai");
+    expect(result.current.copied).toBe("transcript");
+  });
+
+  it("does nothing when there is no accumulated transcript yet", async () => {
+    const { result } = await renderOverlay();
+
+    act(() => result.current.copyTranscript());
+
+    expect(mocks.copyToClipboard).not.toHaveBeenCalled();
+  });
+});
+
+describe("useCaptionOverlay - pause / resume / stop (item 2, owner complaint: no way to pause or stop)", () => {
+  it("defaults to running and pauses without touching the overlay window", async () => {
+    const { result } = await renderOverlay();
+    expect(result.current.state.sessionState).toBe("running");
+
+    act(() => {
+      result.current.pause();
+    });
+
+    expect(mocks.audioIpc.pause).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(result.current.state.sessionState).toBe("paused"),
+    );
+    expect(mocks.audioIpc.stop).not.toHaveBeenCalled();
+    expect(mocks.captionIpc.closeOverlay).not.toHaveBeenCalled();
+  });
+
+  it("resumes a paused session", async () => {
+    const { result } = await renderOverlay();
+    act(() => {
+      result.current.pause();
+    });
+    await waitFor(() =>
+      expect(result.current.state.sessionState).toBe("paused"),
+    );
+
+    act(() => {
+      result.current.resume();
+    });
+
+    expect(mocks.audioIpc.resume).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(result.current.state.sessionState).toBe("running"),
+    );
+  });
+
+  it("stops the session but leaves the overlay window (and its transcript) intact", async () => {
+    const { result } = await renderOverlay();
+    emitCaption(caption({ sequence: 0 }));
+
+    act(() => {
+      result.current.stop();
+    });
+
+    expect(mocks.audioIpc.stop).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(result.current.state.sessionState).toBe("stopped"),
+    );
+    // Distinct from close(): the window/transcript are untouched.
+    expect(mocks.captionIpc.closeOverlay).not.toHaveBeenCalled();
+    expect(result.current.state.captions).toHaveLength(1);
+  });
+
+  it("reflects audio:paused/audio:resumed as edges (owner-reported: pause triggered elsewhere, e.g. tray/hotkey)", async () => {
+    const { result } = await renderOverlay();
+
+    emitPaused();
+    expect(result.current.state.sessionState).toBe("paused");
+
+    emitResumed();
+    expect(result.current.state.sessionState).toBe("running");
+  });
+
+  it("reflects audio:stopped even when stop was triggered outside this window", async () => {
+    const { result } = await renderOverlay();
+
+    emitStopped();
+
+    expect(result.current.state.sessionState).toBe("stopped");
+  });
+
+  it("a caption arriving while paused/stopped brings the session back to running", async () => {
+    const { result } = await renderOverlay();
+    emitPaused();
+    expect(result.current.state.sessionState).toBe("paused");
+
+    emitCaption(caption());
+
+    expect(result.current.state.sessionState).toBe("running");
   });
 });

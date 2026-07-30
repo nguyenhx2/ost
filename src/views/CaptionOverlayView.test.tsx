@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AudioCaptionPayload, ConsentDisclosure } from "../lib/ipc";
 
@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => {
     audioIpc: {
       start: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn(),
     },
     captionIpc: {
       openOverlay: vi.fn().mockResolvedValue(undefined),
@@ -30,6 +33,7 @@ const mocks = vi.hoisted(() => {
     copyToClipboard: vi.fn().mockResolvedValue(undefined),
     recordTranslation: vi.fn().mockResolvedValue(null),
     loadProviderSettings: vi.fn(),
+    loadAudioSourcePreference: vi.fn(),
   };
 });
 
@@ -59,6 +63,14 @@ vi.mock("../lib/settings", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/audioSource", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/audioSource")>();
+  return {
+    ...actual,
+    loadAudioSourcePreference: mocks.loadAudioSourcePreference,
+  };
+});
+
 import {
   EVENT_AUDIO_CAPTION,
   EVENT_AUDIO_ERROR,
@@ -81,6 +93,11 @@ function caption(over: Partial<AudioCaptionPayload> = {}): AudioCaptionPayload {
     segmentConfidences: [0.9],
     lowConfidence: false,
     timestampMs: 100,
+    sttModel: "base",
+    audioSource: "systemLoopback",
+    captureToChunkMs: 50,
+    sttMs: 900,
+    translateMs: 300,
     ...over,
   };
 }
@@ -133,14 +150,29 @@ function keyStatuses(present: Partial<Record<string, boolean>>) {
   ];
 }
 
+const DEFAULT_STATUS = {
+  running: true,
+  paused: false,
+  sttModelId: "base",
+  sttModelLabel: "Base (recommended)",
+  provider: "gemini",
+  model: "gemini-2.5-flash",
+  audioSource: "systemLoopback" as const,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
   setLocale("en");
   mocks.audioIpc.start.mockResolvedValue(undefined);
+  mocks.audioIpc.stop.mockResolvedValue(undefined);
+  mocks.audioIpc.pause.mockResolvedValue(undefined);
+  mocks.audioIpc.resume.mockResolvedValue(undefined);
+  mocks.audioIpc.getStatus.mockResolvedValue(DEFAULT_STATUS);
   // Default: a key IS configured, so the session starts as before; the
   // zero-key tests below override this per test.
   mocks.keysIpc.statuses.mockResolvedValue(keyStatuses({ gemini: true }));
+  mocks.loadAudioSourcePreference.mockResolvedValue("systemLoopback");
 });
 
 describe("CaptionOverlayView", () => {
@@ -290,9 +322,7 @@ describe("CaptionOverlayView", () => {
     expect(
       screen.getByRole("button", { name: "Copy caption" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Stop and close" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
   it("copies both the translation and the source text via the clipboard IPC, with aria-live feedback (AC-04.8)", async () => {
@@ -319,9 +349,7 @@ describe("CaptionOverlayView", () => {
     await renderOverlay();
     emitCaption(caption());
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Stop and close" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => expect(mocks.audioIpc.stop).toHaveBeenCalledTimes(1));
     expect(mocks.captionIpc.closeOverlay).toHaveBeenCalledTimes(1);
@@ -348,5 +376,126 @@ describe("CaptionOverlayView", () => {
     // directly in the panel (so it scrolls instead of shrinking the panel).
     expect(body?.textContent).toContain("こんにちは");
     expect(body?.textContent).toContain("Xin chào");
+  });
+});
+
+describe("CaptionOverlayView - model transparency (item 1, owner complaint: never knew which model was running)", () => {
+  it("shows the STT model badge from the mount-time status snapshot BEFORE any caption arrives", async () => {
+    await renderOverlay();
+
+    await waitFor(() =>
+      expect(mocks.audioIpc.getStatus).toHaveBeenCalledTimes(1),
+    );
+    expect(await screen.findByText("Base (recommended)")).toBeInTheDocument();
+    // The provider/model badge is populated from the query-string request too,
+    // independent of the status fetch.
+    expect(screen.getByText("gemini / gemini-2.5-flash")).toBeInTheDocument();
+  });
+});
+
+describe("CaptionOverlayView - pause / resume / stop (item 2, owner complaint: no way to pause or stop)", () => {
+  it("pauses without closing the overlay, then resumes", async () => {
+    await renderOverlay();
+    emitCaption(caption());
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(mocks.audioIpc.pause).toHaveBeenCalledTimes(1);
+    expect(mocks.captionIpc.closeOverlay).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.getByText("Paused - press Resume to keep listening"),
+      ).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect(mocks.audioIpc.resume).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Paused - press Resume to keep listening"),
+      ).toBeNull(),
+    );
+  });
+
+  it("stops without closing the overlay, keeping the transcript visible", async () => {
+    await renderOverlay();
+    emitCaption(caption());
+
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(mocks.audioIpc.stop).toHaveBeenCalledTimes(1);
+    expect(mocks.captionIpc.closeOverlay).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.getByText("Session stopped - the transcript below is kept"),
+      ).toBeInTheDocument(),
+    );
+    // The last caption is still visible - stopping never clears it.
+    expect(screen.getByText("Xin chào")).toBeInTheDocument();
+    // Once stopped, pause/resume/stop are no longer offered.
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+});
+
+describe("CaptionOverlayView - full transcript (item 3, the owner's biggest complaint)", () => {
+  it("accumulates every caption and shows them all, in order, in the expanded transcript view", async () => {
+    await renderOverlay();
+    emitCaption(
+      caption({ sequence: 0, sourceText: "one", translatedText: "một" }),
+    );
+    emitCaption(
+      caption({ sequence: 1, sourceText: "two", translatedText: "hai" }),
+    );
+
+    // The compact view still shows only the latest caption by default.
+    expect(screen.queryByText("one")).toBeNull();
+    expect(screen.getByText("two")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "View full transcript" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Full transcript",
+    });
+    expect(dialog).toBeInTheDocument();
+    const dialogScope = within(dialog);
+    expect(dialogScope.getByText("one")).toBeInTheDocument();
+    expect(dialogScope.getByText("một")).toBeInTheDocument();
+    expect(dialogScope.getByText("two")).toBeInTheDocument();
+    expect(dialogScope.getByText("hai")).toBeInTheDocument();
+  });
+
+  it("copies the full transcript via the dialog's copy-all affordance", async () => {
+    await renderOverlay();
+    emitCaption(
+      caption({ sequence: 0, sourceText: "one", translatedText: "một" }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "View full transcript" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Copy full transcript" }),
+    );
+
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith("one\nmột");
+  });
+});
+
+describe("CaptionOverlayView - latency readout (owner-reported: processing feels slow)", () => {
+  it("shows a small, unobtrusive per-stage timing hint behind the more-options popover", async () => {
+    await renderOverlay();
+    emitCaption(
+      caption({ captureToChunkMs: 50, sttMs: 6200, translateMs: 300 }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "More options" }));
+
+    expect(
+      screen.getByText(
+        "Processing: capture 50 ms, speech-to-text 6.2 s, translation 300 ms",
+      ),
+    ).toBeInTheDocument();
   });
 });
