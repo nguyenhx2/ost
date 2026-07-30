@@ -227,6 +227,18 @@ export const WHISPER_MODEL_SET_ID = "whisper-ggml";
 /* ------------------------------------------------------------------ */
 
 /**
+ * Captured audio source, resolved once at `start_audio_session` (Capture
+ * context, `src-tauri/src/audio/`; ipc.md). Absent on `AudioSessionRequest` =
+ * `"systemLoopback"` (the pre-microphone default behavior is preserved).
+ */
+export type AudioSourceKind = "systemLoopback" | "microphone";
+
+/** Narrow an unknown value (e.g. a URL query param) to a valid `AudioSourceKind`. */
+export function isAudioSourceKind(value: unknown): value is AudioSourceKind {
+  return value === "systemLoopback" || value === "microphone";
+}
+
+/**
  * Frontend -> core request to start a live audio-translation session. Carries
  * NAMES only (provider/model ids, language codes) - never a key (BR-02) and
  * never audio. Mirrors the Rust `AudioSessionRequest` (ipc.md).
@@ -244,6 +256,34 @@ export interface AudioSessionRequest {
    * `provider` is `local_openai`, ignored otherwise.
    */
   baseUrl?: string;
+  /**
+   * Captured audio source (owner-reported: no way to pick microphone vs
+   * system audio); absent = `"systemLoopback"`. Persisted core-side to
+   * `settings.json` key `audioSource` (ipc.md).
+   */
+  audioSource?: AudioSourceKind;
+}
+
+/**
+ * Snapshot of the live audio session in ONE call (`get_audio_session_status`,
+ * ipc.md) - owner-reported: the overlay never showed which models were
+ * running, and the gap was worst BEFORE the first `audio:caption` arrived
+ * (which can be many seconds away). Consumers fetch this at mount rather than
+ * waiting for a caption.
+ */
+export interface AudioSessionStatusPayload {
+  running: boolean;
+  /** Always `false` when `running` is `false`. */
+  paused: boolean;
+  /** Whisper tier actually in use if `running`, else the tier the NEXT session will use. */
+  sttModelId: string;
+  sttModelLabel: string;
+  /** Translation provider actually in use; `null` when no session is running. */
+  provider: string | null;
+  /** Translation model actually in use; `null` when no session is running. */
+  model: string | null;
+  /** Actual source if `running`, else the saved/default preference. */
+  audioSource: AudioSourceKind;
 }
 
 /**
@@ -308,6 +348,22 @@ export interface AudioCaptionPayload {
   lowConfidence: boolean;
   /** Milliseconds since the session started (monotonic; never wall-clock). */
   timestampMs: number;
+  /** Whisper catalog id actually used for this chunk (owner-reported: no
+   * visibility into which model is running). Matches `AudioSessionStatusPayload.sttModelId`. */
+  sttModel: string;
+  /** Captured audio source for this session. */
+  audioSource: AudioSourceKind;
+  /**
+   * Instrumentation only (owner-reported "processing feels slow"), NOT an
+   * optimization signal by itself: approximate ms this chunk waited from the
+   * previous chunk until it reached the caption loop (capture + VAD +
+   * chunking, from the consumer's viewpoint).
+   */
+  captureToChunkMs: number;
+  /** Milliseconds whisper spent transcribing this chunk. */
+  sttMs: number;
+  /** Milliseconds the translation provider call took for this chunk. */
+  translateMs: number;
 }
 
 /**
@@ -325,12 +381,24 @@ export const EVENT_AUDIO_CAPTION = "audio:caption";
 /** Emitted when a chunk fails to transcribe/translate (non-fatal). */
 export const EVENT_AUDIO_ERROR = "audio:error";
 /**
- * Emitted (app-global, no payload) when the caption overlay window is destroyed
- * - directly closed or via the tray/hotkey. A separate Settings window that
- * launched the session listens for this to reset its running-state (TASK-016
- * follow-up). Owned by `src-tauri/src/shell/audio_session.rs`.
+ * Emitted (app-global, no payload) whenever a running session stops - either
+ * `stop_audio_session` itself (a distinct control now, owner-reported: no way
+ * to stop without losing the overlay), or the caption overlay window being
+ * destroyed directly/via tray/hotkey (which also stops the session core-side).
+ * A separate Settings window that launched the session listens for this to
+ * reset its running-state (TASK-016 follow-up). Owned by
+ * `src-tauri/src/shell/audio_session.rs`.
  */
 export const EVENT_AUDIO_STOPPED = "audio:stopped";
+/**
+ * Emitted when a RUNNING session transitions to paused (`pause_audio_session`)
+ * - an edge, not a periodic state: a no-op pause (already paused / no session)
+ * does NOT re-emit this.
+ */
+export const EVENT_AUDIO_PAUSED = "audio:paused";
+/** Emitted when a PAUSED session resumes (`resume_audio_session`) - same
+ * edge-only semantics as `EVENT_AUDIO_PAUSED`. */
+export const EVENT_AUDIO_RESUMED = "audio:resumed";
 
 /* ------------------------------------------------------------------ */
 /* Provider key management (FR-03) contract                            */
@@ -744,8 +812,22 @@ export const audioIpc = {
   start: (request: AudioSessionRequest): Promise<void> =>
     invokeIpc("start_audio_session", { request }),
 
-  /** Stop the active session (AC-01.10). Idempotent. */
+  /** Stop the active session (AC-01.10). Idempotent; leaves the overlay
+   * window (and its accumulated transcript) alone - closing it is a separate
+   * action (`captionIpc.closeOverlay`). */
   stop: (): Promise<void> => invokeIpc("stop_audio_session"),
+
+  /** Pause a running session (owner-reported: no way to pause). Idempotent -
+   * a no-op (no session, or already paused) emits no `audio:paused` event. */
+  pause: (): Promise<void> => invokeIpc("pause_audio_session"),
+
+  /** Resume a paused session. Idempotent, same semantics as `pause`. */
+  resume: (): Promise<void> => invokeIpc("resume_audio_session"),
+
+  /** One-call session snapshot (owner-reported: no visibility into which
+   * models are running) - fetch at mount, before the first `audio:caption`. */
+  getStatus: (): Promise<AudioSessionStatusPayload> =>
+    invokeIpc("get_audio_session_status"),
 };
 
 /**

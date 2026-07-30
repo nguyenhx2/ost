@@ -24,6 +24,7 @@ import {
   historyIpc,
   hotkeysIpc,
   invokeIpc,
+  isAudioSourceKind,
   keysIpc,
   listenIpc,
   regionIpc,
@@ -266,6 +267,64 @@ describe("audioIpc (FR-01)", () => {
     invokeMock.mockResolvedValueOnce(undefined);
     await audioIpc.stop();
     expect(invokeMock).toHaveBeenCalledWith("stop_audio_session", undefined);
+  });
+
+  it("pause invokes the pause command with no payload (item 2)", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await audioIpc.pause();
+    expect(invokeMock).toHaveBeenCalledWith("pause_audio_session", undefined);
+  });
+
+  it("resume invokes the resume command with no payload (item 2)", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    await audioIpc.resume();
+    expect(invokeMock).toHaveBeenCalledWith("resume_audio_session", undefined);
+  });
+
+  it("getStatus invokes the status command and returns the typed snapshot (item 1)", async () => {
+    invokeMock.mockClear();
+    const status = {
+      running: true,
+      paused: false,
+      sttModelId: "base",
+      sttModelLabel: "Base (recommended)",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      audioSource: "systemLoopback" as const,
+    };
+    invokeMock.mockResolvedValueOnce(status);
+    const result = await audioIpc.getStatus();
+    expect(invokeMock).toHaveBeenCalledWith(
+      "get_audio_session_status",
+      undefined,
+    );
+    expect(result).toEqual(status);
+  });
+
+  it("start forwards an explicit audioSource (item 4)", async () => {
+    invokeMock.mockClear();
+    invokeMock.mockResolvedValueOnce(undefined);
+    const request = {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      audioSource: "microphone" as const,
+    };
+
+    await audioIpc.start(request);
+
+    expect(invokeMock).toHaveBeenCalledWith("start_audio_session", { request });
+  });
+});
+
+describe("isAudioSourceKind", () => {
+  it("accepts only the two valid audio source kinds", () => {
+    expect(isAudioSourceKind("systemLoopback")).toBe(true);
+    expect(isAudioSourceKind("microphone")).toBe(true);
+    expect(isAudioSourceKind("speaker")).toBe(false);
+    expect(isAudioSourceKind(null)).toBe(false);
+    expect(isAudioSourceKind(undefined)).toBe(false);
   });
 });
 

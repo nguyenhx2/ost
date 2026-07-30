@@ -31,6 +31,22 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
+ * Compact duration readout for the caption overlay's per-stage timing hint
+ * (owner-reported "processing feels slow" - a small, non-alarming number, not
+ * a dashboard). Milliseconds under 1s render as whole ms; at/above 1s render
+ * as seconds with one decimal. Non-finite/negative inputs render as "0 ms".
+ */
+export function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) {
+    return "0 ms";
+  }
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)} s`;
+  }
+  return `${Math.round(ms)} ms`;
+}
+
+/**
  * Locale-aware date+time for a history entry's ISO-8601 `createdAt`. Uses the
  * platform Intl formatter (`vi`/`en`). An empty/invalid input returns "" so the
  * view can omit the timestamp rather than render "Invalid Date".

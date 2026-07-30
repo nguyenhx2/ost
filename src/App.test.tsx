@@ -47,6 +47,8 @@ const mocks = vi.hoisted(() => ({
   saveProviderSettings: vi.fn(),
   loadRegionLanguageSettings: vi.fn(),
   saveRegionLanguageSettings: vi.fn(),
+  loadAudioSourcePreference: vi.fn(),
+  saveAudioSourcePreference: vi.fn(),
 }));
 
 vi.mock("./lib/ipc", async (importOriginal) => {
@@ -83,6 +85,15 @@ vi.mock("./lib/regionLanguageSettings", async (importOriginal) => {
     ...actual,
     loadRegionLanguageSettings: mocks.loadRegionLanguageSettings,
     saveRegionLanguageSettings: mocks.saveRegionLanguageSettings,
+  };
+});
+
+vi.mock("./lib/audioSource", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./lib/audioSource")>();
+  return {
+    ...actual,
+    loadAudioSourcePreference: mocks.loadAudioSourcePreference,
+    saveAudioSourcePreference: mocks.saveAudioSourcePreference,
   };
 });
 
@@ -176,6 +187,10 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ sourceLanguage: "auto", targetLanguage: "vi" });
   mocks.saveRegionLanguageSettings.mockReset().mockResolvedValue(undefined);
+  mocks.loadAudioSourcePreference
+    .mockReset()
+    .mockResolvedValue("systemLoopback");
+  mocks.saveAudioSourcePreference.mockReset().mockResolvedValue(undefined);
   mocks.hotkeysIpc.get.mockReset().mockResolvedValue({
     toggleAudio: "Ctrl+Alt+A",
     regionSelect: "Ctrl+Alt+R",
@@ -335,6 +350,34 @@ describe("App (home screen, FR-04 TASK-028)", () => {
     await waitFor(() => expect(mocks.audioIpc.stop).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument(),
+    );
+  });
+
+  it("offers an audio source picker (item 4) that persists and is included on start", async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("Start / stop live audio translation"),
+      ).toBeInTheDocument(),
+    );
+
+    const picker = screen.getByRole("button", { name: "Audio source" });
+    expect(picker).toHaveTextContent("System audio");
+
+    await userEvent.click(picker);
+    await userEvent.click(screen.getByRole("option", { name: "Microphone" }));
+
+    await waitFor(() =>
+      expect(mocks.saveAudioSourcePreference).toHaveBeenCalledWith(
+        "microphone",
+      ),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() =>
+      expect(mocks.captionIpc.openOverlay).toHaveBeenCalledWith(
+        expect.objectContaining({ audioSource: "microphone" }),
+      ),
     );
   });
 });
