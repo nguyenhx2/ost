@@ -92,6 +92,23 @@ pub trait AudioSource: Send {
     fn read(&mut self, out: &mut Vec<f32>) -> Result<usize, CaptureError>;
 }
 
+/// Lets a boxed, type-erased source stand in for a sized `S: AudioSource` at
+/// call sites generic over `AudioSource` (e.g. `CaptureSession::start`).
+/// Without this, `Box<dyn AudioSource>` - the return type `open_source` uses
+/// so callers pick a backend by `AudioSourceKind` without naming a concrete
+/// type - could not itself satisfy `S: AudioSource + 'static`, forcing the
+/// shell to downcast or match on the concrete backend. `AudioSource: Send`
+/// already, so the boxed form stays `Send` too.
+impl AudioSource for Box<dyn AudioSource> {
+    fn format(&self) -> AudioFormat {
+        (**self).format()
+    }
+
+    fn read(&mut self, out: &mut Vec<f32>) -> Result<usize, CaptureError> {
+        (**self).read(out)
+    }
+}
+
 /// Interleaved-to-mono downmix by averaging channels. Pure and allocation-light
 /// (writes into `out`); the shared seam every multi-channel backend uses and a
 /// unit-testable helper. `channels` of 0 or 1 copies straight through.
